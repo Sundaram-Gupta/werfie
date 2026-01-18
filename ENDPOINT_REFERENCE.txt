@@ -1,0 +1,781 @@
+# X-Clone API - Complete Endpoint Reference
+
+**Base URL**: `http://localhost:3001/api`  
+**Total Endpoints**: 19+
+
+---
+
+## 📋 Table of Contents
+
+1. [Authentication Endpoints](#authentication-endpoints) (5)
+2. [User Endpoints](#user-endpoints) (3)
+3. [Post Endpoints](#post-endpoints) (9)
+4. [Timeline Endpoints](#timeline-endpoints) (1)
+5. [Quick Reference Table](#quick-reference-table)
+
+---
+
+## 🔐 Authentication Endpoints
+
+### **1. Register New User**
+
+```http
+POST /api/auth/register
+```
+
+**Authentication**: None  
+**Content-Type**: `application/json`
+
+**Request Body**:
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword123",
+  "name": "John Doe",
+  "handle": "johndoe"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "user": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "profile": {
+      "name": "John Doe",
+      "handle": "johndoe",
+      "bio": null,
+      "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=johndoe"
+    }
+  }
+}
+```
+
+**Notes**:
+- Email must be unique
+- Password minimum 8 characters
+- Handle must be unique and alphanumeric
+- Avatar auto-generated using DiceBear API
+- Returns tokens immediately (auto-login)
+
+**Errors**:
+- `400`: Email already exists
+- `400`: Handle already taken
+- `400`: Invalid email format
+
+---
+
+### **2. Login**
+
+```http
+POST /api/auth/login
+```
+
+**Authentication**: None  
+**Content-Type**: `application/json`
+
+**Request Body**:
+```json
+{
+  "email": "user1@xclone.com",
+  "password": "password123"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "user": {
+    "id": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+    "email": "user1@xclone.com",
+    "profile": {
+      "name": "User 1",
+      "handle": "user1",
+      "bio": "This is the bio for User 1. I love X-Clone!",
+      "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=user1"
+    }
+  }
+}
+```
+
+**Notes**:
+- Access token expires in 15 minutes
+- Refresh token expires in 7 days
+- Store tokens securely (not in localStorage)
+- Use access token for subsequent requests
+
+**Errors**:
+- `401`: Invalid credentials
+- `400`: Missing email or password
+
+---
+
+### **3. Get Current User**
+
+```http
+GET /api/auth/me
+```
+
+**Authentication**: Bearer Token (Required)  
+**Header**: `Authorization: Bearer {accessToken}`
+
+**Response** (200 OK):
+```json
+{
+  "id": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+  "email": "user1@xclone.com",
+  "profile": {
+    "id": "68a16bd8-d54b-4712-a140-b9fcb208e04e",
+    "userId": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+    "name": "User 1",
+    "handle": "user1",
+    "bio": "This is the bio for User 1. I love X-Clone!",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=user1",
+    "banner": "/api/media/files/2ab9b6d3-bcec-4d13-9a14-34a19ff0591f.jpg",
+    "location": "Internet",
+    "website": "xclone.com",
+    "birthdate": null,
+    "createdAt": "2026-01-14T12:53:32.745Z",
+    "updatedAt": "2026-01-14T17:57:05.255Z"
+  }
+}
+```
+
+**Notes**:
+- Validates JWT token
+- Returns complete user profile
+- Use to verify authentication status
+- Call after login to get full user data
+
+**Errors**:
+- `401`: Missing or invalid token
+- `401`: Token expired
+
+---
+
+### **4. Refresh Access Token**
+
+```http
+POST /api/auth/refresh
+```
+
+**Authentication**: None  
+**Content-Type**: `application/json`
+
+**Request Body**:
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+**Notes**:
+- Use when access token expires
+- Returns new access token AND refresh token
+- Implement automatic refresh on 401 errors
+- Refresh proactively before expiration
+
+**Errors**:
+- `401`: Invalid refresh token
+- `401`: Refresh token expired
+
+---
+
+### **5. Logout**
+
+```http
+POST /api/auth/logout
+```
+
+**Authentication**: Bearer Token (Required)
+
+**Response** (200 OK):
+```json
+{
+  "success": true,
+  "message": "Logged out successfully"
+}
+```
+
+**Notes**:
+- Invalidates refresh token (if implemented)
+- Clear tokens from client storage
+- Redirect to login page
+
+---
+
+## 👤 User Endpoints
+
+### **6. Get User Profile**
+
+```http
+GET /api/users/:id/
+```
+
+**Authentication**: Bearer Token (Required)  
+**URL Parameter**: `id` - User UUID
+
+**Example**:
+```bash
+GET /api/users/41083e60-7445-486b-a4e1-0d9f8d793a08/
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+  "email": "user1@xclone.com",
+  "profile": {
+    "name": "User 1",
+    "handle": "user1",
+    "bio": "This is the bio for User 1. I love X-Clone!",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=user1",
+    "location": "Internet",
+    "website": "xclone.com"
+  },
+  "stats": {
+    "posts": 15,
+    "followers": 12,
+    "following": 8
+  }
+}
+```
+
+**Notes**:
+- Trailing slash required
+- Returns public profile data
+- Includes follower/following counts
+- Can view any user's profile
+
+**Errors**:
+- `404`: User not found
+- `401`: Not authenticated
+
+---
+
+### **7. Update User Profile**
+
+```http
+PUT /api/users/:id/
+```
+
+**Authentication**: Bearer Token (Required)  
+**Content-Type**: `application/json`  
+**URL Parameter**: `id` - User UUID (must be current user)
+
+**Request Body**:
+```json
+{
+  "name": "Updated Name",
+  "bio": "My new bio",
+  "location": "San Francisco",
+  "website": "example.com",
+  "birthdate": "1990-01-01"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": "68a16bd8-d54b-4712-a140-b9fcb208e04e",
+  "userId": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+  "name": "Updated Name",
+  "bio": "My new bio",
+  "location": "San Francisco",
+  "website": "example.com",
+  "updatedAt": "2026-01-16T13:45:00.000Z"
+}
+```
+
+**Notes**:
+- Can only update own profile
+- All fields optional
+- Handle cannot be changed via this endpoint
+- Avatar/banner updated separately
+
+**Errors**:
+- `403`: Cannot update other user's profile
+- `400`: Invalid data format
+
+---
+
+### **8. Get Multiple Users (Bulk)**
+
+```http
+GET /api/users?ids=uuid1,uuid2,uuid3
+```
+
+**Authentication**: Bearer Token (Required)  
+**Query Parameter**: `ids` - Comma-separated UUIDs
+
+**Response** (200 OK):
+```json
+[
+  {
+    "id": "uuid1",
+    "profile": { "name": "User 1", "handle": "user1" }
+  },
+  {
+    "id": "uuid2",
+    "profile": { "name": "User 2", "handle": "user2" }
+  }
+]
+```
+
+**Notes**:
+- Efficient for loading multiple users
+- Used in timeline/follower lists
+- Maximum 50 users per request
+
+---
+
+## 📝 Post Endpoints
+
+### **9. Create Post**
+
+```http
+POST /api/posts/
+```
+
+**Authentication**: Bearer Token (Required)  
+**Content-Type**: `application/json`
+
+**Request Body**:
+```json
+{
+  "content": "Hello World! 🚀 #testing",
+  "mediaUrls": ["https://example.com/image.jpg"],
+  "replyToId": null
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": "bf101e6f-d358-4e1d-ad71-a84223eb8a0e",
+  "userId": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+  "content": "Hello World! 🚀 #testing",
+  "mediaUrls": ["https://example.com/image.jpg"],
+  "replyToId": null,
+  "createdAt": "2026-01-16T06:05:42.149Z",
+  "updatedAt": "2026-01-16T06:05:42.149Z",
+  "_count": {
+    "replies": 0,
+    "likes": 0,
+    "retweets": 0
+  }
+}
+```
+
+**Notes**:
+- Content max 280 characters
+- mediaUrls optional (array of URLs)
+- Set replyToId to create a reply
+- Returns with interaction counts
+
+**Errors**:
+- `400`: Content too long
+- `400`: Invalid replyToId
+- `401`: Not authenticated
+
+---
+
+### **10. Get All Posts**
+
+```http
+GET /api/posts/
+```
+
+**Authentication**: Bearer Token (Required)  
+**Query Parameters** (optional):
+- `limit` - Number of posts (default: 20)
+- `offset` - Pagination offset (default: 0)
+
+**Response** (200 OK):
+```json
+{
+  "posts": [
+    {
+      "id": "post-uuid",
+      "content": "Post content",
+      "user": {
+        "id": "user-uuid",
+        "profile": {
+          "name": "User Name",
+          "handle": "username",
+          "avatar": "avatar-url"
+        }
+      },
+      "_count": {
+        "replies": 5,
+        "likes": 10,
+        "retweets": 2
+      },
+      "createdAt": "2026-01-16T12:00:00.000Z"
+    }
+  ],
+  "total": 100,
+  "hasMore": true
+}
+```
+
+**Notes**:
+- Returns paginated results
+- Includes user data for each post
+- Sorted by creation date (newest first)
+- Use for explore/discover feed
+
+---
+
+### **11. Get Single Post**
+
+```http
+GET /api/posts/:id
+```
+
+**Authentication**: None (public)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+{
+  "id": "bf101e6f-d358-4e1d-ad71-a84223eb8a0e",
+  "userId": "41083e60-7445-486b-a4e1-0d9f8d793a08",
+  "content": "Post content",
+  "user": {
+    "profile": {
+      "name": "User 1",
+      "handle": "user1",
+      "avatar": "avatar-url"
+    }
+  },
+  "_count": {
+    "replies": 3,
+    "likes": 15,
+    "retweets": 5
+  },
+  "createdAt": "2026-01-16T06:05:42.149Z"
+}
+```
+
+**Notes**:
+- Public endpoint (no auth required)
+- Returns full post details
+- Includes user information
+- Use for post detail page
+
+**Errors**:
+- `404`: Post not found
+
+---
+
+### **12. Delete Post**
+
+```http
+DELETE /api/posts/:id
+```
+
+**Authentication**: Bearer Token (Required)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+{
+  "success": true,
+  "message": "Post deleted successfully"
+}
+```
+
+**Notes**:
+- Can only delete own posts
+- Permanently deletes post
+- Also deletes all replies, likes, retweets
+
+**Errors**:
+- `403`: Not post owner
+- `404`: Post not found
+
+---
+
+### **13. Like Post**
+
+```http
+POST /api/posts/:id/like
+```
+
+**Authentication**: Bearer Token (Required)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+{
+  "id": "like-uuid",
+  "userId": "user-uuid",
+  "postId": "post-uuid",
+  "createdAt": "2026-01-16T13:45:00.000Z"
+}
+```
+
+**Notes**:
+- Idempotent (liking twice has no effect)
+- Returns like record
+- Increments post like count
+- Triggers notification to post author
+
+**Errors**:
+- `404`: Post not found
+- `400`: Already liked (if not idempotent)
+
+---
+
+### **14. Unlike Post**
+
+```http
+DELETE /api/posts/:id/like
+```
+
+**Authentication**: Bearer Token (Required)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+{
+  "success": true,
+  "message": "Post unliked successfully"
+}
+```
+
+**Notes**:
+- Removes like from post
+- Decrements post like count
+- Idempotent (safe to call multiple times)
+
+---
+
+### **15. Retweet Post**
+
+```http
+POST /api/posts/:id/retweet
+```
+
+**Authentication**: Bearer Token (Required)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+{
+  "id": "retweet-uuid",
+  "userId": "user-uuid",
+  "postId": "post-uuid",
+  "createdAt": "2026-01-16T13:45:00.000Z"
+}
+```
+
+**Notes**:
+- Creates retweet record
+- Appears in user's timeline
+- Increments retweet count
+- Cannot retweet own posts (usually)
+
+**Errors**:
+- `404`: Post not found
+- `400`: Already retweeted
+
+---
+
+### **16. Unretweet Post**
+
+```http
+DELETE /api/posts/:id/retweet
+```
+
+**Authentication**: Bearer Token (Required)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+{
+  "success": true,
+  "message": "Retweet removed successfully"
+}
+```
+
+**Notes**:
+- Removes retweet
+- Decrements retweet count
+- Removes from user's timeline
+
+---
+
+### **17. Get Post Replies**
+
+```http
+GET /api/posts/:id/replies
+```
+
+**Authentication**: None (public)  
+**URL Parameter**: `id` - Post UUID
+
+**Response** (200 OK):
+```json
+[
+  {
+    "id": "reply-uuid",
+    "content": "This is a reply",
+    "replyToId": "original-post-uuid",
+    "user": {
+      "profile": {
+        "name": "Replier",
+        "handle": "replier",
+        "avatar": "avatar-url"
+      }
+    },
+    "_count": {
+      "replies": 0,
+      "likes": 2,
+      "retweets": 0
+    },
+    "createdAt": "2026-01-16T13:50:00.000Z"
+  }
+]
+```
+
+**Notes**:
+- Returns all direct replies
+- Sorted by creation date
+- Includes user data
+- Nested replies not included (fetch separately)
+
+---
+
+## 📰 Timeline Endpoints
+
+### **18. Get Home Timeline**
+
+```http
+GET /api/timeline/home
+```
+
+**Authentication**: Bearer Token (Required)  
+**Query Parameters** (optional):
+- `limit` - Number of posts (default: 20)
+- `offset` - Pagination offset (default: 0)
+
+**Response** (200 OK):
+```json
+[
+  {
+    "id": "post-uuid",
+    "content": "Timeline post",
+    "user": {
+      "id": "user-uuid",
+      "profile": {
+        "name": "User Name",
+        "handle": "username",
+        "avatar": "avatar-url"
+      }
+    },
+    "_count": {
+      "replies": 5,
+      "likes": 10,
+      "retweets": 2
+    },
+    "createdAt": "2026-01-16T12:00:00.000Z"
+  }
+]
+```
+
+**Notes**:
+- Returns posts from followed users + own posts
+- Sorted by creation date (newest first)
+- Includes retweets from followed users
+- Main feed for authenticated users
+
+**Current Issue**:
+- Gateway routes to wrong service (port 3004)
+- Direct access works: `http://localhost:3003/timeline/home`
+
+---
+
+## 📊 Quick Reference Table
+
+| # | Endpoint | Method | Auth | Purpose |
+|---|----------|--------|------|---------|
+| 1 | `/api/auth/register` | POST | None | Register new user |
+| 2 | `/api/auth/login` | POST | None | User login |
+| 3 | `/api/auth/me` | GET | Bearer | Get current user |
+| 4 | `/api/auth/refresh` | POST | None | Refresh token |
+| 5 | `/api/auth/logout` | POST | Bearer | Logout user |
+| 6 | `/api/users/:id/` | GET | Bearer | Get user profile |
+| 7 | `/api/users/:id/` | PUT | Bearer | Update profile |
+| 8 | `/api/users?ids=...` | GET | Bearer | Bulk get users |
+| 9 | `/api/posts/` | POST | Bearer | Create post |
+| 10 | `/api/posts/` | GET | Bearer | Get all posts |
+| 11 | `/api/posts/:id` | GET | None | Get single post |
+| 12 | `/api/posts/:id` | DELETE | Bearer | Delete post |
+| 13 | `/api/posts/:id/like` | POST | Bearer | Like post |
+| 14 | `/api/posts/:id/like` | DELETE | Bearer | Unlike post |
+| 15 | `/api/posts/:id/retweet` | POST | Bearer | Retweet post |
+| 16 | `/api/posts/:id/retweet` | DELETE | Bearer | Unretweet post |
+| 17 | `/api/posts/:id/replies` | GET | None | Get replies |
+| 18 | `/api/timeline/home` | GET | Bearer | Home timeline |
+
+---
+
+## 🔑 Authentication Summary
+
+**Required for**:
+- All POST/PUT/DELETE operations
+- User profile operations
+- Timeline access
+- Creating/deleting content
+
+**Not required for**:
+- Registration
+- Login
+- Viewing single post
+- Viewing post replies
+
+**Header Format**:
+```
+Authorization: Bearer {accessToken}
+```
+
+---
+
+## ⚠️ Common Errors
+
+| Code | Meaning | Common Cause |
+|------|---------|--------------|
+| 400 | Bad Request | Invalid data format |
+| 401 | Unauthorized | Missing/invalid token |
+| 403 | Forbidden | Insufficient permissions |
+| 404 | Not Found | Resource doesn't exist |
+| 500 | Server Error | Backend issue |
+
+---
+
+## 💡 Best Practices
+
+1. **Always handle 401** - Implement token refresh
+2. **Use pagination** - Don't load all posts at once
+3. **Cache responses** - Reduce API calls
+4. **Implement retry logic** - Handle network failures
+5. **Validate before sending** - Check data client-side first
+
+---
+
+**For interactive testing**: Visit http://localhost:3001/docs

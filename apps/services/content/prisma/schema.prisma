@@ -1,0 +1,180 @@
+// This is your Prisma schema file
+// X-Clone Auth Service Schema (Master Source of Truth)
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  refreshTokens RefreshToken[]
+  profile       Profile?
+  
+  // Relations from Content/Social
+  posts         Post[]
+  likes         Like[]
+  retweets      Retweet[]
+  bookmarks     Bookmark[]
+  followers     Follow[]     @relation("UserFollowers")
+  following     Follow[]     @relation("UserFollowing")
+  notifications Notification[] @relation("NotificationRecipient")
+  triggeredNotifications Notification[] @relation("NotificationActor")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  name        String
+  handle      String   @unique
+  bio         String?
+  avatar      String?
+  banner      String?
+  location    String?
+  website     String?
+  birthdate   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([handle])
+}
+
+// --- Content & Social Models ---
+
+model Post {
+  id          String   @id @default(uuid())
+  userId      String
+  content     String
+  mediaUrls   String?  // JSON array of media URLs
+  replyToId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replyTo     Post?    @relation("PostReplies", fields: [replyToId], references: [id], onDelete: Cascade)
+  replies     Post[]   @relation("PostReplies")
+  likes       Like[]
+  retweets    Retweet[]
+  bookmarks   Bookmark[]
+  notifications Notification[]
+  
+  @@index([userId])
+  @@index([replyToId])
+  @@index([createdAt])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Retweet {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   // recipient
+  type      String   // 'like', 'retweet', 'follow', 'reply', 'mention'
+  actorId   String   // user who triggered the notification
+  postId    String?  // related post if applicable
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user  User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor User  @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  post  Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  
+  follower  User @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  
+  @@index([followingId])
+}
+
+model Trend {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  category  String?
+  volume    String?
+  createdAt DateTime @default(now())
+}
+
+model ExploreItem {
+  id          String   @id @default(uuid())
+  category    String   // 'news', 'sports', 'entertainment'
+  title       String
+  source      String
+  imageUrl    String?
+  url         String?
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
