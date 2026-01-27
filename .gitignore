@@ -1,6 +1,4 @@
-# Exclude nested frontend/admin repos
-apps/client/
-apps/admin/
+
 
 # Dependencies
 node_modules

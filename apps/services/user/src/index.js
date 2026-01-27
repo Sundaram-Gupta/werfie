@@ -8,31 +8,22 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3002;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
+const businessRoutes = require('./routes/businessRoutes');
+
 // app.use(cors()); // Handled by Gateway
 app.use(express.json());
 
+app.use('/business', businessRoutes);
+
+// Debug Middleware
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
 // Auth Middleware
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        console.log('Auth Middleware: No token provided');
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-            console.error('Auth Middleware: Token verification failed:', err.message);
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-        console.log('Auth Middleware: User decoded:', user);
-        req.user = user;
-        req.user.userId = user.sub || user.id || user.userId;
-        console.log('Auth Middleware: Mapped userId:', req.user.userId);
-        next();
-    });
-};
+// Auth Middleware (Imported)
+const authenticateToken = require('./middleware/auth');
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -68,6 +59,24 @@ app.post('/:id/follow', authenticateToken, async (req, res) => {
                 followingId
             }
         });
+
+        // Create Notification
+        // Check if notification already exists (optional, but good for idempotency if repeated follow/unfollow)
+        // Here we just create it.
+        try {
+            await prisma.notification.create({
+                data: {
+                    userId: followingId, // Recipient
+                    type: 'follow',
+                    actorId: followerId,
+                    read: false
+                }
+            });
+        } catch (notifError) {
+            console.error('Failed to create follow notification:', notifError);
+            // Don't fail the request if notification fails
+        }
+
         res.json(follow);
     } catch (error) {
         console.error('Follow Error:', error);
@@ -160,9 +169,38 @@ app.get('/:id/following', async (req, res) => {
 // Get User Suggestions (Who to follow)
 app.get('/suggestions', async (req, res) => {
     const { limit = 3 } = req.query;
+
+    // Optional Auth: If token provided, exclude followed users
+    let currentUserId = null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            currentUserId = decoded.sub || decoded.id || decoded.userId;
+        } catch (e) {
+            // Ignore invalid token for suggestions
+        }
+    }
+
     try {
-        // Simple strategy: fetch latest users (excluding current if auth headers passed, but simpler to just fetch all for now)
+        let excludeIds = [];
+        if (currentUserId) {
+            excludeIds.push(currentUserId);
+
+            // Get already followed users
+            const following = await prisma.follow.findMany({
+                where: { followerId: currentUserId },
+                select: { followingId: true }
+            });
+            excludeIds.push(...following.map(f => f.followingId));
+        }
+
         const users = await prisma.user.findMany({
+            where: {
+                id: { notIn: excludeIds }
+            },
             take: parseInt(limit),
             orderBy: { createdAt: 'desc' },
             include: { profile: true }

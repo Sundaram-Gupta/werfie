@@ -1,0 +1,417 @@
+import api from '@/lib/api'
+
+// Authentication Services
+export const authService = {
+    // Register new user
+    register: async (email, password, name, handle) => {
+        const { data } = await api.post('/api/auth/register', {
+            email,
+            password,
+            name,
+            handle,
+        })
+
+        // Store tokens
+        localStorage.setItem('accessToken', data.accessToken)
+        localStorage.setItem('refreshToken', data.refreshToken)
+        localStorage.setItem('user', JSON.stringify(data.user))
+
+        return data
+    },
+
+    // Login
+    login: async (email, password) => {
+        const { data } = await api.post('/api/auth/login', {
+            email,
+            password,
+        })
+
+        // Store tokens
+        localStorage.setItem('accessToken', data.accessToken)
+        localStorage.setItem('refreshToken', data.refreshToken)
+        localStorage.setItem('user', JSON.stringify(data.user))
+
+        return data
+    },
+
+    // Logout
+    logout: async () => {
+        const refreshToken = localStorage.getItem('refreshToken')
+        if (refreshToken) {
+            try {
+                await api.post('/api/auth/logout', {}, {
+                    headers: { Authorization: `Bearer ${refreshToken}` }
+                })
+            } catch (error) {
+                console.error('Logout error:', error)
+            }
+        }
+
+        // Clear local storage
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('user')
+    },
+
+    getFeed: async () => {
+        // Use the timeline endpoint from content service
+        const { data } = await api.get('/api/timeline/home/')
+        return data
+    },
+    changePassword: async (currentPassword, newPassword) => {
+        const { data } = await api.post('/api/auth/change-password', { currentPassword, newPassword })
+        return data
+    },
+
+    // Get current user
+    getCurrentUser: async () => {
+        const { data } = await api.get('/api/auth/me')
+        return data
+    },
+
+    // Check if user is authenticated
+    isAuthenticated: () => {
+        return !!localStorage.getItem('accessToken')
+    },
+
+    // Get stored user
+    getStoredUser: () => {
+        const user = localStorage.getItem('user')
+        return user ? JSON.parse(user) : null
+    },
+}
+
+// Post Services
+export const postService = {
+    // Get all posts
+    getPosts: async (params = {}) => {
+        const { data } = await api.get('/api/posts/', { params })
+        return data
+    },
+
+    // Get single post
+    getPost: async (postId) => {
+        const { data } = await api.get(`/api/posts/${postId}/`)
+        return data
+    },
+
+    // Create post
+    createPost: async (content, mediaUrls = [], replyToId = null) => {
+        const payload = { content, mediaUrls }
+        if (replyToId) payload.replyToId = replyToId
+
+        const { data } = await api.post('/api/posts/', payload)
+        return data
+    },
+
+    // Delete post
+    deletePost: async (postId) => {
+        const { data } = await api.delete(`/api/posts/${postId}/`)
+        return data
+    },
+
+    // Like post
+    likePost: async (postId) => {
+        const { data } = await api.post(`/api/posts/${postId}/like`)
+        return data
+    },
+
+    // Unlike post
+    unlikePost: async (postId) => {
+        const { data } = await api.delete(`/api/posts/${postId}/like`)
+        return data
+    },
+
+    // Retweet post
+    retweetPost: async (postId) => {
+        const { data } = await api.post(`/api/posts/${postId}/retweet`)
+        return data
+    },
+
+    // Unretweet post
+    unretweetPost: async (postId) => {
+        const { data } = await api.delete(`/api/posts/${postId}/retweet`)
+        return data
+    },
+
+    // Get post replies
+    getReplies: async (postId, params = {}) => {
+        const { data } = await api.get(`/api/posts/${postId}/replies`, { params })
+        return data
+    },
+
+    // Get following feed
+    getFollowingPosts: async () => {
+        const { data } = await api.get('/api/posts/following')
+        return data
+    },
+}
+
+// User Services
+export const userService = {
+    // Get user profile
+    getUser: async (userId) => {
+        const { data } = await api.get(`/api/users/${userId}/`)
+        return data
+    },
+
+    // Get multiple users
+    getUsers: async (userIds) => {
+        if (!userIds || userIds.length === 0) return []
+        const { data } = await api.get('/api/users/', {
+            params: { ids: userIds.join(',') }
+        })
+        return data
+    },
+
+    // Get suggestions
+    getSuggestions: async (limit = 3) => {
+        const { data } = await api.get('/api/users/suggestions', { params: { limit } })
+        return data
+    },
+
+    // Update user profile
+    updateProfile: async (userId, profileData) => {
+        const { data } = await api.put(`/api/users/${userId}/`, profileData)
+        return data
+    },
+
+    // Follow user
+    followUser: async (userId) => {
+        const { data } = await api.post(`/api/users/${userId}/follow`)
+        return data
+    },
+
+    // Unfollow user
+    unfollowUser: async (userId) => {
+        const { data } = await api.delete(`/api/users/${userId}/follow`)
+        return data
+    },
+
+    // Get followers
+    getFollowers: async (userId, params = {}) => {
+        const { data } = await api.get(`/api/users/${userId}/followers`, { params })
+        return data
+    },
+
+    // Get following
+    getFollowing: async (userId, params = {}) => {
+        const { data } = await api.get(`/api/users/${userId}/following`, { params })
+        return data
+    },
+}
+
+// Timeline Services
+export const timelineService = {
+    // Get home timeline
+    getHomeTimeline: async (params = {}) => {
+        const { data } = await api.get('/api/timeline/home/', { params })
+        return data
+    },
+}
+
+// Notification Services
+export const notificationService = {
+    // Get notifications
+    getNotifications: async (params = {}) => {
+        const { data } = await api.get('/api/notifications', { params })
+        return data
+    },
+
+    // Mark notification as read
+    markAsRead: async (notificationId) => {
+        const { data } = await api.put(`/api/notifications/${notificationId}/read`)
+        return data
+    },
+}
+
+// Search Services
+export const searchService = {
+    // Search posts
+    searchPosts: async (query, params = {}) => {
+        const { data } = await api.get('/api/search/posts', {
+            params: { q: query, ...params },
+        })
+        return data
+    },
+
+    // Search users
+    searchUsers: async (query, params = {}) => {
+        const { data } = await api.get('/api/search/users', {
+            params: { q: query, ...params },
+        })
+        return data
+    },
+
+
+    // Get Trends
+    getTrends: async () => {
+        const { data } = await api.get('/api/trends', { params: { limit: 20 } })
+        return data
+    },
+
+    // Get Explore Items
+    getExploreItems: async (category) => {
+        const { data } = await api.get('/api/explore', { params: { category, limit: 20 } })
+        return data
+    },
+
+    // Get Communities
+    getCommunities: async () => {
+        const { data } = await api.get('/api/communities')
+        return data
+    },
+
+    // Get Spaces
+    getSpaces: async () => {
+        const { data } = await api.get('/api/spaces')
+        return data
+    },
+}
+
+// Space Services
+export const spaceService = {
+    // Get all spaces
+    getAll: async () => {
+        const { data } = await api.get('/api/spaces')
+        return data
+    },
+
+    // Create space
+    createSpace: async (spaceData) => {
+        const { data } = await api.post('/api/spaces', spaceData)
+        return data
+    },
+
+    // Start space (if scheduled)
+    startSpace: async (spaceId) => {
+        const { data } = await api.post(`/api/spaces/${spaceId}/start`)
+        return data
+    },
+
+    // End space
+    endSpace: async (spaceId) => {
+        const { data } = await api.post(`/api/spaces/${spaceId}/end`)
+        return data
+    }
+}
+
+// Media Services
+export const mediaService = {
+    // Upload media
+    uploadMedia: async (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const { data } = await api.post('/api/media/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        })
+        return data
+    },
+}
+
+// Messaging Services
+export const messagingService = {
+    // Get conversations
+    getConversations: async (params = {}) => {
+        const { data } = await api.get('/api/messages/conversations', { params })
+        return data
+    },
+
+    // Get messages
+    getMessages: async (conversationId, params = {}) => {
+        const { data } = await api.get(`/api/messages/conversations/${conversationId}/messages`, { params })
+        return data
+    },
+
+    // Send message
+    sendMessage: async (recipientId, content) => {
+        const { data } = await api.post('/api/messages/send', { recipientId, content })
+        return data
+    },
+}
+
+// Analytics Services
+export const analyticsService = {
+    logEvent: async (event, data) => {
+        try {
+            await api.post('/api/analytics/events', { event, data })
+        } catch (e) {
+            console.error('Analytics error', e)
+        }
+    },
+    getCreatorStats: async () => {
+        const { data } = await api.get('/api/creator-studio/stats')
+        return data
+    }
+}
+
+// Ad Services
+export const adService = {
+    getCampaigns: async () => {
+        const { data } = await api.get('/api/ads/')
+        return data
+    },
+    createCampaign: async (campaignData) => {
+        const { data } = await api.post('/api/ads/', campaignData)
+        return data
+    },
+    getPerformance: async () => {
+        const { data } = await api.get('/api/ads/performance')
+        return data
+    }
+}
+
+// Business Services
+export const businessService = {
+    getStats: async () => {
+        const { data } = await api.get('/api/business/stats')
+        return data
+    },
+    boostPost: async (postId) => {
+        const { data } = await api.post('/api/business/boost', { postId })
+        return data
+    }
+}
+
+// List Services
+export const listService = {
+    getPinned: async () => {
+        const { data } = await api.get('/api/lists/pinned')
+        return data
+    },
+    getDiscover: async () => {
+        const { data } = await api.get('/api/lists/discover')
+        return data
+    },
+    getYours: async () => {
+        const { data } = await api.get('/api/lists/yours')
+        return data
+    },
+    createList: async (listData) => {
+        const { data } = await api.post('/api/lists/', listData)
+        return data
+    }
+}
+
+// Moderation Services
+export const moderationService = {
+    reportContent: async (contentType, contentId, reason) => {
+        const { data } = await api.post('/api/moderation/report', { contentType, contentId, reason })
+        return data
+    }
+}
+
+// Settings Services
+export const settingsService = {
+    getSettings: async () => {
+        const { data } = await api.get('/api/settings')
+        return data
+    },
+    updateSettings: async (settings) => {
+        const { data } = await api.put('/api/settings', settings)
+        return data
+    }
+}

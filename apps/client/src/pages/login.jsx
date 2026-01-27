@@ -1,0 +1,130 @@
+import { useState } from 'react'
+import { useAuth } from '@/context/AuthContext'
+import { useNavigate } from 'react-router-dom'
+import { validateLoginForm } from '@/lib/validation'
+
+export default function Login() {
+    const [email, setEmail] = useState('')
+    const [password, setPassword] = useState('')
+    const [errors, setErrors] = useState({})
+    const [loading, setLoading] = useState(false)
+    const [serverError, setServerError] = useState('')
+
+    const { login } = useAuth()
+    const navigate = useNavigate()
+
+    const handleSubmit = async (e) => {
+        e.preventDefault()
+        setServerError('')
+
+        // Client-side validation
+        const validation = validateLoginForm(email, password)
+        if (!validation.isValid) {
+            setErrors(validation.errors)
+            return
+        }
+
+        setErrors({})
+        setLoading(true)
+
+        try {
+            await login(email, password)
+            navigate('/')
+        } catch (error) {
+            console.error('Login failed:', error)
+            setServerError(error.response?.data?.error || error.message || 'Login failed. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen p-4">
+            <div className="w-full max-w-md">
+                {/* Logo */}
+                <div className="flex justify-center mb-8">
+                    <img
+                        src="/websplash.png"
+                        alt="Werfie Logo"
+                        className="w-12 h-12 dark:invert"
+                    />
+                </div>
+
+                <h1 className="text-3xl font-bold mb-8 text-center">Sign in to Werfie</h1>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Email Field */}
+                    <div>
+                        <label htmlFor="email" className="block text-sm font-medium mb-2">
+                            Email
+                        </label>
+                        <input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className={`w-full px-4 py-3 rounded-lg border ${errors.email ? 'border-red-500' : 'border-border'
+                                } bg-background focus:outline-none focus:ring-2 focus:ring-primary`}
+                            placeholder="Enter your email"
+                            disabled={loading}
+                        />
+                        {errors.email && (
+                            <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                        )}
+                    </div>
+
+                    {/* Password Field */}
+                    <div>
+                        <label htmlFor="password" className="block text-sm font-medium mb-2">
+                            Password
+                        </label>
+                        <input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className={`w-full px-4 py-3 rounded-lg border ${errors.password ? 'border-red-500' : 'border-border'
+                                } bg-background focus:outline-none focus:ring-2 focus:ring-primary`}
+                            placeholder="Enter your password"
+                            disabled={loading}
+                        />
+                        {errors.password && (
+                            <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+                        )}
+                    </div>
+
+                    {/* Server Error */}
+                    {serverError && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                            <p className="text-red-500 text-sm">{serverError}</p>
+                        </div>
+                    )}
+
+                    {/* Submit Button */}
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full py-3 bg-primary text-primary-foreground rounded-full font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading ? 'Signing in...' : 'Sign in'}
+                    </button>
+                </form>
+
+                {/* Register Link */}
+                <p className="text-center mt-6 text-muted-foreground">
+                    Don't have an account?{' '}
+                    <a href="/signup" className="text-primary hover:underline">
+                        Sign up
+                    </a>
+                </p>
+
+                {/* Test Credentials */}
+                <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-sm font-medium mb-2">Test Credentials:</p>
+                    <p className="text-xs text-muted-foreground">Email: john@example.com</p>
+                    <p className="text-xs text-muted-foreground">Password: password123</p>
+                </div>
+            </div>
+        </div>
+    )
+}

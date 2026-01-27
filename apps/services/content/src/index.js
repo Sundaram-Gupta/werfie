@@ -35,28 +35,17 @@ app.use(express.json());
 // Serve static files from uploads directory
 app.use('/media/uploads', express.static('uploads'));
 
+const adsRoutes = require('./routes/adsRoutes');
+const listsRoutes = require('./routes/listsRoutes');
+const spacesRoutes = require('./routes/spacesRoutes');
+
+app.use('/ads', adsRoutes);
+app.use('/lists', listsRoutes);
+app.use('/spaces', spacesRoutes);
+
 // Auth Middleware
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        console.log('Content Service Auth: No token provided');
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-            console.error('Content Service Auth: Token verification failed:', err.message);
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-        console.log('Content Service Auth: User decoded:', user);
-        req.user = user;
-        req.user.userId = user.sub || user.id || user.userId; // Map standard claims
-        console.log('Content Service Auth: Mapped userId:', req.user.userId);
-        next();
-    });
-};
+// Auth Middleware (Imported)
+const authenticateToken = require('./middleware/auth');
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -120,6 +109,7 @@ app.post('/', authenticateToken, async (req, res) => {
 app.get('/timeline/home', authenticateToken, async (req, res) => {
     try {
         const posts = await prisma.post.findMany({
+            where: { replyToId: null },
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
@@ -139,8 +129,8 @@ app.get('/trends', async (req, res) => {
     console.log('GET /trends hit');
     try {
         const trends = await prisma.trend.findMany({
-            orderBy: { createdAt: 'desc' },
-            take: 10
+            orderBy: { posts: 'desc' },
+            take: 20
         });
         res.json(trends);
     } catch (error) {
@@ -159,36 +149,82 @@ app.get('/explore', async (req, res) => {
             where.category = category;
         }
 
-        const items = await prisma.exploreItem.findMany({
+        const items = await prisma.trend.findMany({
             where,
-            orderBy: { publishedAt: 'desc' },
+            orderBy: { posts: 'desc' },
             take: parseInt(limit)
         });
         res.json(items);
+
     } catch (error) {
         console.error('Explore Error:', error);
         res.status(500).json({ error: 'Failed to fetch explore items' });
     }
 });
 
-// Get Single Post
-app.get('/:id', async (req, res) => {
-    console.log('GET /:id hit', req.params.id);
+// Get Communities
+app.get('/communities', async (req, res) => {
     try {
-        const post = await prisma.post.findUnique({
-            where: { id: req.params.id },
+        const communities = await prisma.community.findMany({
             include: {
-                user: true,
-                _count: { select: { replies: true, likes: true, retweets: true } }
-            }
+                members: {
+                    include: {
+                        user: {
+                            include: { profile: true }
+                        }
+                    }
+                },
+                moderators: {
+                    include: {
+                        user: {
+                            include: { profile: true }
+                        }
+                    }
+                },
+                _count: {
+                    select: { members: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
         });
-        if (!post) return res.status(404).json({ error: `Post not found (ID: ${req.params.id})` });
-        res.json(post);
+
+        // Transform to match frontend expectations
+        const transformedCommunities = communities.map(community => ({
+            id: community.id,
+            name: community.name,
+            description: community.description,
+            avatar: community.avatar,
+            banner: community.banner,
+            membersCount: community.membersCount,
+            isJoined: false, // TODO: Check if current user is a member
+            rules: [],
+            moderators: community.moderators.map(mod => ({
+                name: mod.user.profile?.name || mod.user.email,
+                handle: mod.user.profile?.handle || mod.user.email.split('@')[0],
+                avatar: mod.user.profile?.avatar
+            })),
+            posts: [],
+            members: community.members.slice(0, 5).map(member => ({
+                name: member.user.profile?.name || member.user.email,
+                handle: member.user.profile?.handle || member.user.email.split('@')[0],
+                avatar: member.user.profile?.avatar
+            }))
+        }));
+
+        res.json(transformedCommunities);
     } catch (error) {
-        console.error('Get Post Error:', error);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Communities Error:', error);
+        res.status(500).json({ error: 'Failed to fetch communities' });
     }
 });
+
+
+
+
+
+// Get Single Post - Moved to bottom to avoid conflicts
+// app.get('/:id', ...)
+
 
 // Get All Posts (Feed compatible)
 app.get('/', authenticateToken, async (req, res) => {
@@ -549,12 +585,21 @@ app.get('/bookmarks', authenticateToken, async (req, res) => {
 // Get Notifications
 app.get('/notifications', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
-    const { limit = 20, offset = 0, unreadOnly = false } = req.query;
+    const { limit = 20, offset = 0, unreadOnly = false, filter } = req.query;
 
     try {
         const where = { userId };
+
         if (unreadOnly === 'true') {
             where.read = false;
+        }
+
+        if (filter === 'mentions') {
+            where.type = 'mention';
+        }
+
+        if (filter === 'verified') {
+            where.actor = { profile: { isVerified: true } };
         }
 
         const notifications = await prisma.notification.findMany({
@@ -589,6 +634,25 @@ app.put('/notifications/:id/read', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Mark as Read Error:', error);
         res.status(404).json({ error: 'Notification not found' });
+    }
+});
+
+// Get Single Post - Moved to bottom to avoid conflicts
+app.get('/:id', async (req, res) => {
+    console.log('GET /:id hit', req.params.id);
+    try {
+        const post = await prisma.post.findUnique({
+            where: { id: req.params.id },
+            include: {
+                user: true,
+                _count: { select: { replies: true, likes: true, retweets: true } }
+            }
+        });
+        if (!post) return res.status(404).json({ error: `Post not found (ID: ${req.params.id})` });
+        res.json(post);
+    } catch (error) {
+        console.error('Get Post Error:', error);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
