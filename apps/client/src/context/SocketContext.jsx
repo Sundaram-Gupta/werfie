@@ -24,7 +24,7 @@ export const SocketProvider = ({ children }) => {
         // Only connect if not already connected or if token changed (handled by effect dependency)
         // But socket instance is new every time effect runs.
 
-        const newSocket = io('http://localhost:3002', {
+        const newSocket = io('http://localhost:3013', {
             auth: { token }
         });
 

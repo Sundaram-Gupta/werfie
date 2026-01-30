@@ -33,14 +33,14 @@ export default function ConfigPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-white">Global Configuration</h1>
-                    <p className="text-gray-400 mt-1">Manage system-wide settings and policies.</p>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">Global Configuration</h1>
+                    <p className="text-muted-foreground mt-1">Manage system-wide settings and policies.</p>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline" className="border-white/10 hover:bg-white/5 text-gray-300">
+                    <Button variant="outline" className="border-border hover:bg-muted text-muted-foreground">
                         <RefreshCw className="mr-2 h-4 w-4" /> Reset
                     </Button>
-                    <Button onClick={handleSave} disabled={loading} className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20">
+                    <Button onClick={handleSave} disabled={loading} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
                         {loading ? 'Saving...' : <><Save className="mr-2 h-4 w-4" /> Save Changes</>}
                     </Button>
                 </div>
@@ -48,10 +48,10 @@ export default function ConfigPage() {
 
             <div className="grid gap-6 md:grid-cols-2">
                 {/* Platform Identity */}
-                <Card className="bg-[#151516] border-white/5 shadow-sm">
+                <Card className="bg-card border-border shadow-sm">
                     <CardHeader>
                         <CardTitle>Platform Settings</CardTitle>
-                        <CardDescription className="text-gray-500">General platform identity and contact info.</CardDescription>
+                        <CardDescription className="text-muted-foreground">General platform identity and contact info.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -60,7 +60,7 @@ export default function ConfigPage() {
                                 id="siteName"
                                 value={config.siteName}
                                 onChange={(e) => setConfig({ ...config, siteName: e.target.value })}
-                                className="bg-[#0a0a0b] border-white/10"
+                                className="bg-muted border-transparent text-foreground placeholder:text-muted-foreground"
                             />
                         </div>
                         <div className="space-y-2">
@@ -69,17 +69,17 @@ export default function ConfigPage() {
                                 id="supportEmail"
                                 value={config.supportEmail}
                                 onChange={(e) => setConfig({ ...config, supportEmail: e.target.value })}
-                                className="bg-[#0a0a0b] border-white/10"
+                                className="bg-muted border-transparent text-foreground placeholder:text-muted-foreground"
                             />
                         </div>
                     </CardContent>
                 </Card>
 
                 {/* Access Control */}
-                <Card className="bg-[#151516] border-white/5 shadow-sm">
+                <Card className="bg-card border-border shadow-sm">
                     <CardHeader>
                         <CardTitle>Access Control</CardTitle>
-                        <CardDescription className="text-gray-500">Manage user registration and authentication.</CardDescription>
+                        <CardDescription className="text-muted-foreground">Manage user registration and authentication.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="flex items-center justify-between">
@@ -107,10 +107,10 @@ export default function ConfigPage() {
                 </Card>
 
                 {/* Content Policy */}
-                <Card className="bg-[#151516] border-white/5 shadow-sm">
+                <Card className="bg-card border-border shadow-sm">
                     <CardHeader>
                         <CardTitle>Content Policy</CardTitle>
-                        <CardDescription className="text-gray-500">Limits on user-generated content.</CardDescription>
+                        <CardDescription className="text-muted-foreground">Limits on user-generated content.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -121,7 +121,7 @@ export default function ConfigPage() {
                                     type="number"
                                     value={config.maxPostLength}
                                     onChange={(e) => setConfig({ ...config, maxPostLength: parseInt(e.target.value) })}
-                                    className="bg-[#0a0a0b] border-white/10"
+                                    className="bg-muted border-transparent text-foreground placeholder:text-muted-foreground"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -131,7 +131,7 @@ export default function ConfigPage() {
                                     type="number"
                                     value={config.maxUploadSize}
                                     onChange={(e) => setConfig({ ...config, maxUploadSize: parseInt(e.target.value) })}
-                                    className="bg-[#0a0a0b] border-white/10"
+                                    className="bg-muted border-transparent text-foreground placeholder:text-muted-foreground"
                                 />
                             </div>
                         </div>
@@ -139,10 +139,10 @@ export default function ConfigPage() {
                 </Card>
 
                 {/* Safety & Performance */}
-                <Card className="bg-[#151516] border-white/5 shadow-sm">
+                <Card className="bg-card border-border shadow-sm">
                     <CardHeader>
                         <CardTitle>Safety & Performance</CardTitle>
-                        <CardDescription className="text-gray-500">System limits and safety modes.</CardDescription>
+                        <CardDescription className="text-muted-foreground">System limits and safety modes.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-2">
@@ -152,7 +152,7 @@ export default function ConfigPage() {
                                 type="number"
                                 value={config.rateLimitPerMinute}
                                 onChange={(e) => setConfig({ ...config, rateLimitPerMinute: parseInt(e.target.value) })}
-                                className="bg-[#0a0a0b] border-white/10"
+                                className="bg-muted border-transparent text-foreground placeholder:text-muted-foreground"
                             />
                         </div>
                         <div className="flex items-center justify-between pt-2">

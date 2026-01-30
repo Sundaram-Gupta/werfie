@@ -21,14 +21,14 @@ export function GettingStartedCard() {
     };
 
     return (
-        <Card className="bg-[#151516] border-white/5 shadow-none">
+        <Card className="bg-card border-border shadow-none">
             <CardHeader className="pb-3">
                 <div className="flex items-center justify-between mb-2">
-                    <CardTitle className="text-lg font-bold text-white">Getting Started</CardTitle>
+                    <CardTitle className="text-lg font-bold text-foreground">Getting Started</CardTitle>
                     <span className="text-sm text-muted-foreground">{completedCount} of {tasks.length} completed</span>
                 </div>
                 {/* Progress Bar */}
-                <div className="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
                     <div
                         className="h-full bg-blue-600 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${progress}%` }}
@@ -40,7 +40,7 @@ export function GettingStartedCard() {
                     <div
                         key={task.id}
                         className={cn(
-                            "group flex items-center gap-4 p-3 rounded-xl transition-all duration-200 hover:bg-white/5 cursor-pointer",
+                            "group flex items-center gap-4 p-3 rounded-xl transition-all duration-200 hover:bg-muted cursor-pointer",
                             task.complated && "opacity-70"
                         )}
                         onClick={() => toggleTask(task.id)}
@@ -50,7 +50,7 @@ export function GettingStartedCard() {
                             "h-6 w-6 rounded-md border-2 flex items-center justify-center transition-colors duration-200",
                             task.complated
                                 ? "bg-green-500 border-green-500 text-black"
-                                : "border-gray-600 group-hover:border-gray-500 bg-transparent"
+                                : "border-muted-foreground group-hover:border-foreground bg-transparent"
                         )}>
                             {task.complated && <Check className="h-4 w-4 stroke-[3]" />}
                         </div>
@@ -59,7 +59,7 @@ export function GettingStartedCard() {
                         <div className="flex-1">
                             <h4 className={cn(
                                 "text-sm font-medium transition-colors",
-                                task.complated ? "text-gray-400 line-through" : "text-gray-200"
+                                task.complated ? "text-muted-foreground line-through" : "text-foreground"
                             )}>{task.title}</h4>
                             <p className="text-xs text-muted-foreground">{task.desc}</p>
                         </div>
@@ -68,7 +68,7 @@ export function GettingStartedCard() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 px-3 text-xs font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                             {task.action}
                         </Button>

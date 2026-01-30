@@ -1,8 +1,8 @@
-const { NextResponse } = require('next/server')
-const { prisma } = require('@/lib/prisma')
-const { generateAccessToken, generateRefreshToken } = require('@/lib/jwt')
-const bcrypt = require('bcrypt')
-const { z } = require('zod')
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { generateAccessToken, generateRefreshToken } from '@/lib/jwt'
+import bcrypt from 'bcrypt'
+import { z } from 'zod'
 
 const registerSchema = z.object({
     email: z.string().email(),
@@ -11,7 +11,7 @@ const registerSchema = z.object({
     handle: z.string().min(3).regex(/^[a-zA-Z0-9_]+$/)
 })
 
-async function POST(request) {
+export async function POST(request) {
     try {
         const body = await request.json()
         const { email, password, name, handle } = registerSchema.parse(body)
@@ -91,5 +91,3 @@ async function POST(request) {
         )
     }
 }
-
-module.exports = { POST }

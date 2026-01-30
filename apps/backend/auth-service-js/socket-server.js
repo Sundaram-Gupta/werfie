@@ -72,7 +72,7 @@ io.on("connection", (socket) => {
     });
 });
 
-const PORT = 3002;
+const PORT = 3013;
 httpServer.listen(PORT, () => {
     console.log(`Socket server running on port ${PORT}`);
 });

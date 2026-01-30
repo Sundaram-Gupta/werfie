@@ -274,7 +274,7 @@ services:
     container_name: xclone-client
     restart: always
     environment:
-      VITE_API_URL: "http://192.168.1.4:3001"
+      VITE_API_URL: "http://localhost:3001"
     ports:
       - "5173:5173"
     volumes:
@@ -295,7 +295,7 @@ services:
     container_name: xclone-admin
     restart: always
     environment:
-      VITE_API_URL: "http://192.168.1.4:3001"
+      VITE_API_URL: "http://localhost:3001"
     ports:
       - "5175:5175"
     volumes:

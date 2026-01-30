@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext"
 import { userService, postService } from "@/services/api"
 import { EditProfileModal } from "@/components/profile/edit-profile-modal"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { SetupProgress } from "@/components/profile/setup-progress"
 
 export default function Profile() {
     const navigate = useNavigate()
@@ -248,7 +249,7 @@ export default function Profile() {
             {/* Tabs */}
             <Tabs defaultValue="posts" className="w-full">
                 <TabsList className="w-full h-[53px] bg-transparent border-b border-border/50 p-0 overflow-x-auto justify-between no-scrollbar">
-                    {["Posts", "Replies", "Media", "Likes"].map(tab => (
+                    {["Posts", "Replies", "Highlights", "Articles", "Media", "Likes"].map(tab => (
                         <TabsTrigger
                             key={tab}
                             value={tab.toLowerCase()}
@@ -260,6 +261,7 @@ export default function Profile() {
                 </TabsList>
 
                 <TabsContent value="posts" className="mt-0">
+                    {currentUser?.id === profile.id && <SetupProgress />}
                     <div className="divide-y divide-border/50">
                         {posts.map(post => <PostCard key={post.id} post={post} />)}
                         {posts.length === 0 && <div className="p-8 text-center text-muted-foreground">No posts yet</div>}
@@ -271,6 +273,14 @@ export default function Profile() {
                         {replies.map(post => <PostCard key={post.id} post={post} />)}
                         {replies.length === 0 && <div className="p-8 text-center text-muted-foreground">No replies yet</div>}
                     </div>
+                </TabsContent>
+
+                <TabsContent value="highlights" className="mt-0">
+                    <div className="p-8 text-center text-muted-foreground">No highlights yet</div>
+                </TabsContent>
+
+                <TabsContent value="articles" className="mt-0">
+                    <div className="p-8 text-center text-muted-foreground">No articles yet</div>
                 </TabsContent>
 
                 <TabsContent value="media" className="mt-0">

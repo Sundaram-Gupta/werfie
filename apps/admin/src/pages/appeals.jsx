@@ -23,34 +23,34 @@ export default function AppealsPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white">Appeals Management</h1>
-                <p className="text-gray-400 mt-1">Review and manage user appeals regarding moderation actions.</p>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">Appeals Management</h1>
+                <p className="text-muted-foreground mt-1">Review and manage user appeals regarding moderation actions.</p>
             </div>
 
-            <Card className="bg-[#151516] border-white/5 shadow-sm">
+            <Card className="bg-card border-border shadow-sm">
                 <CardHeader>
                     <CardTitle>Recent Appeals</CardTitle>
-                    <CardDescription className="text-gray-500">List of all pending and processed appeals.</CardDescription>
+                    <CardDescription className="text-muted-foreground">List of all pending and processed appeals.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
-                            <TableRow className="border-white/5 hover:bg-transparent">
-                                <TableHead className="text-gray-400">User</TableHead>
-                                <TableHead className="text-gray-400">Type</TableHead>
-                                <TableHead className="text-gray-400">Reason</TableHead>
-                                <TableHead className="text-gray-400">Date</TableHead>
-                                <TableHead className="text-gray-400">Status</TableHead>
-                                <TableHead className="text-right text-gray-400">Actions</TableHead>
+                            <TableRow className="border-border hover:bg-transparent">
+                                <TableHead className="text-muted-foreground">User</TableHead>
+                                <TableHead className="text-muted-foreground">Type</TableHead>
+                                <TableHead className="text-muted-foreground">Reason</TableHead>
+                                <TableHead className="text-muted-foreground">Date</TableHead>
+                                <TableHead className="text-muted-foreground">Status</TableHead>
+                                <TableHead className="text-right text-muted-foreground">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {appeals.map((appeal) => (
-                                <TableRow key={appeal.id} className="border-white/5 hover:bg-white/5">
-                                    <TableCell className="font-medium text-white">{appeal.user}</TableCell>
-                                    <TableCell className="text-gray-300">{appeal.type}</TableCell>
-                                    <TableCell className="text-gray-400">{appeal.reason}</TableCell>
-                                    <TableCell className="text-gray-500">{appeal.date}</TableCell>
+                                <TableRow key={appeal.id} className="border-border hover:bg-muted/50">
+                                    <TableCell className="font-medium text-foreground">{appeal.user}</TableCell>
+                                    <TableCell className="text-foreground">{appeal.type}</TableCell>
+                                    <TableCell className="text-muted-foreground">{appeal.reason}</TableCell>
+                                    <TableCell className="text-muted-foreground">{appeal.date}</TableCell>
                                     <TableCell>
                                         <Badge
                                             className={`

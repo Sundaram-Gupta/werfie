@@ -30,7 +30,10 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-// app.use(cors()); // Handled by Gateway
+app.use(cors({
+    origin: true, // Reflects the request origin
+    credentials: true
+}));
 app.use(express.json());
 // Serve static files from uploads directory
 app.use('/media/uploads', express.static('uploads'));
@@ -50,6 +53,51 @@ const authenticateToken = require('./middleware/auth');
 // Health Check
 app.get('/health', (req, res) => {
     res.json({ status: 'healthy', service: 'content-service' });
+});
+
+// Search Posts (Moved from Search Service directly to Content for simpler architecture)
+app.get('/posts/search', async (req, res) => {
+    const { q, limit = 20, offset = 0 } = req.query;
+
+    if (!q || q.trim().length === 0) {
+        return res.json([]);
+    }
+
+    try {
+        const posts = await prisma.post.findMany({
+            where: {
+                content: {
+                    contains: q,
+                    mode: 'insensitive'
+                }
+            },
+            include: {
+                user: {
+                    include: { profile: true }
+                },
+                _count: {
+                    select: { likes: true, retweets: true, replies: true }
+                }
+            },
+            take: parseInt(limit),
+            skip: parseInt(offset),
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Sanitize
+        const safePosts = posts.map(post => {
+            const { passwordHash, ...safeUser } = post.user;
+            return {
+                ...post,
+                user: safeUser
+            };
+        });
+
+        res.json(safePosts);
+    } catch (error) {
+        console.error('Search Posts Error:', error);
+        res.status(500).json({ error: 'Failed to search posts' });
+    }
 });
 
 // Create Post
@@ -634,6 +682,47 @@ app.put('/notifications/:id/read', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Mark as Read Error:', error);
         res.status(404).json({ error: 'Notification not found' });
+    }
+});
+
+// Get Spaces
+app.get('/spaces', async (req, res) => {
+    try {
+        const spaces = await prisma.space.findMany({
+            include: {
+                host: {
+                    include: { profile: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(spaces);
+    } catch (error) {
+        console.error('Get Spaces Error:', error);
+        res.status(500).json({ error: 'Failed to get spaces' });
+    }
+});
+
+// Create Space
+app.post('/spaces', authenticateToken, async (req, res) => {
+    const { title, topics, status = 'scheduled', scheduledAt } = req.body;
+    const hostId = req.user.userId;
+
+    try {
+        const space = await prisma.space.create({
+            data: {
+                title,
+                topics,
+                status, // 'live' or 'scheduled'
+                scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+                startedAt: status === 'live' ? new Date() : null,
+                hostId
+            }
+        });
+        res.json(space);
+    } catch (error) {
+        console.error('Create Space Error:', error);
+        res.status(500).json({ error: 'Failed to create space' });
     }
 });
 

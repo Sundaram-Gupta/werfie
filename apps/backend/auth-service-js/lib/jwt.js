@@ -1,11 +1,11 @@
-const { SignJWT, jwtVerify } = require('jose')
-const { randomUUID } = require('crypto')
+import { SignJWT, jwtVerify } from 'jose'
+import { randomUUID } from 'crypto'
 
 const JWT_SECRET = new TextEncoder().encode(
     process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production-min-32-characters'
 )
 
-async function generateAccessToken(userId, email) {
+export async function generateAccessToken(userId, email) {
     const token = await new SignJWT({ sub: userId, email, type: 'access' })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
@@ -15,7 +15,7 @@ async function generateAccessToken(userId, email) {
     return token
 }
 
-async function generateRefreshToken(userId, email) {
+export async function generateRefreshToken(userId, email) {
     const token = await new SignJWT({ sub: userId, email, type: 'refresh' })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
@@ -26,7 +26,7 @@ async function generateRefreshToken(userId, email) {
     return token
 }
 
-async function verifyToken(token) {
+export async function verifyToken(token) {
     try {
         const { payload } = await jwtVerify(token, JWT_SECRET)
         return {
@@ -37,10 +37,4 @@ async function verifyToken(token) {
     } catch (error) {
         throw new Error('Invalid token')
     }
-}
-
-module.exports = {
-    generateAccessToken,
-    generateRefreshToken,
-    verifyToken
 }

@@ -55,7 +55,7 @@ export const authService = {
 
     getFeed: async () => {
         // Use the timeline endpoint from content service
-        const { data } = await api.get('/api/timeline/home/')
+        const { data } = await api.get('/api/timeline/home')
         return data
     },
     changePassword: async (currentPassword, newPassword) => {
@@ -85,13 +85,13 @@ export const authService = {
 export const postService = {
     // Get all posts
     getPosts: async (params = {}) => {
-        const { data } = await api.get('/api/posts/', { params })
+        const { data } = await api.get('/api/posts', { params })
         return data
     },
 
     // Get single post
     getPost: async (postId) => {
-        const { data } = await api.get(`/api/posts/${postId}/`)
+        const { data } = await api.get(`/api/posts/${postId}`)
         return data
     },
 
@@ -100,13 +100,13 @@ export const postService = {
         const payload = { content, mediaUrls }
         if (replyToId) payload.replyToId = replyToId
 
-        const { data } = await api.post('/api/posts/', payload)
+        const { data } = await api.post('/api/posts', payload)
         return data
     },
 
     // Delete post
     deletePost: async (postId) => {
-        const { data } = await api.delete(`/api/posts/${postId}/`)
+        const { data } = await api.delete(`/api/posts/${postId}`)
         return data
     },
 
@@ -151,14 +151,14 @@ export const postService = {
 export const userService = {
     // Get user profile
     getUser: async (userId) => {
-        const { data } = await api.get(`/api/users/${userId}/`)
+        const { data } = await api.get(`/api/users/${userId}`)
         return data
     },
 
     // Get multiple users
     getUsers: async (userIds) => {
         if (!userIds || userIds.length === 0) return []
-        const { data } = await api.get('/api/users/', {
+        const { data } = await api.get('/api/users', {
             params: { ids: userIds.join(',') }
         })
         return data
@@ -172,7 +172,7 @@ export const userService = {
 
     // Update user profile
     updateProfile: async (userId, profileData) => {
-        const { data } = await api.put(`/api/users/${userId}/`, profileData)
+        const { data } = await api.put(`/api/users/${userId}`, profileData)
         return data
     },
 
@@ -351,11 +351,11 @@ export const analyticsService = {
 // Ad Services
 export const adService = {
     getCampaigns: async () => {
-        const { data } = await api.get('/api/ads/')
+        const { data } = await api.get('/api/ads')
         return data
     },
     createCampaign: async (campaignData) => {
-        const { data } = await api.post('/api/ads/', campaignData)
+        const { data } = await api.post('/api/ads', campaignData)
         return data
     },
     getPerformance: async () => {
@@ -391,7 +391,7 @@ export const listService = {
         return data
     },
     createList: async (listData) => {
-        const { data } = await api.post('/api/lists/', listData)
+        const { data } = await api.post('/api/lists', listData)
         return data
     }
 }

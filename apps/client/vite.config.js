@@ -13,6 +13,6 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173, // ensuring port remains standard
-    allowedHosts: ['werfie.ai', 'localhost', '127.0.0.1', '192.168.1.4', '.werfie.ai'],
+    allowedHosts: ['werfie.ai', 'localhost', '127.0.0.1', '.werfie.ai'],
   }
 })

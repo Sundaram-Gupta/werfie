@@ -72,7 +72,6 @@ model Profile {
   location    String?
   website     String?
   birthdate   DateTime?
-  isVerified  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   

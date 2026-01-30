@@ -10,7 +10,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 const businessRoutes = require('./routes/businessRoutes');
 
-// app.use(cors()); // Handled by Gateway
+app.use(cors({
+    origin: true, // Reflects the request origin
+    credentials: true
+}));
 app.use(express.json());
 
 app.use('/business', businessRoutes);

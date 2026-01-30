@@ -1,8 +1,8 @@
-const { NextResponse } = require('next/server')
-const { prisma } = require('@/lib/prisma')
-const { verifyToken } = require('@/lib/jwt')
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { verifyToken } from '@/lib/jwt'
 
-async function POST(request) {
+export async function POST(request) {
     try {
         const authHeader = request.headers.get('authorization')
 
@@ -41,5 +41,3 @@ async function POST(request) {
         )
     }
 }
-
-module.exports = { POST }
