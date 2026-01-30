@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/shared/StatCard';
 import { GettingStartedCard } from '@/components/shared/GettingStartedCard';
-import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, ArrowRight, DollarSign, Mail, MessageSquare } from 'lucide-react';
+import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, ArrowRight, DollarSign, Mail, MessageSquare, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -35,60 +35,15 @@ export default function Dashboard() {
     return (
         <div className="space-y-6 pt-0 pb-8">
 
-            {/* Dark Premium Banner (Reference Match) - Adapted for Light Mode */}
-            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-blue-600/5 to-purple-600/5 dark:from-[#1a1a2e] dark:to-[#0a0a0b] border border-border shadow-2xl group">
-                {/* Subtle radial glow */}
-                <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 blur-[130px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />
 
-                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-5">
-                        <div className="relative">
-                            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-white/10 to-transparent border border-border flex items-center justify-center backdrop-blur-sm shadow-sm">
-                                {/* User Avatar */}
-                                <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center overflow-hidden relative border border-border">
-                                    <img src="https://github.com/shadcn.png" alt="Admin" className="h-full w-full object-cover" />
-                                </div>
-                            </div>
-                            <div className="absolute bottom-0 right-0 h-4 w-4 bg-green-500 border-[3px] border-[#0a0a0b] rounded-full"></div>
-                        </div>
 
-                        <div>
-                            <h1 className="text-3xl font-bold text-foreground mb-2 tracking-tight">Welcome back, Admin!</h1>
-                            <div className="flex items-center gap-3">
-                                <span className="text-muted-foreground text-sm">Werfie Admin Console</span>
-                                <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded text-[10px] font-bold border border-yellow-500/20 uppercase tracking-wider flex items-center gap-1">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse"></span> Super Admin
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-4 mt-3 text-xs font-medium text-muted-foreground">
-                                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-background/50 border border-border">
-                                    <Users className="h-3 w-3 text-blue-400" />
-                                    <span className="text-foreground">12.5M</span> users
-                                </span>
-                                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-background/50 border border-border">
-                                    <Activity className="h-3 w-3 text-purple-400" />
-                                    <span className="text-foreground">98.2%</span> uptime
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <Button asChild className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-6 py-5 shadow-lg shadow-blue-600/20 font-medium transition-all hover:scale-105 active:scale-95">
-                            <Link to="/reports">
-                                View Reports
-                            </Link>
-                        </Button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Stat Cards (Social Media Context) */}
+            {/* Stat Cards */}
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard
                     title="Total Users"
                     value="12.5M"
                     icon={Users}
+                    color="blue"
                     trend="up"
                     trendValue="+120K"
                 />
@@ -96,6 +51,7 @@ export default function Dashboard() {
                     title="Daily Active Users"
                     value="8.2M"
                     icon={Activity}
+                    color="purple"
                     trend="up"
                     trendValue="+5.4%"
                 />
@@ -103,64 +59,72 @@ export default function Dashboard() {
                     title="Verification Requests"
                     value="842"
                     icon={Shield}
+                    color="green"
                     trend="up"
                     trendValue="+12"
                 />
                 <StatCard
-                    title="New Reports"
+                    title="Reports"
                     value="156"
                     icon={AlertTriangle}
+                    color="red"
                     trend="down"
                     trendValue="-3%"
                 />
             </div>
 
             {/* Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-2">
-                {/* Getting Started Checklist */}
-                <GettingStartedCard />
+            <div className="grid gap-6 lg:grid-cols-3">
+                {/* Getting Started Checklist - Takes up 1 column */}
+                <div className="lg:col-span-1 h-full">
+                    <GettingStartedCard className="h-full" />
+                </div>
 
-                {/* Recent Activity Feed */}
-                <Card className="bg-card border-border shadow-none h-full">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                {/* Recent Activity Feed - Takes up 2 columns */}
+                <Card className="lg:col-span-2 bg-card border-border shadow-sm h-full">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/50">
                         <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-                            <Activity className="h-5 w-5 text-blue-500" />
+                            <Activity className="h-5 w-5 text-indigo-500" />
                             Recent Activity
                         </CardTitle>
-                        <Button variant="link" className="text-muted-foreground text-xs h-auto p-0 hover:text-foreground">View all <ArrowRight className="ml-1 h-3 w-3" /></Button>
+                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                            View all <ArrowRight className="ml-1 h-3 w-3" />
+                        </Button>
                     </CardHeader>
-                    <CardContent>
-                        <div className="space-y-6 relative pl-2 pt-2">
+                    <CardContent className="pt-6">
+                        <div className="space-y-6 relative pl-2">
                             {/* Vertical Line */}
-                            <div className="absolute left-[19px] top-4 bottom-4 w-[2px] bg-border" />
+                            <div className="absolute left-[19px] top-2 bottom-6 w-[2px] bg-border/60" />
 
                             {[
                                 { user: "Sarah Miller", action: "verified account @elonmusk", time: "16m ago", color: "blue" },
                                 { user: "Mike Chen", action: "reviewed report #12345", time: "45m ago", color: "purple" },
                                 { user: "System", action: "flagged suspicious activity", time: "2h ago", color: "yellow" },
                                 { user: "Emily Davis", action: "banned bot network", time: "3h ago", color: "red" },
-                                { user: "John Doe", action: "approved ad campaign", time: "5h ago", color: "purple" },
-                                { user: "Chris Wilson", action: "updated platform policies", time: "1d ago", color: "blue" },
+                                { user: "John Doe", action: "approved ad campaign", time: "5h ago", color: "green" },
                             ].map((item, idx) => (
-                                <div key={idx} className="flex gap-4 relative z-10">
+                                <div key={idx} className="flex gap-4 relative z-10 group">
                                     <div className={cn(
-                                        "flex-shrink-0 h-9 w-9 rounded-full border border-background ring-2 ring-card flex items-center justify-center font-bold text-xs",
-                                        item.color === 'blue' ? "bg-blue-600/20 text-blue-500" :
-                                            item.color === 'purple' ? "bg-purple-600/20 text-purple-500" :
-                                                item.color === 'yellow' ? "bg-yellow-600/20 text-yellow-500" :
-                                                    "bg-red-600/20 text-red-500"
+                                        "flex-shrink-0 h-9 w-9 rounded-full border-2 border-background ring-1 ring-border flex items-center justify-center font-bold text-xs shadow-sm transition-transform group-hover:scale-110",
+                                        item.color === 'blue' ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" :
+                                        item.color === 'purple' ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" :
+                                        item.color === 'yellow' ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
+                                        item.color === 'green' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                                        "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
                                     )}>
-                                        {item.user === "System" ? <Server className="h-4 w-4" /> :
-                                            <Users className="h-4 w-4" />}
+                                        {item.user === "System" ? <Server className="h-4 w-4" /> : <Users className="h-4 w-4" />}
                                     </div>
                                     <div className="flex-1 pb-1">
                                         <p className="text-sm text-muted-foreground">
                                             <span className="font-semibold text-foreground">{item.user}</span> {item.action}
                                         </p>
-                                        <p className="text-xs text-muted-foreground mt-0.5 font-medium">{item.time}</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5 font-medium flex items-center gap-1">
+                                            <span className="w-1 h-1 rounded-full bg-border inline-block"></span>
+                                            {item.time}
+                                        </p>
                                     </div>
-                                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user}`} alt={item.user} className="h-5 w-5 rounded-full" />
+                                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user}`} alt={item.user} className="h-6 w-6 rounded-full" />
                                     </div>
                                 </div>
                             ))}
