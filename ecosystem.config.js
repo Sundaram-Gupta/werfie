@@ -244,11 +244,15 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
                 NODE_ENV: 'development',
-                PORT: 3009
+                PORT: 3009,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3009
+                PORT: 3009,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             }
         },
         {
@@ -266,11 +270,15 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
                 NODE_ENV: 'development',
-                PORT: 3010
+                PORT: 3010,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3010
+                PORT: 3010,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             }
         },
         {
@@ -288,11 +296,15 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
                 NODE_ENV: 'development',
-                PORT: 3011
+                PORT: 3011,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3011
+                PORT: 3011,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             }
         },
         {
@@ -311,6 +323,44 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 VITE_API_URL: 'http://localhost:3001'
+            }
+        },
+        {
+            name: 'admin-panel',
+            cwd: './apps/admin',
+            script: 'node',
+            args: 'node_modules/vite/bin/vite.js --port 5175 --host',
+            instances: 1,
+            exec_mode: 'fork',
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '1G',
+            error_file: './logs/admin-panel-error.log',
+            out_file: './logs/admin-panel-out.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+            env: {
+                NODE_ENV: 'development',
+                VITE_API_URL: 'http://localhost:3012'
+            }
+        },
+        {
+            name: 'admin-backend',
+            cwd: './adminBackend',
+            script: 'node',
+            args: 'node_modules/next/dist/bin/next start -p 3012',
+            instances: 1,
+            exec_mode: 'fork',
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '1G',
+            error_file: './logs/admin-backend-error.log',
+            out_file: './logs/admin-backend-out.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+            env: {
+                NODE_ENV: 'development',
+                PORT: 3012,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
             }
         }
     ]

@@ -35,7 +35,7 @@ export function withAuth(handler) {
 
             // Add user to request headers
             const headers = new Headers(request.headers)
-            headers.set('x-user-id', user.userId)
+            headers.set('x-user-id', user.userId || user.sub)
             headers.set('x-user-email', user.email)
 
             // Create new request with user info

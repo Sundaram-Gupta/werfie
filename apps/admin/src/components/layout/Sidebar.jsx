@@ -76,16 +76,8 @@ const navGroups = [
         title: "SYSTEM",
         items: [
             { icon: Settings, label: 'Settings', href: '/settings' },
-            { icon: Globe, label: 'Global Config', href: '/config' },
+            { icon: Globe, label: 'Platform Config', href: '/config' },
             { icon: FileText, label: 'System Logs', href: '/logs' },
-            {
-                icon: Server,
-                label: 'API Settings',
-                subItems: [
-                    { label: 'Manage API Server Key', href: '/settings/api-keys' },
-                    { label: 'Push Notifications Settings', href: '/settings/notifications' }
-                ]
-            }
         ]
     }
 ];

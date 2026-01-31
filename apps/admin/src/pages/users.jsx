@@ -145,12 +145,12 @@ export default function UsersPage() {
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-2">
                                             <Avatar className="h-8 w-8">
-                                                <AvatarImage src={user.avatar} />
-                                                <AvatarFallback>{user.name?.charAt(0) || 'U'}</AvatarFallback>
+                                                <AvatarImage src={user.profile?.avatar} />
+                                                <AvatarFallback>{user.profile?.name?.charAt(0) || user.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex flex-col">
-                                                <span>{user.name}</span>
-                                                <span className="text-xs text-muted-foreground">{user.handle}</span>
+                                                <span>{user.profile?.name || 'Unknown'}</span>
+                                                <span className="text-xs text-muted-foreground">{user.profile?.handle || user.email}</span>
                                             </div>
                                         </div>
                                     </TableCell>
@@ -164,7 +164,7 @@ export default function UsersPage() {
                                             <span className="text-muted-foreground text-xs">No</span>
                                         )}
                                     </TableCell>
-                                    <TableCell>{new Date(user.signupDate).toLocaleDateString()}</TableCell>
+                                    <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
@@ -233,11 +233,11 @@ export default function UsersPage() {
                         <div className="grid gap-4 py-4">
                             <div className="flex flex-col items-center gap-2 mb-4">
                                 <Avatar className="h-20 w-20">
-                                    <AvatarImage src={selectedUser.avatar} />
-                                    <AvatarFallback className="text-2xl">{selectedUser.name?.charAt(0)}</AvatarFallback>
+                                    <AvatarImage src={selectedUser.profile?.avatar} />
+                                    <AvatarFallback className="text-2xl">{selectedUser.profile?.name?.charAt(0) || selectedUser.email.charAt(0)}</AvatarFallback>
                                 </Avatar>
-                                <h3 className="text-xl font-bold">{selectedUser.name}</h3>
-                                <p className="text-sm text-muted-foreground">@{selectedUser.handle}</p>
+                                <h3 className="text-xl font-bold">{selectedUser.profile?.name || 'Unknown'}</h3>
+                                <p className="text-sm text-muted-foreground">@{selectedUser.profile?.handle || selectedUser.email}</p>
                                 <div className="flex gap-2 mt-2">
                                     {getRoleBadge(selectedUser.role)}
                                     {getStatusBadge(selectedUser.status)}
@@ -250,7 +250,7 @@ export default function UsersPage() {
                                 </div>
                                 <div>
                                     <span className="font-semibold">Joined:</span>
-                                    <p className="text-muted-foreground">{new Date(selectedUser.signupDate).toLocaleDateString()}</p>
+                                    <p className="text-muted-foreground">{new Date(selectedUser.createdAt).toLocaleDateString()}</p>
                                 </div>
                                 <div>
                                     <span className="font-semibold">Verified:</span>

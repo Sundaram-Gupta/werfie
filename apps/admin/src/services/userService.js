@@ -2,11 +2,11 @@ import api from '@/lib/axios';
 
 export const getUsers = async (page = 1, limit = 10, search = '') => {
     try {
-        // Use the public search endpoint which we know exists
-        const response = await api.get('/api/search/users', {
-            params: { q: search, limit, offset: (page - 1) * limit }
+        // Use the admin users endpoint
+        const response = await api.get('/api/admin/users', {
+            params: { page, limit, search }
         });
-        return { users: response.data || [] }; // Map array to expected object structure if needed
+        return response.data;
     } catch (error) {
         console.error('Error fetching users:', error);
         return { users: [] };
@@ -15,7 +15,7 @@ export const getUsers = async (page = 1, limit = 10, search = '') => {
 
 export const updateUserStatus = async (userId, status) => {
     try {
-        const response = await api.patch(`/admin/users/${userId}/status`, { status });
+        const response = await api.patch(`/api/admin/users/${userId}/status`, { status });
         return response.data;
     } catch (error) {
         console.error('Error updating user status:', error);
@@ -25,7 +25,7 @@ export const updateUserStatus = async (userId, status) => {
 
 export const updateUserRole = async (userId, role) => {
     try {
-        const response = await api.patch(`/admin/users/${userId}/role`, { role });
+        const response = await api.patch(`/api/admin/users/${userId}/role`, { role });
         return response.data;
     } catch (error) {
         console.error('Error updating user role:', error);
@@ -35,7 +35,7 @@ export const updateUserRole = async (userId, role) => {
 
 export const deleteUser = async (userId) => {
     try {
-        const response = await api.delete(`/admin/users/${userId}`);
+        const response = await api.delete(`/api/admin/users/${userId}`);
         return response.data;
     } catch (error) {
         console.error('Error deleting user:', error);

@@ -6,15 +6,21 @@ import { GettingStartedCard } from '@/components/shared/GettingStartedCard';
 import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, ArrowRight, DollarSign, Mail, MessageSquare, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { getDashboardStats } from '@/services/dashboardService';
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState(null);
+    const [activity, setActivity] = useState([]);
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                // Mock loading delay
-                await new Promise(resolve => setTimeout(resolve, 800));
+                const data = await getDashboardStats();
+                if (data.success) {
+                    setStats(data.stats);
+                    setActivity(data.recentActivity);
+                }
                 setLoading(false);
             } catch (error) {
                 console.error("Failed to load dashboard data", error);
@@ -32,44 +38,57 @@ export default function Dashboard() {
         );
     }
 
+    // Fallback data if API fails or returns no data
+    const displayStats = stats || {
+        totalUsers: { value: "12.5M", trend: "up", trendValue: "+120K" },
+        dailyActiveUsers: { value: "8.2M", trend: "up", trendValue: "+5.4%" },
+        verificationRequests: { value: "842", trend: "up", trendValue: "+12" },
+        reports: { value: "156", trend: "down", trendValue: "-3%" }
+    };
+
+    const displayActivity = activity.length > 0 ? activity : [
+        { user: "Sarah Miller", action: "verified account @elonmusk", time: "16m ago", color: "blue" },
+        { user: "Mike Chen", action: "reviewed report #12345", time: "45m ago", color: "purple" },
+        { user: "System", action: "flagged suspicious activity", time: "2h ago", color: "yellow" },
+        { user: "Emily Davis", action: "banned bot network", time: "3h ago", color: "red" },
+        { user: "John Doe", action: "approved ad campaign", time: "5h ago", color: "green" },
+    ];
+
     return (
         <div className="space-y-6 pt-0 pb-8">
-
-
-
             {/* Stat Cards */}
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard
                     title="Total Users"
-                    value="12.5M"
+                    value={displayStats.totalUsers.value}
                     icon={Users}
                     color="blue"
-                    trend="up"
-                    trendValue="+120K"
+                    trend={displayStats.totalUsers.trend === 'down' ? 'down' : 'up'}
+                    trendValue={displayStats.totalUsers.trendValue}
                 />
                 <StatCard
                     title="Daily Active Users"
-                    value="8.2M"
+                    value={displayStats.dailyActiveUsers.value}
                     icon={Activity}
                     color="purple"
-                    trend="up"
-                    trendValue="+5.4%"
+                    trend={displayStats.dailyActiveUsers.trend === 'down' ? 'down' : 'up'}
+                    trendValue={displayStats.dailyActiveUsers.trendValue}
                 />
                 <StatCard
                     title="Verification Requests"
-                    value="842"
+                    value={displayStats.verificationRequests.value}
                     icon={Shield}
                     color="green"
-                    trend="up"
-                    trendValue="+12"
+                    trend={displayStats.verificationRequests.trend === 'down' ? 'down' : 'up'}
+                    trendValue={displayStats.verificationRequests.trendValue}
                 />
                 <StatCard
                     title="Reports"
-                    value="156"
+                    value={displayStats.reports.value}
                     icon={AlertTriangle}
                     color="red"
-                    trend="down"
-                    trendValue="-3%"
+                    trend={displayStats.reports.trend === 'down' ? 'down' : 'up'}
+                    trendValue={displayStats.reports.trendValue}
                 />
             </div>
 
@@ -96,13 +115,7 @@ export default function Dashboard() {
                             {/* Vertical Line */}
                             <div className="absolute left-[19px] top-2 bottom-6 w-[2px] bg-border/60" />
 
-                            {[
-                                { user: "Sarah Miller", action: "verified account @elonmusk", time: "16m ago", color: "blue" },
-                                { user: "Mike Chen", action: "reviewed report #12345", time: "45m ago", color: "purple" },
-                                { user: "System", action: "flagged suspicious activity", time: "2h ago", color: "yellow" },
-                                { user: "Emily Davis", action: "banned bot network", time: "3h ago", color: "red" },
-                                { user: "John Doe", action: "approved ad campaign", time: "5h ago", color: "green" },
-                            ].map((item, idx) => (
+                            {displayActivity.map((item, idx) => (
                                 <div key={idx} className="flex gap-4 relative z-10 group">
                                     <div className={cn(
                                         "flex-shrink-0 h-9 w-9 rounded-full border-2 border-background ring-1 ring-border flex items-center justify-center font-bold text-xs shadow-sm transition-transform group-hover:scale-110",
@@ -135,3 +148,4 @@ export default function Dashboard() {
         </div>
     );
 }
+

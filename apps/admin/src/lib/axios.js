@@ -27,7 +27,10 @@ api.interceptors.response.use(
     (error) => {
         if (error.response && error.response.status === 401) {
             // Handle unauthorized access (e.g., redirect to login)
-            // window.location.href = '/login'; // Do not auto-redirect in interceptor for now to avoid loops
+            // Handle unauthorized access (e.g., redirect to login)
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('adminUser');
+            window.location.href = '/login';
         }
         return Promise.reject(error);
     }

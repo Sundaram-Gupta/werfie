@@ -24,6 +24,7 @@ import { AuthModal } from "./components/auth/auth-modal"
 import { AuthProvider } from "./context/AuthContext"
 import { SocketProvider } from "./context/SocketContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
+import { Toaster } from "sonner"
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
       <SocketProvider>
         <BrowserRouter>
           <AuthModalProvider>
+            <Toaster position="bottom-center" richColors theme="dark" />
             <AuthModal />
             <Routes>
               {/* Protected Routes - Require Login */}

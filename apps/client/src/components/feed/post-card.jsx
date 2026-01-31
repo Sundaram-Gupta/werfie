@@ -79,7 +79,7 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground whitespace-nowrap">{timestamp}</span>
                     </div>
-                    <MoreOptionsDropdown user={user} />
+                    <MoreOptionsDropdown user={user} contentId={post.id} />
                 </div>
 
                 {/* Post content text */}
