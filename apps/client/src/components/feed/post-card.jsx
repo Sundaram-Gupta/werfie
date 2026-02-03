@@ -3,8 +3,10 @@ import { BadgeCheck } from "lucide-react"
 import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
 import { getMediaUrl } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
+    const { t } = useTranslation()
     // Handle backend data structure
     // Backend returns: { id, userId, content, createdAt, user: { id, profile: { name, handle } } }
     // Frontend expects: { id, user: { name, handle, avatar }, content, timestamp, stats }
@@ -23,13 +25,13 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
         const now = new Date()
         const seconds = Math.floor((now - date) / 1000)
 
-        if (seconds < 60) return `${seconds}s`
+        if (seconds < 60) return `${seconds}${t('time.s')}`
         const minutes = Math.floor(seconds / 60)
-        if (minutes < 60) return `${minutes}m`
+        if (minutes < 60) return `${minutes}${t('time.m')}`
         const hours = Math.floor(minutes / 60)
-        if (hours < 24) return `${hours}h`
+        if (hours < 24) return `${hours}${t('time.h')}`
         const days = Math.floor(hours / 24)
-        return `${days}d`
+        return `${days}${t('time.d')}`
     }
 
     const timestamp = getRelativeTime(post.createdAt || post.timestamp)

@@ -1,0 +1,173 @@
+{
+    "settings": "Configuración",
+    "language": "Idioma",
+    "select_language": "Seleccionar idioma",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "account": "Cuenta",
+    "privacy_safety": "Privacidad y seguridad",
+    "display": "Pantalla",
+    "notifications": "Notificaciones",
+    "data_usage": "Uso de datos",
+    "dark_mode": "Modo oscuro",
+    "feed": {
+        "title": "Inicio",
+        "for_you": "Para ti",
+        "actions": {
+            "reply": "Responder",
+            "repost": "Republicar",
+            "like": "Me gusta",
+            "view": "Ver",
+            "share": "Compartir"
+        },
+        "unable_to_load_posts": "No se pueden cargar las publicaciones.",
+        "no_posts_yet": "Aún no hay publicaciones.",
+        "be_first_to_post": "¡Sé el primero en publicar algo!",
+        "everyone_can_reply": "Todos pueden responder",
+        "uploading": "Subiendo...",
+        "posting": "Publicando..."
+    },
+    "time": {
+        "s": "s",
+        "m": "m",
+        "h": "h",
+        "d": "d"
+    },
+    "profile_menu": {
+        "login_another_account": "Iniciar sesión en otra cuenta",
+        "logout_user": "Cerrar sesión @{{userHandle}}"
+    },
+    "nav": {
+        "home": "Inicio",
+        "explore": "Explorar",
+        "notifications": "Notificaciones",
+        "werfie_ai": "Werfie IA",
+        "follow": "Seguir",
+        "chat": "Chat",
+        "profile": "Perfil",
+        "more": "Más",
+        "post": "Publicar"
+    },
+    "more_menu": {
+        "creator_studio": "Creator Studio",
+        "lists": "Listas",
+        "business": "Negocios",
+        "ads": "Anuncios",
+        "create_space": "Crear tu Espacio",
+        "settings_privacy": "Configuración y privacidad",
+        "theme": "Tema",
+        "dark": "Oscuro",
+        "light": "Claro"
+    },
+    "right_sidebar": {
+        "search_placeholder": "Buscar",
+        "whats_happening": "Qué está pasando",
+        "who_to_follow": "A quién seguir",
+        "show_more": "Mostrar más",
+        "terms": "Términos de servicio",
+        "privacy": "Política de privacidad",
+        "cookies": "Política de cookies",
+        "accessibility": "Accesibilidad",
+        "ads_info": "Info de anuncios",
+        "loading_trends": "Cargando tendencias...",
+        "no_trends": "No se encontraron tendencias",
+        "no_suggestions": "No hay sugerencias"
+    },
+    "common": {
+        "following": "Siguiendo",
+        "loading": "Cargando..."
+    },
+    "explore": {
+        "tabs": {
+            "foryou": "Para ti",
+            "trending": "Tendencias",
+            "news": "Noticias",
+            "sports": "Deportes",
+            "entertainment": "Entretenimiento"
+        },
+        "trends_for_you": "Tendencias para ti",
+        "no_trends": "Aún no hay tendencias",
+        "no_items": "No hay elementos para mostrar"
+    },
+    "notifications": {
+        "title": "Notificaciones",
+        "tabs": {
+            "all": "Todo",
+            "verified": "Verificado",
+            "mentions": "Menciones"
+        },
+        "empty": "Aún no hay notificaciones",
+        "types": {
+            "like": "le gustó tu publicación",
+            "repost": "republicó tu publicación",
+            "follow": "te siguió",
+            "reply": "respondió a tu publicación",
+            "mention": "te mencionó"
+        }
+    },
+    "follow": {
+        "title": "Seguir",
+        "subtitle": "Personas que quizás conozcas y cuentas que sigues",
+        "section_following": "Siguiendo",
+        "section_suggested": "Sugerido para ti",
+        "empty_following": "Aún no sigues a nadie",
+        "empty_suggestions": "No hay sugerencias disponibles"
+    },
+    "chat": {
+        "requests": "Solicitudes",
+        "sent": "Enviado",
+        "start_new_message": "Iniciar nuevo mensaje",
+        "start_conversation": "Iniciar conversación",
+        "choose_conversation": "Elige entre tus conversaciones existentes o inicia una nueva.",
+        "new_chat": "Nuevo chat"
+    },
+    "profile": {
+        "posts_count": "publicaciones",
+        "edit_profile": "Editar perfil",
+        "joined": "Se unió",
+        "following_count": "Siguiendo",
+        "followers_count": "Seguidores",
+        "message_user": "Mensaje @{{handle}}",
+        "no_replies": "Aún no hay respuestas",
+        "tabs": {
+            "posts": "Publicaciones",
+            "replies": "Respuestas",
+            "highlights": "Destacados",
+            "articles": "Artículos",
+            "media": "Multimedia",
+            "likes": "Me gusta"
+        }
+    },
+    "settings_page": {
+        "username": "Nombre de usuario",
+        "email": "Correo electrónico",
+        "change_password": "Cambia tu contraseña",
+        "change_password_desc": "Actualiza tu contraseña en cualquier momento.",
+        "new_pass_error": "Las nuevas contraseñas no coinciden",
+        "pass_update_success": "Contraseña actualizada exitosamente",
+        "pass_update_error": "Error al actualizar la contraseña",
+        "deactivate_account": "Desactiva tu cuenta",
+        "deactivate_account_desc": "Descubre cómo puedes desactivar tu cuenta.",
+        "audience_tagging": "Audiencia y etiquetas",
+        "audience_tagging_desc": "Administra qué información permites que otros vean en X.",
+        "mute_block": "Silenciar y bloquear",
+        "mute_block_desc": "Administra las cuentas, palabras y notificaciones que has silenciado o bloqueado.",
+        "display_desc": "Ajusta la apariencia de X.",
+        "notifications_push": "Notificaciones push",
+        "notifications_push_desc": "Recibe notificaciones push para saber qué sucede cuando no estás en X.",
+        "notifications_email": "Notificaciones por correo electrónico",
+        "notifications_sms": "Notificaciones por SMS",
+        "data_usage": "Uso de datos",
+        "data_saver": "Ahorro de datos",
+        "data_saver_desc": "Reduce el uso de datos cargando imágenes y videos de menor calidad.",
+        "security_access": "Seguridad y acceso a la cuenta",
+        "security": "Seguridad",
+        "security_desc": "Administra la seguridad de tu cuenta.",
+        "additional_resources": "Recursos adicionales",
+        "help_center": "Centro de ayuda",
+        "change_password_title": "Cambiar contraseña",
+        "current_password": "Contraseña actual",
+        "new_password": "Nueva contraseña",
+        "confirm_new_password": "Confirmar nueva contraseña"
+    }
+}

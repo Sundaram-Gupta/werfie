@@ -11,8 +11,11 @@ import { useAuth } from "@/context/AuthContext"
 import { useNavigate } from "react-router-dom"
 import { getMediaUrl } from "@/lib/utils"
 
+import { useTranslation } from "react-i18next"
+
 export function UserProfileMenu() {
     const { user, logout } = useAuth()
+    const { t } = useTranslation()
     const navigate = useNavigate()
 
     const handleLogout = async () => {
@@ -55,7 +58,7 @@ export function UserProfileMenu() {
                     className="cursor-pointer hover:bg-white/[0.03] p-3"
                 >
                     <UserPlus className="w-4 h-4 mr-3" />
-                    <span>Log in to another account</span>
+                    <span>{t('profile_menu.login_another_account')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border" />
                 <DropdownMenuItem
@@ -63,7 +66,7 @@ export function UserProfileMenu() {
                     className="cursor-pointer hover:bg-white/[0.03] p-3 text-red-500 focus:text-red-500"
                 >
                     <LogOut className="w-4 h-4 mr-3" />
-                    <span>Log out @{userHandle}</span>
+                    <span>{t('profile_menu.logout_user', { userHandle })}</span>
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>

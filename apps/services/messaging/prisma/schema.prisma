@@ -8,12 +8,17 @@ datasource db {
 }
 
 model Conversation {
-  id        String    @id @default(uuid())
-  type      String    @default("direct") // direct, group
-  updatedAt DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  type          String    @default("direct") // direct, group
+  updatedAt     DateTime  @updatedAt
+  lastMessageAt DateTime  @default(now())
   
-  participants Participant[]
-  messages     Message[]
+  // Basic caching for list view
+  lastMessageId String?   @unique
+  lastMessage   Message?  @relation("LastMessage", fields: [lastMessageId], references: [id])
+
+  participants  Participant[]
+  messages      Message[] @relation("ConversationMessages")
 }
 
 model Participant {
@@ -22,20 +27,27 @@ model Participant {
   conversationId String
   lastReadAt     DateTime     @default(now())
   
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   
   @@unique([userId, conversationId])
+  @@index([userId])
 }
 
 model Message {
   id             String       @id @default(uuid())
   conversationId String
   senderId       String
-  content        String
+  content        String?      // Optional if media only
+  type           String       @default("text") // text, image, video, system
+  mediaUrl       String?
+  status         String       @default("sent") // sent, delivered, read
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation   Conversation @relation("ConversationMessages", fields: [conversationId], references: [id], onDelete: Cascade)
+  isLastMessageFor Conversation? @relation("LastMessage")
   
   @@index([conversationId])
   @@index([createdAt])
+  @@index([senderId])
 }

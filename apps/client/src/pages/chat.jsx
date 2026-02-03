@@ -5,82 +5,238 @@ import { BadgeCheck, Mail, Search, Settings, Image as ImageIcon, Smile, Send, In
 import { useState, useRef, useEffect } from "react"
 import { cn, getMediaUrl } from "@/lib/utils"
 import EmojiPicker from 'emoji-picker-react'
-import { mediaService } from "@/services/api"
+import { mediaService, searchService, messagingService, userService, authService } from "@/services/api"
+import { socketService } from "@/services/socket"
 import { useLocation } from "react-router-dom"
-
-const CONVERSATIONS = [
-    { id: 1, user: { name: "Elon Musk", handle: "elonmusk", avatar: "https://github.com/shadcn.png", verified: true }, lastMessage: "Let's build a rocket! 🚀", timestamp: "2m", unread: true },
-    { id: 2, user: { name: "Vercel", handle: "vercel", avatar: "https://github.com/vercel.png", verified: true }, lastMessage: "Your deployment is ready.", timestamp: "1h", unread: false },
-    { id: 3, user: { name: "Guillermo Rauch", handle: "rauchg", avatar: "https://github.com/rauchg.png", verified: true }, lastMessage: "Next.js 15 is insane.", timestamp: "3h", unread: false },
-    { id: 4, user: { name: "React", handle: "reactjs", avatar: "https://github.com/reactjs.png", verified: true }, lastMessage: "Have you tried Server Components?", timestamp: "1d", unread: false },
-    { id: 5, user: { name: "Tailwind CSS", handle: "tailwindcss", avatar: "https://github.com/tailwindlabs.png", verified: true }, lastMessage: "v4.0 is coming soon!", timestamp: "2d", unread: true },
-    { id: 6, user: { name: "Linear", handle: "linear", avatar: "https://github.com/linear.png", verified: true }, lastMessage: "New issue tracking features.", timestamp: "3d", unread: false },
-    { id: 7, user: { name: "OpenAI", handle: "openai", avatar: "https://github.com/openai.png", verified: true }, lastMessage: "GPT-5 preview?", timestamp: "1w", unread: false },
-    { id: 8, user: { name: "GitHub", handle: "github", avatar: "https://github.com/github.png", verified: true }, lastMessage: "Copilot X is now available.", timestamp: "1w", unread: false },
-]
-
-const MESSAGES = [
-    { id: 1, sender: "them", text: "Hey! How's the new X clone coming along?", timestamp: "10:30 AM" },
-    { id: 2, sender: "me", text: "It's going great! Just implementing the chat feature now.", timestamp: "10:32 AM" },
-    { id: 3, sender: "them", text: "Nice! Are you using Shadcn UI?", timestamp: "10:33 AM" },
-    { id: 4, sender: "me", text: "Of course! It looks super clean. 🎨", timestamp: "10:34 AM" },
-    { id: 5, sender: "them", text: "Can't wait to see it live! 🚀", timestamp: "10:35 AM" },
-    { id: 6, sender: "me", text: "Sending you a preview link shortly.", timestamp: "10:36 AM" },
-]
-
+import { useTranslation } from "react-i18next"
 
 export default function Chat() {
+    const { t } = useTranslation()
     const location = useLocation()
     const [activeTab, setActiveTab] = useState("all")
     const [searchQuery, setSearchQuery] = useState("")
-    const [selectedChat, setSelectedChat] = useState(CONVERSATIONS[0])
-    const [messages, setMessages] = useState(MESSAGES)
+    const [conversations, setConversations] = useState([])
+    const [selectedChat, setSelectedChat] = useState(null)
+    const [messages, setMessages] = useState([])
     const [newMessage, setNewMessage] = useState("")
+    const [currentUser, setCurrentUser] = useState(null)
+    const [loading, setLoading] = useState(true)
 
     // New State for Media/Emoji
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [mediaAttachment, setMediaAttachment] = useState(null) // { url, type }
     const fileInputRef = useRef(null)
+    const [searchResults, setSearchResults] = useState([])
+    const [typingUsers, setTypingUsers] = useState({}) // { conversationId: [userIds] }
+
+    // Initialize Socket & Load Data
+    useEffect(() => {
+        const init = async () => {
+            const user = authService.getStoredUser()
+            if (!user) return
+            setCurrentUser(user)
+
+            // Connect Socket
+            const socket = socketService.connect()
+            
+            if (socket) {
+                // Listen for messages
+                socket.on('receive_message', handleReceiveMessage)
+                socket.on('typing_start', handleTypingStart)
+                socket.on('typing_stop', handleTypingStop)
+            }
+
+            await loadConversations(user.id)
+        }
+
+        init()
+
+        return () => {
+            const socket = socketService.getSocket()
+            if (socket) {
+                socket.off('receive_message')
+                socket.off('typing_start')
+                socket.off('typing_stop')
+            }
+            socketService.disconnect()
+        }
+    }, [])
+
+    const loadConversations = async (currentUserId) => {
+        try {
+            setLoading(true)
+            const data = await messagingService.getConversations()
+            
+            // Enrich conversations with user profiles
+            // Collect all OTHER user IDs
+            const otherUserIds = new Set()
+            data.forEach(c => {
+                c.participants.forEach(p => {
+                     if (p.userId !== currentUserId) otherUserIds.add(p.userId)
+                })
+            })
+
+            const users = await userService.getUsers(Array.from(otherUserIds))
+            const userMap = {}
+            users.forEach(u => userMap[u.id] = u)
+
+            const enriched = data.map(c => {
+                const otherParticipant = c.participants.find(p => p.userId !== currentUserId)
+                const otherUser = userMap[otherParticipant?.userId] || { name: 'Unknown', handle: 'unknown' }
+                
+                return {
+                    id: c.id,
+                    user: otherUser,
+                    lastMessage: c.lastMessage?.content || (c.lastMessage?.mediaUrl ? "Sent an attachment" : ""),
+                    timestamp: new Date(c.lastMessageAt || c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    unread: false // logic for unread count pending
+                }
+            })
+            
+            setConversations(enriched)
+        } catch (error) {
+            console.error("Failed to load conversations", error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleReceiveMessage = (message) => {
+        // message has conversationId
+        // Update messages if selected chat
+        setSelectedChat(prev => {
+            if (prev && prev.id === message.conversationId) {
+                setMessages(msgs => [...msgs, formatMessage(message)])
+            }
+            return prev
+        })
+
+        // Update conversation list
+        setConversations(prev => {
+            const existing = prev.find(c => c.id === message.conversationId)
+            if (existing) {
+                return prev.map(c => 
+                    c.id === message.conversationId 
+                        ? { 
+                            ...c, 
+                            lastMessage: message.content || "Attachment", 
+                            timestamp: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                            unread: selectedChat?.id !== message.conversationId 
+                        } 
+                        : c
+                ) // Move to top would be better, but map is stable
+            } else {
+                // New conversation incoming? 
+                // We'd need to fetch details or just reload. Reload simpler for now.
+                // loadConversations(currentUser.id) 
+                return prev 
+            }
+        })
+    }
+
+    const handleTypingStart = ({ conversationId, userId }) => {
+        // Show typing indicator
+    }
+
+    const handleTypingStop = ({ conversationId, userId }) => {
+        // Hide typing indicator
+    }
+
+    // Load messages when selecting chat
+    useEffect(() => {
+        if (!selectedChat) return
+
+        const fetchMessages = async () => {
+            try {
+                const msgs = await messagingService.getMessages(selectedChat.id)
+                setMessages(msgs.map(formatMessage))
+                socketService.joinConversation(selectedChat.id)
+                // Mark read
+            } catch (error) {
+                console.error("Failed to load messages", error)
+            }
+        }
+
+        fetchMessages()
+
+        return () => {
+            socketService.leaveConversation(selectedChat.id)
+        }
+    }, [selectedChat?.id])
+
+
+    const formatMessage = (msg) => ({
+        id: msg.id,
+        sender: msg.senderId === currentUser?.id ? "me" : "them",
+        text: msg.content,
+        mediaUrl: msg.mediaUrl,
+        mediaType: msg.type,
+        timestamp: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+
+    useEffect(() => {
+        const searchUsers = async () => {
+            if (!searchQuery.trim()) {
+                setSearchResults([])
+                return
+            }
+            try {
+                const results = await searchService.searchUsers(searchQuery)
+                setSearchResults(results)
+            } catch (error) {
+                console.error("Search failed", error)
+            }
+        }
+
+        const debounceTimer = setTimeout(searchUsers, 300)
+        return () => clearTimeout(debounceTimer)
+    }, [searchQuery])
+
+    const startChatWithUser = async (user) => {
+        if (!currentUser) return
+
+        try {
+            // Optimistic UI update or find existing in list
+            const recipientId = user._id || user.id
+            const existing = conversations.find(c => c.user.id === recipientId)
+            
+            if (existing) {
+                setSelectedChat(existing)
+            } else {
+                // Create on backend
+                const newConv = await messagingService.createConversation(recipientId)
+                
+                // Formatted structure
+                const chatObj = {
+                    id: newConv.id,
+                    user: user,
+                    lastMessage: "",
+                    timestamp: "New",
+                    unread: false
+                }
+                
+                setConversations([chatObj, ...conversations])
+                setSelectedChat(chatObj)
+            }
+            
+            setSearchQuery("")
+            setSearchResults([])
+        } catch (error) {
+            console.error("Failed to start chat", error)
+        }
+    }
 
     // Handle navigation from profile page
     useEffect(() => {
-        if (location.state?.userId) {
+        if (location.state?.userId && currentUser) {
             const { userId, userName, userHandle } = location.state
-
-            // Check if conversation already exists
-            const existingConversation = CONVERSATIONS.find(
-                conv => conv.user.handle === userHandle
-            )
-
-            if (existingConversation) {
-                // Select existing conversation
-                setSelectedChat(existingConversation)
-            } else {
-                // Create new conversation entry
-                const newConversation = {
-                    id: CONVERSATIONS.length + 1,
-                    user: {
-                        name: userName,
-                        handle: userHandle,
-                        avatar: "https://github.com/shadcn.png",
-                        verified: false
-                    },
-                    lastMessage: "Start a conversation...",
-                    timestamp: "now",
-                    unread: false
-                }
-
-                // Add to conversations list and select it
-                CONVERSATIONS.unshift(newConversation)
-                setSelectedChat(newConversation)
-                setMessages([]) // Clear messages for new conversation
-            }
-
+            startChatWithUser({ id: userId, name: userName, handle: userHandle })
+            
             // Clear the navigation state
             window.history.replaceState({}, document.title)
         }
-    }, [location.state])
+    }, [location.state, currentUser])
 
     const handleEmojiClick = (emojiData) => {
         setNewMessage(prev => prev + emojiData.emoji)
@@ -95,7 +251,7 @@ export default function Chat() {
             const { url } = await mediaService.uploadMedia(file)
             setMediaAttachment({
                 url,
-                type: file.type.startsWith('video/') ? 'VIDEO' : 'IMAGE'
+                type: file.type.startsWith('video/') ? 'video' : 'image'
             })
         } catch (error) {
             console.error("Upload failed", error)
@@ -105,16 +261,29 @@ export default function Chat() {
     }
 
     const handleSendMessage = () => {
-        if (!newMessage.trim() && !mediaAttachment) return
+        if ((!newMessage.trim() && !mediaAttachment) || !selectedChat) return
 
-        setMessages([...messages, {
-            id: messages.length + 1,
-            sender: "me",
-            text: newMessage,
-            mediaUrl: mediaAttachment?.url,
-            mediaType: mediaAttachment?.type,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }])
+        const payload = {
+            conversationId: selectedChat.id,
+            content: newMessage,
+            type: mediaAttachment ? mediaAttachment.type : 'text',
+            mediaUrl: mediaAttachment?.url
+        }
+
+        // Optimistic update
+        const tempMsg = {
+           id: Date.now(),
+           senderId: currentUser.id,
+           content: newMessage,
+           type: payload.type,
+           mediaUrl: payload.mediaUrl,
+           createdAt: new Date()
+        }
+        
+        setMessages(prev => [...prev, formatMessage(tempMsg)])
+        
+        // Emit socket
+        socketService.sendMessage(payload)
 
         setNewMessage("")
         setMediaAttachment(null)
@@ -128,7 +297,7 @@ export default function Chat() {
                 {/* Header */}
                 <div className="sticky top-0 z-10 bg-black border-b border-border">
                     <div className="px-4 py-3 flex justify-between items-center">
-                        <h1 className="text-xl font-bold">Chat</h1>
+                        <h1 className="text-xl font-bold">{t('nav.chat')}</h1>
                         <div className="flex gap-2">
                             <button className="p-2 hover:bg-white/[0.03] rounded-full transition-colors">
                                 <Settings className="w-5 h-5" />
@@ -143,7 +312,7 @@ export default function Chat() {
                             <Input
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search"
+                                placeholder={t('right_sidebar.search_placeholder')}
                                 className="w-full bg-[#202327] border-none rounded-full pl-12 h-11 text-white placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-blue-500"
                             />
                         </div>
@@ -158,7 +327,7 @@ export default function Chat() {
                                 activeTab === "all" ? "text-white" : "text-muted-foreground hover:text-white"
                             )}
                         >
-                            All
+                            {t('notifications.tabs.all')}
                             {activeTab === "all" && (
                                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-full" />
                             )}
@@ -170,7 +339,7 @@ export default function Chat() {
                                 activeTab === "requests" ? "text-white" : "text-muted-foreground hover:text-white"
                             )}
                         >
-                            Requests
+                            {t('chat.requests')}
                             {activeTab === "requests" && (
                                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-full" />
                             )}
@@ -179,19 +348,51 @@ export default function Chat() {
                 </div>
 
                 {/* Conversation List */}
+
+
+                {/* Conversation List or Search Results */}
                 <div className="flex flex-col">
-                    {CONVERSATIONS.map((chat) => (
+                    {searchQuery.trim() ? (
+                        /* Search Results */
+                        searchResults.length > 0 ? (
+                            searchResults.map((user) => (
+                                <div
+                                    key={user._id || user.id}
+                                    onClick={() => startChatWithUser(user)}
+                                    className="flex items-center gap-3 px-4 py-4 hover:bg-white/[0.03] transition-colors cursor-pointer border-r-2 border-transparent"
+                                >
+                                    <Avatar className="w-10 h-10 border border-border">
+                                        <AvatarImage src={user.avatar || user.profile?.avatar || "https://github.com/shadcn.png"} />
+                                        <AvatarFallback>{(user.name?.[0] || 'U').toUpperCase()}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1">
+                                            <span className="font-bold text-[15px] truncate">{user.name || user.profile?.name}</span>
+                                            {user.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                                        </div>
+                                        <span className="text-muted-foreground text-[14px]">@{user.handle || user.username || user.profile?.handle}</span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="px-4 py-8 text-center text-muted-foreground">
+                                No users found
+                            </div>
+                        )
+                    ) : (
+                        /* Existing Conversations */
+                        conversations.map((chat) => (
                         <div
                             key={chat.id}
                             onClick={() => setSelectedChat(chat)}
                             className={cn(
                                 "flex items-center gap-3 px-4 py-4 hover:bg-white/[0.03] transition-colors cursor-pointer border-r-2",
-                                selectedChat.id === chat.id ? "bg-white/[0.03] border-blue-500" : "border-transparent"
+                                selectedChat?.id === chat.id ? "bg-white/[0.03] border-blue-500" : "border-transparent"
                             )}
                         >
                             <Avatar className="w-10 h-10 border border-border">
-                                <AvatarImage src={chat.user.avatar} />
-                                <AvatarFallback>{chat.user.name[0]}</AvatarFallback>
+                                <AvatarImage src={chat.user.avatar || "https://github.com/shadcn.png"} />
+                                <AvatarFallback>{chat.user.name?.[0] || "U"}</AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-0.5">
@@ -204,13 +405,14 @@ export default function Chat() {
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <p className={cn("text-[14px] truncate", chat.unread ? "text-white font-bold" : "text-muted-foreground")}>
-                                        {chat.lastMessage}
+                                        {chat.lastMessage || t('chat.start_conversation')}
                                     </p>
                                     {chat.unread && <div className="w-2 h-2 rounded-full bg-blue-500" />}
                                 </div>
                             </div>
                         </div>
-                    ))}
+                    ))
+                    )}
                 </div>
             </div>
 
@@ -230,15 +432,14 @@ export default function Chat() {
                             {/* Profile Info in Chat */}
                             <div className="flex flex-col items-center justify-center py-8 hover:bg-white/[0.03] rounded-xl transition-colors mb-4 border-b border-border/50">
                                 <Avatar className="w-16 h-16 mb-2">
-                                    <AvatarImage src={selectedChat.user.avatar} />
-                                    <AvatarFallback>{selectedChat.user.name[0]}</AvatarFallback>
+                                    <AvatarImage src={selectedChat.user.avatar || "https://github.com/shadcn.png"} />
+                                    <AvatarFallback>{selectedChat.user.name?.[0]}</AvatarFallback>
                                 </Avatar>
                                 <h3 className="text-lg font-bold flex items-center gap-1">
                                     {selectedChat.user.name}
                                     {selectedChat.user.verified && <BadgeCheck className="w-5 h-5 text-blue-500 fill-blue-500/10" />}
                                 </h3>
                                 <p className="text-muted-foreground">@{selectedChat.user.handle}</p>
-                                <p className="text-muted-foreground text-sm mt-2">Joined September 2024 · 1.2M Followers</p>
                             </div>
 
                             {messages.map((msg) => (
@@ -258,16 +459,20 @@ export default function Chat() {
                                         )}
                                     >
                                         {msg.mediaUrl && (
-                                            <img
-                                                src={getMediaUrl(msg.mediaUrl)}
-                                                alt="Attachment"
-                                                className="rounded-lg mb-2 max-h-[300px] w-full object-cover"
-                                            />
+                                            msg.mediaType === 'video' ? (
+                                                <video src={getMediaUrl(msg.mediaUrl)} controls className="rounded-lg mb-2 max-h-[300px] w-full object-cover" />
+                                            ) : (
+                                                <img
+                                                    src={getMediaUrl(msg.mediaUrl)}
+                                                    alt="Attachment"
+                                                    className="rounded-lg mb-2 max-h-[300px] w-full object-cover"
+                                                />
+                                            )
                                         )}
                                         {msg.text}
                                     </div>
                                     <span className="text-[11px] text-muted-foreground mt-1 px-1">
-                                        {msg.timestamp} {msg.sender === "me" && "· Sent"}
+                                        {msg.timestamp} {msg.sender === "me" && `· ${t('chat.sent')}`}
                                     </span>
                                 </div>
                             ))}
@@ -285,7 +490,12 @@ export default function Chat() {
                             {mediaAttachment && (
                                 <div className="absolute bottom-full left-0 w-full bg-black/90 p-3 border-t border-border flex items-center gap-3">
                                     <div className="relative group">
-                                        <img src={getMediaUrl(mediaAttachment.url)} className="h-20 w-20 object-cover rounded-lg border border-border" />
+                                        {mediaAttachment.type === 'video' ? (
+                                             <video src={getMediaUrl(mediaAttachment.url)} className="h-20 w-20 object-cover rounded-lg border border-border" />
+                                        ) : (
+                                            <img src={getMediaUrl(mediaAttachment.url)} className="h-20 w-20 object-cover rounded-lg border border-border" />
+                                        )}
+                                        
                                         <button
                                             onClick={() => setMediaAttachment(null)}
                                             className="absolute -top-2 -right-2 bg-zinc-800 rounded-full p-1 border border-border hover:bg-zinc-700"
@@ -293,7 +503,7 @@ export default function Chat() {
                                             <X className="w-3 h-3" />
                                         </button>
                                     </div>
-                                    <div className="text-sm text-muted-foreground">Attached Image</div>
+                                    <div className="text-sm text-muted-foreground">{t('feed.media_attached')}</div>
                                 </div>
                             )}
 
@@ -325,7 +535,7 @@ export default function Chat() {
                                 <Input
                                     value={newMessage}
                                     onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder={isUploading ? "Uploading..." : "Start a new message"}
+                                    placeholder={isUploading ? t('feed.uploading') : t('chat.start_new_message')}
                                     className="flex-1 border-none bg-transparent focus-visible:ring-0 text-white placeholder:text-muted-foreground px-2 h-10"
                                     onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                                 />
@@ -347,10 +557,10 @@ export default function Chat() {
                             <div className="w-16 h-16 mb-6 mx-auto relative">
                                 <Mail className="w-16 h-16 text-white" strokeWidth={1.5} />
                             </div>
-                            <h2 className="text-[31px] font-bold mb-2">Start Conversation</h2>
-                            <p className="text-[15px] text-muted-foreground mb-7">Choose from your existing conversations, or start a new one.</p>
+                            <h2 className="text-[31px] font-bold mb-2">{t('chat.start_conversation')}</h2>
+                            <p className="text-[15px] text-muted-foreground mb-7">{t('chat.choose_conversation')}</p>
                             <Button className="rounded-full bg-white text-black hover:bg-white/90 font-bold px-8 h-[52px] text-[17px]">
-                                New chat
+                                {t('chat.new_chat')}
                             </Button>
                         </div>
                     </div>

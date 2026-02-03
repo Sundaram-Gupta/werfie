@@ -5,8 +5,10 @@ import { searchService } from "@/services/api"
 import { cn } from "@/lib/utils"
 import { MoreOptionsDropdown } from "@/components/feed/more-options-dropdown"
 import { useNavigate } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 
 export default function Explore() {
+    const { t } = useTranslation()
     const [activeTab, setActiveTab] = useState("foryou")
     const [trends, setTrends] = useState([])
     const [exploreItems, setExploreItems] = useState([])
@@ -43,11 +45,11 @@ export default function Explore() {
     }, [activeTab])
 
     const tabs = [
-        { id: "foryou", label: "For you" },
-        { id: "trending", label: "Trending" },
-        { id: "news", label: "News" },
-        { id: "sports", label: "Sports" },
-        { id: "entertainment", label: "Entertainment" },
+        { id: "foryou", label: t('explore.tabs.foryou') },
+        { id: "trending", label: t('explore.tabs.trending') },
+        { id: "news", label: t('explore.tabs.news') },
+        { id: "sports", label: t('explore.tabs.sports') },
+        { id: "entertainment", label: t('explore.tabs.entertainment') },
     ]
 
     return (
@@ -59,7 +61,7 @@ export default function Explore() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
                             type="text"
-                            placeholder="Search"
+                            placeholder={t('right_sidebar.search_placeholder')}
                             className="w-full bg-muted/50 rounded-full py-2.5 pl-10 pr-4 outline-none text-[15px] focus:bg-background focus:ring-1 ring-primary transition border border-transparent focus:border-primary placeholder-muted-foreground"
                             onKeyDown={e => e.key === 'Enter' && navigate(`/search?q=${encodeURIComponent(e.target.value)}`)}
                         />
@@ -108,8 +110,8 @@ export default function Explore() {
                 {/* Trending List */}
                 {(activeTab === "foryou" || activeTab === "trending") && (
                     <div className="divide-y divide-border/50 border-b border-border/50">
-                        <h2 className="px-4 py-3 font-bold text-xl">Trends for you</h2>
-                        {trends.length === 0 ? <div className="p-4 text-muted-foreground">No trends yet</div> : trends.map((item) => (
+                        <h2 className="px-4 py-3 font-bold text-xl">{t('explore.trends_for_you')}</h2>
+                        {trends.length === 0 ? <div className="p-4 text-muted-foreground">{t('explore.no_trends')}</div> : trends.map((item) => (
                             <div key={item.id} className="px-4 py-3 hover:bg-white/[0.03] transition cursor-pointer flex justify-between items-start" onClick={() => navigate(`/search?q=${encodeURIComponent(item.topic)}`)}>
                                 <div>
                                     <div className="text-[13px] text-muted-foreground">{item.category}</div>
@@ -126,9 +128,9 @@ export default function Explore() {
                 {['foryou', 'news', 'sports', 'entertainment'].includes(activeTab) && (
                     <div className="divide-y divide-border/50">
                         {loading ? (
-                            <div className="p-8 text-center text-muted-foreground">Loading...</div>
+                            <div className="p-8 text-center text-muted-foreground">{t('common.loading')}</div>
                         ) : exploreItems.length === 0 ? (
-                            <div className="p-8 text-center text-muted-foreground">No items to display</div>
+                            <div className="p-8 text-center text-muted-foreground">{t('explore.no_items')}</div>
                         ) : (
                             exploreItems.map(item => (
                                 <div

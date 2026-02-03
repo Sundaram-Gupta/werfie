@@ -56,11 +56,10 @@ export async function POST(request) {
         return NextResponse.json({
             accessToken,
             refreshToken,
-            user: {
-                id: user.id,
-                email: user.email,
-                profile: user.profile
-            }
+            id: user.id,
+            email: user.email,
+            profile: user.profile,
+            preferredLanguage: user.preferredLanguage
         })
 
     } catch (error) {

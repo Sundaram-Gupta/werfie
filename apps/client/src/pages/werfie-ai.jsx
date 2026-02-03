@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Send, Sparkles, Zap, Brain } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 /**
  * Sample conversation prompts for quick start
@@ -35,6 +36,7 @@ const SAMPLE_CONVERSATIONS = [
 ]
 
 export default function WerfieAI() {
+    const { i18n } = useTranslation()
     /**
      * Messages state - stores the conversation history
      * Each message object contains:
@@ -90,10 +92,21 @@ export default function WerfieAI() {
 
         // Simulate AI response (replace with actual API call)
         setTimeout(() => {
+            const responses = {
+                en: `I understand you're asking about "${inputMessage}". This is a demo response.`,
+                hi: `मैं समझता हूँ कि आप "${inputMessage}" के बारे में पूछ रहे हैं। यह एक डेमो उत्तर है।`,
+                es: `Entiendo que preguntas sobre "${inputMessage}". Esta es una respuesta de demostración.`,
+                fr: `Je comprends que vous posez des questions sur "${inputMessage}". Ceci est une réponse de démonstration.`,
+                de: `Ich verstehe, dass Sie nach "${inputMessage}" fragen. Dies ist eine Demo-Antwort.`
+            };
+
+            const lang = i18n.language || 'en';
+            const content = responses[lang] || responses['en'];
+
             const aiResponse = {
                 id: messages.length + 2,
                 role: "assistant",
-                content: `I understand you're asking about "${inputMessage}". This is a demo response. In a production environment, this would connect to an actual AI service to provide intelligent responses.`,
+                content: content,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }
             setMessages(prev => [...prev, aiResponse])

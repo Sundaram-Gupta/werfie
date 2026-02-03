@@ -7,8 +7,10 @@ import { useAuth } from "@/context/AuthContext"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 import EmojiPicker from 'emoji-picker-react';
+import { useTranslation } from "react-i18next"
 
 export default function Home() {
+    const { t } = useTranslation()
     const [activeTab, setActiveTab] = useState("for-you")
     const [postContent, setPostContent] = useState("")
     const [isPosting, setIsPosting] = useState(false)
@@ -84,14 +86,14 @@ export default function Home() {
                         onClick={() => setActiveTab("for-you")}
                         className={cn("flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] font-bold relative", activeTab === "following" && "text-muted-foreground font-medium")}
                     >
-                        For you
+                        {t('feed.for_you')}
                         {activeTab === "for-you" && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 bg-primary rounded-full min-w-[56px]" />}
                     </div>
                     <div
                         onClick={() => setActiveTab("following")}
                         className={cn("flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] font-bold relative", activeTab === "for-you" && "text-muted-foreground font-medium")}
                     >
-                        Following
+                        {t('common.following')}
                         {activeTab === "following" && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-primary rounded-full" />}
                     </div>
                 </div>
@@ -107,8 +109,9 @@ export default function Home() {
                     <textarea
                         value={postContent}
                         onChange={(e) => setPostContent(e.target.value)}
+                        onChange={(e) => setPostContent(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        placeholder="What is happening?!"
+                        placeholder={t('right_sidebar.whats_happening')}
                         className="w-full bg-transparent outline-none text-[20px] placeholder-muted-foreground mb-3 text-foreground resize-none min-h-[60px]"
                         maxLength={280}
                     />
@@ -130,7 +133,7 @@ export default function Home() {
                         </div>
                     )}
 
-                    {isUploading && <div className="text-sm text-primary mb-2">Uploading...</div>}
+                    {isUploading && <div className="text-sm text-primary mb-2">{t('feed.uploading')}</div>}
 
                     <div className="flex justify-between items-center border-t border-border/20 pt-3">
                         <div className="flex gap-2 text-primary -ml-2 relative">
@@ -188,7 +191,7 @@ export default function Home() {
                                 disabled={(!postContent.trim() && mediaUrls.length === 0) || isPosting || postContent.length > 280 || isUploading}
                                 className="bg-primary text-primary-foreground font-bold text-[15px] px-4 py-1.5 rounded-full hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isPosting ? 'Posting...' : 'Post'}
+                                {isPosting ? t('feed.posting') : t('nav.post')}
                             </button>
                         </div>
                     </div>

@@ -1,0 +1,173 @@
+{
+    "settings": "सेटिंग्स",
+    "language": "भाषा",
+    "select_language": "भाषा चुनें",
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "account": "खाता",
+    "privacy_safety": "गोपनीयता और सुरक्षा",
+    "display": "प्रदर्शन",
+    "notifications": "सूचनाएं",
+    "data_usage": "डेटा उपयोग",
+    "dark_mode": "डार्क मोड",
+    "feed": {
+        "title": "होम",
+        "for_you": "आपके लिए",
+        "actions": {
+            "reply": "जवाब दें",
+            "repost": "रीपोस्ट",
+            "like": "लाइक",
+            "view": "देखें",
+            "share": "साझा करें"
+        },
+        "unable_to_load_posts": "पोस्ट लोड करने में असमर्थ।",
+        "no_posts_yet": "अभी तक कोई पोस्ट नहीं।",
+        "be_first_to_post": "कुछ पोस्ट करने वाले पहले बनें!",
+        "everyone_can_reply": "हर कोई जवाब दे सकता है",
+        "uploading": "अपलोड हो रहा है...",
+        "posting": "पोस्ट किया जा रहा है..."
+    },
+    "time": {
+        "s": "से",
+        "m": "मि",
+        "h": "घं",
+        "d": "दि"
+    },
+    "profile_menu": {
+        "login_another_account": "दूसरे खाते में लॉग इन करें",
+        "logout_user": "लॉग आउट @{{userHandle}}"
+    },
+    "nav": {
+        "home": "होम",
+        "explore": "एक्सप्लोर",
+        "notifications": "सूचनाएं",
+        "werfie_ai": "Werfie एआई",
+        "follow": "फॉलो करें",
+        "chat": "चैट",
+        "profile": "प्रोफाइल",
+        "more": "अधिक",
+        "post": "पोस्ट"
+    },
+    "more_menu": {
+        "creator_studio": "क्रिएटर स्टूडियो",
+        "lists": "सूचियाँ",
+        "business": "व्यापार",
+        "ads": "विज्ञापन",
+        "create_space": "अपना स्पेस बनाएं",
+        "settings_privacy": "सेटिंग्स और गोपनीयता",
+        "theme": "थीम",
+        "dark": "डार्क",
+        "light": "लाइट"
+    },
+    "right_sidebar": {
+        "search_placeholder": "खोजें",
+        "whats_happening": "क्या चल रहा है",
+        "who_to_follow": "किन्हें फॉलो करें",
+        "show_more": "और दिखाएं",
+        "terms": "सेवा की शर्तें",
+        "privacy": "गोपनीयता नीति",
+        "cookies": "कुकी नीति",
+        "accessibility": "सुगम्यता",
+        "ads_info": "विज्ञापन जानकारी",
+        "loading_trends": "ट्रेंड लोड हो रहे हैं...",
+        "no_trends": "कोई ट्रेंड नहीं मिला",
+        "no_suggestions": "कोई सुझाव नहीं"
+    },
+    "common": {
+        "following": "फॉलो कर रहे हैं",
+        "loading": "लोड हो रहा है..."
+    },
+    "explore": {
+        "tabs": {
+            "foryou": "आपके लिए",
+            "trending": "ट्रेंडिंग",
+            "news": "समाचार",
+            "sports": "खेल",
+            "entertainment": "मनोरंजन"
+        },
+        "trends_for_you": "आपके लिए रुझान",
+        "no_trends": "अभी तक कोई रुझान नहीं",
+        "no_items": "दिखाने के लिए कोई आइटम नहीं"
+    },
+    "notifications": {
+        "title": "सूचनाएं",
+        "tabs": {
+            "all": "सभी",
+            "verified": "सत्यापित",
+            "mentions": "उल्लेख"
+        },
+        "empty": "अभी तक कोई सूचना नहीं",
+        "types": {
+            "like": "आपकी पोस्ट लाइक की",
+            "repost": "आपकी पोस्ट रीपोस्ट की",
+            "follow": "ने आपको फॉलो किया",
+            "reply": "आपकी पोस्ट का जवाब दिया",
+            "mention": "आपका उल्लेख किया"
+        }
+    },
+    "follow": {
+        "title": "फॉलो करें",
+        "subtitle": "लोग जिन्हें आप जान सकते हैं और खाते जिन्हें आप फॉलो करते हैं",
+        "section_following": "फॉलो कर रहे हैं",
+        "section_suggested": "आपके लिए सुझाव",
+        "empty_following": "आप अभी तक किसी को फॉलो नहीं कर रहे हैं",
+        "empty_suggestions": "कोई सुझाव उपलब्ध नहीं है"
+    },
+    "chat": {
+        "requests": "अनुरोध",
+        "sent": "भेजा गया",
+        "start_new_message": "नया संदेश शुरू करें",
+        "start_conversation": "बातचीत शुरू करें",
+        "choose_conversation": "अपनी मौजूदा बातचीत में से चुनें, या नई बातचीत शुरू करें।",
+        "new_chat": "नई चैट"
+    },
+    "profile": {
+        "posts_count": "पोस्ट",
+        "edit_profile": "प्रोफाइल संपादित करें",
+        "joined": "शामिल हुए",
+        "following_count": "फॉलो कर रहे हैं",
+        "followers_count": "फॉलोअर्स",
+        "message_user": "संदेश @{{handle}}",
+        "no_replies": "अभी तक कोई जवाब नहीं",
+        "tabs": {
+            "posts": "पोस्ट",
+            "replies": "जवाब",
+            "highlights": "हाइलाइट",
+            "articles": "लेख",
+            "media": "मीडिया",
+            "likes": "लाइक्स"
+        }
+    },
+    "settings_page": {
+        "username": "उपयोगकर्ता नाम",
+        "email": "ईमेल",
+        "change_password": "अपना पासवर्ड बदलें",
+        "change_password_desc": "अपना पासवर्ड किसी भी समय अपडेट करें।",
+        "new_pass_error": "नए पासवर्ड मेल नहीं खाते",
+        "pass_update_success": "पासवर्ड सफलतापूर्वक अपडेट किया गया",
+        "pass_update_error": "पासवर्ड अपडेट करने में विफल",
+        "deactivate_account": "अपना खाता निष्क्रिय करें",
+        "deactivate_account_desc": "जानें कि आप अपना खाता कैसे निष्क्रिय कर सकते हैं।",
+        "audience_tagging": "श्रोता और टैगिंग",
+        "audience_tagging_desc": "प्रबंधित करें कि आप X पर अन्य लोगों को कौन सी जानकारी देखने की अनुमति देते हैं।",
+        "mute_block": "म्यूट और ब्लॉक",
+        "mute_block_desc": "उन खातों, शब्दों और सूचनाओं को प्रबंधित करें जिन्हें आपने म्यूट या ब्लॉक किया है।",
+        "display_desc": "X की उपस्थिति को समायोजित करें।",
+        "notifications_push": "पुश नोटिफिकेशन",
+        "notifications_push_desc": "जब आप X पर न हों तो क्या हो रहा है, यह जानने के लिए पुश नोटिफिकेशन प्राप्त करें।",
+        "notifications_email": "ईमेल नोटिफिकेशन",
+        "notifications_sms": "एसएमएस नोटिफिकेशन",
+        "data_usage": "डेटा उपयोग",
+        "data_saver": "डेटा सेवर",
+        "data_saver_desc": "कम गुणवत्ता वाले चित्र और वीडियो लोड करके डेटा उपयोग कम करें।",
+        "security_access": "सुरक्षा और खाता पहुंच",
+        "security": "सुरक्षा",
+        "security_desc": "अपने खाते की सुरक्षा प्रबंधित करें।",
+        "additional_resources": "अतिरिक्त संसाधन",
+        "help_center": "सहायता केंद्र",
+        "change_password_title": "पासवर्ड बदलें",
+        "current_password": "वर्तमान पासवर्ड",
+        "new_password": "नया पासवर्ड",
+        "confirm_new_password": "नए पासवर्ड की पुष्टि करें"
+    }
+}

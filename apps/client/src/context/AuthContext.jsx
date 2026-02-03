@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { authService } from '@/services/api'
 
+import i18n from '@/i18n'
+
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -14,6 +16,9 @@ export function AuthProvider({ children }) {
                 try {
                     const userData = await authService.getCurrentUser()
                     setUser(userData)
+                    if (userData.preferredLanguage) {
+                        i18n.changeLanguage(userData.preferredLanguage)
+                    }
                 } catch (error) {
                     console.error('Auth check failed:', error)
                     // Clear invalid tokens

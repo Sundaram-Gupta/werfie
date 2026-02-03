@@ -6,6 +6,8 @@ import {
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { Image, X, MapPin, Smile, FileBarChart2, CalendarClock, Globe } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/context/AuthContext"
@@ -22,6 +24,7 @@ export function ComposeModal({ children }) {
     const textareaRef = useRef(null)
     const fileInputRef = useRef(null)
     const { user } = useAuth()
+    const { t } = useTranslation()
 
     const MAX_CHARS = 280
     const progress = (postContent.length / MAX_CHARS) * 100
@@ -127,7 +130,7 @@ export function ComposeModal({ children }) {
                             <textarea
                                 ref={textareaRef}
                                 className="w-full bg-transparent border-none outline-none text-[20px] placeholder-[rgb(113,118,123)] resize-none min-h-[120px] text-white mt-2"
-                                placeholder="What is happening?!"
+                                placeholder={t('right_sidebar.whats_happening')}
                                 value={postContent}
                                 onChange={(e) => setPostContent(e.target.value)}
                             />
@@ -152,7 +155,7 @@ export function ComposeModal({ children }) {
                             <div className="border-b border-[rgb(47,51,54)] pb-3 mb-3">
                                 <button className="flex items-center gap-1 text-blue-500 hover:bg-blue-500/10 px-3 py-1 -ml-3 rounded-full transition-colors w-fit">
                                     <Globe className="w-4 h-4" />
-                                    <span className="text-[14px] font-bold">Everyone can reply</span>
+                                    <span className="font-bold text-[15px]">{t('feed.everyone_can_reply')}</span>
                                 </button>
                             </div>
 
@@ -225,7 +228,8 @@ export function ComposeModal({ children }) {
                                         className="bg-[rgb(29,155,240)] hover:bg-[rgb(26,140,216)] text-white font-bold rounded-full px-5 py-2 h-auto text-[15px] disabled:opacity-50 disabled:bg-[rgb(29,155,240)]"
                                         onClick={handleCreatePost}
                                     >
-                                        {uploadingMedia ? 'Uploading...' : (isPosting ? 'Posting...' : 'Post')}
+                                    >
+                                        {uploadingMedia ? t('feed.uploading') : (isPosting ? t('feed.posting') : t('nav.post'))}
                                     </Button>
                                 </div>
                             </div>

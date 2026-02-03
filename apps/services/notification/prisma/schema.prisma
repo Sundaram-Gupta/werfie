@@ -19,3 +19,8 @@ model Notification {
   @@index([userId])
   @@index([createdAt])
 }
+
+model User {
+  id                String @id
+  preferredLanguage String @default("en")
+}

@@ -1,18 +1,32 @@
 import { useState, useEffect } from "react"
 import { SETTINGS_DATA } from "@/lib/dummy-data"
-import { ArrowLeft, ChevronRight, User, Lock, Shield, Bell, Eye, Database, HelpCircle, ExternalLink, X, Loader2 } from "lucide-react"
+import { ArrowLeft, ChevronRight, User, Lock, Shield, Bell, Eye, Database, HelpCircle, ExternalLink, X, Loader2, Globe } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/AuthContext"
-import { authService } from "@/services/api"
+import { authService, userService } from "@/services/api"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useTranslation } from 'react-i18next'
 
 export default function Settings() {
     const navigate = useNavigate()
-    const { user } = useAuth()
+    const { user, updateUser } = useAuth()
+    const { t, i18n } = useTranslation()
+
+    const changeLanguage = async (lng) => {
+        i18n.changeLanguage(lng)
+        if (user?.id) {
+            try {
+                updateUser({ preferredLanguage: lng })
+                await userService.updateProfile(user.id, { preferredLanguage: lng })
+            } catch (error) {
+                console.error("Failed to update language preference", error)
+            }
+        }
+    }
 
     // Preferences State (persisted in localStorage)
     const [notifications, setNotifications] = useState({
@@ -64,7 +78,7 @@ export default function Settings() {
     const handleChangePassword = async (e) => {
         e.preventDefault()
         if (passwordForm.new !== passwordForm.confirm) {
-            setError("New passwords do not match")
+            setError(t('settings_page.new_pass_error'))
             return
         }
         setLoading(true)
@@ -72,14 +86,14 @@ export default function Settings() {
         setSuccess("")
         try {
             await authService.changePassword(passwordForm.current, passwordForm.new)
-            setSuccess("Password updated successfully")
+            setSuccess(t('settings_page.pass_update_success'))
             setTimeout(() => {
                 setIsPasswordModalOpen(false)
                 setPasswordForm({ current: "", new: "", confirm: "" })
                 setSuccess("")
             }, 2000)
         } catch (err) {
-            setError(err.response?.data?.error || "Failed to update password")
+            setError(err.response?.data?.error || t('settings_page.pass_update_error'))
         } finally {
             setLoading(false)
         }
@@ -93,31 +107,32 @@ export default function Settings() {
                     <ArrowLeft className="w-5 h-5" />
                 </div>
                 <div>
-                    <h1 className="text-[20px] font-bold leading-6">Settings and privacy</h1>
+                    <h1 className="text-[20px] font-bold leading-6">{t('settings')}</h1>
                     <span className="text-[13px] text-muted-foreground">@{user?.profile?.handle || "user"}</span>
                 </div>
             </div>
 
             <div className="pb-20">
                 {/* 1. Account */}
-                <SectionHeader title="Account" icon={User} />
+                {/* 1. Account */}
+                <SectionHeader title={t('account')} icon={User} />
                 <SettingsItem
-                    label="Username"
+                    label={t('settings_page.username')}
                     value={`@${user?.profile?.handle || ""}`}
                 />
                 <SettingsItem
-                    label="Email"
+                    label={t('settings_page.email')}
                     value={user?.email}
                 />
                 <SettingsItem
-                    label="Change your password"
-                    description="Update your password at any time."
+                    label={t('settings_page.change_password')}
+                    description={t('settings_page.change_password_desc')}
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
                     onClick={() => setIsPasswordModalOpen(true)}
                 />
                 <SettingsItem
-                    label="Deactivate your account"
-                    description="Find out how you can deactivate your account."
+                    label={t('settings_page.deactivate_account')}
+                    description={t('settings_page.deactivate_account_desc')}
                     isDestructive
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
                 />
@@ -125,26 +140,47 @@ export default function Settings() {
                 <Separator className="my-2 opacity-50" />
 
                 {/* 2. Privacy and Safety (Mock) */}
-                <SectionHeader title="Privacy and Safety" icon={Lock} />
+                {/* 2. Privacy and Safety (Mock) */}
+                <SectionHeader title={t('privacy_safety')} icon={Lock} />
                 <SettingsItem
-                    label="Audience and tagging"
-                    description="Manage what information you allow other people on X to see."
+                    label={t('settings_page.audience_tagging')}
+                    description={t('settings_page.audience_tagging_desc')}
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
                 />
                 <SettingsItem
-                    label="Mute and block"
-                    description="Manage the accounts, words, and notifications that you’ve muted or blocked."
+                    label={t('settings_page.mute_block')}
+                    description={t('settings_page.mute_block_desc')}
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
                 />
 
                 <Separator className="my-2 opacity-50" />
 
                 {/* 3. Display */}
-                <SectionHeader title="Display" icon={Eye} />
+                <SectionHeader title={t('display')} icon={Eye} />
+                
+                {/* Language Selection */}
+                 <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex-1 pr-4">
+                        <div className="font-medium text-[15px]">{t('language')}</div>
+                        <div className="text-[13px] text-muted-foreground">{t('select_language')}</div>
+                    </div>
+                    <select 
+                        className="bg-black text-white border border-gray-700 rounded-md p-1 text-sm focus:outline-none focus:border-blue-500"
+                        value={i18n.language}
+                        onChange={(e) => changeLanguage(e.target.value)}
+                    >
+                        <option value="en">English (US)</option>
+                        <option value="hi">Hindi (हिंदी)</option>
+                        <option value="es">Spanish (Español)</option>
+                        <option value="fr">French (Français)</option>
+                        <option value="de">German (Deutsch)</option>
+                    </select>
+                </div>
+
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 pr-4">
-                        <div className="font-medium text-[15px]">Dark mode</div>
-                        <div className="text-[13px] text-muted-foreground">Adjust the appearance of X.</div>
+                        <div className="font-medium text-[15px]">{t('dark_mode')}</div>
+                        <div className="text-[13px] text-muted-foreground">{t('settings_page.display_desc')}</div>
                     </div>
                     <Switch checked={display.darkMode} onCheckedChange={(c) => setDisplay({ ...display, darkMode: c })} />
                 </div>
@@ -152,23 +188,23 @@ export default function Settings() {
                 <Separator className="my-2 opacity-50" />
 
                 {/* 4. Notifications */}
-                <SectionHeader title="Notifications" icon={Bell} />
+                <SectionHeader title={t('notifications')} icon={Bell} />
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 pr-4">
-                        <div className="font-medium text-[15px]">Push notifications</div>
-                        <div className="text-[13px] text-muted-foreground">Get push notifications to find out what's going on when you're not on X.</div>
+                        <div className="font-medium text-[15px]">{t('settings_page.notifications_push')}</div>
+                        <div className="text-[13px] text-muted-foreground">{t('settings_page.notifications_push_desc')}</div>
                     </div>
                     <Switch checked={notifications.push} onCheckedChange={(c) => handleNotifChange('push', c)} />
                 </div>
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 pr-4">
-                        <div className="font-medium text-[15px]">Email notifications</div>
+                        <div className="font-medium text-[15px]">{t('settings_page.notifications_email')}</div>
                     </div>
                     <Switch checked={notifications.email} onCheckedChange={(c) => handleNotifChange('email', c)} />
                 </div>
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 pr-4">
-                        <div className="font-medium text-[15px]">SMS notifications</div>
+                        <div className="font-medium text-[15px]">{t('settings_page.notifications_sms')}</div>
                     </div>
                     <Switch checked={notifications.sms} onCheckedChange={(c) => handleNotifChange('sms', c)} />
                 </div>
@@ -176,28 +212,28 @@ export default function Settings() {
                 <Separator className="my-2 opacity-50" />
 
                 {/* 5. Data Usage (Mock) */}
-                <SectionHeader title="Data Usage" icon={Database} />
+                <SectionHeader title={t('settings_page.data_usage')} icon={Database} />
                 <SettingsItem
-                    label="Data saver"
-                    description="Reduce data usage by loading lower quality images and videos."
+                    label={t('settings_page.data_saver')}
+                    description={t('settings_page.data_saver_desc')}
                     action={<Switch />}
                 />
 
                 <Separator className="my-2 opacity-50" />
 
                 {/* 6. Security and account access (Mock) */}
-                <SectionHeader title="Security and account access" icon={Shield} />
+                <SectionHeader title={t('settings_page.security_access')} icon={Shield} />
                 <SettingsItem
-                    label="Security"
-                    description="Manage your account's security."
+                    label={t('settings_page.security')}
+                    description={t('settings_page.security_desc')}
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
                 />
 
                 <Separator className="my-2 opacity-50" />
 
                 {/* 7. Help */}
-                <SectionHeader title="Additional Resources" icon={HelpCircle} />
-                <LinkItem label="Help Center" />
+                <SectionHeader title={t('settings_page.additional_resources')} icon={HelpCircle} />
+                <LinkItem label={t('settings_page.help_center')} />
                 <div className="px-4 py-6 text-center text-muted-foreground text-[13px]">
                     Version 1.0.0
                 </div>
@@ -207,14 +243,14 @@ export default function Settings() {
             <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
                 <DialogContent className="sm:max-w-[425px] bg-black text-white border-border">
                     <DialogHeader>
-                        <DialogTitle>Change Password</DialogTitle>
+                        <DialogTitle>{t('settings_page.change_password_title')}</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
                         {error && <div className="text-red-500 text-sm bg-red-500/10 p-2 rounded">{error}</div>}
                         {success && <div className="text-green-500 text-sm bg-green-500/10 p-2 rounded">{success}</div>}
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Current Password</label>
+                            <label className="text-sm font-medium">{t('settings_page.current_password')}</label>
                             <Input
                                 type="password"
                                 value={passwordForm.current}
@@ -224,7 +260,7 @@ export default function Settings() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">New Password</label>
+                            <label className="text-sm font-medium">{t('settings_page.new_password')}</label>
                             <Input
                                 type="password"
                                 value={passwordForm.new}
@@ -234,7 +270,7 @@ export default function Settings() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Confirm New Password</label>
+                            <label className="text-sm font-medium">{t('settings_page.confirm_new_password')}</label>
                             <Input
                                 type="password"
                                 value={passwordForm.confirm}
@@ -244,10 +280,10 @@ export default function Settings() {
                             />
                         </div>
                         <div className="flex justify-end gap-2 pt-4">
-                            <Button type="button" variant="ghost" onClick={() => setIsPasswordModalOpen(false)}>Cancel</Button>
+                            <Button type="button" variant="ghost" onClick={() => setIsPasswordModalOpen(false)}>{t('cancel')}</Button>
                             <Button type="submit" className="bg-blue-500 hover:bg-blue-600 rounded-full" disabled={loading}>
                                 {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Save
+                                {t('save')}
                             </Button>
                         </div>
                     </form>

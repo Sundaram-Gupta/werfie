@@ -1,8 +1,10 @@
 import { PostCard } from "./post-card"
 import { usePosts } from "@/hooks/usePosts"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useTranslation } from "react-i18next" // Added useTranslation import
 
 export function Feed({ tab = 'for-you' }) {
+    const { t } = useTranslation() // Added useTranslation hook
     const { posts, loading, likePost, unlikePost, retweetPost, unretweetPost } = usePosts({ tab })
 
 
@@ -28,14 +30,14 @@ export function Feed({ tab = 'for-you' }) {
     }
 
     if (!posts || !Array.isArray(posts)) {
-        return <div className="p-8 text-center text-muted-foreground">Unable to load posts.</div>
+        return <div className="p-8 text-center text-muted-foreground">{t('feed.unable_to_load_posts')}</div> // Used t()
     }
 
     if (posts.length === 0) {
         return (
             <div className="p-8 text-center text-muted-foreground">
-                <p>No posts yet.</p>
-                <p className="text-sm">Be the first to post something!</p>
+                <p>{t('feed.no_posts_yet')}</p>
+                <p className="text-sm">{t('feed.be_first_to_post')}</p>
             </div>
         )
     }

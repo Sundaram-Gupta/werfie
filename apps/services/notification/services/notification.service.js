@@ -18,6 +18,49 @@ export class NotificationService {
                 console.log(`📡 Sent real-time notification to ${data.userId}`)
             }
 
+            // 3. Push Notification (Simulated)
+            try {
+                // Fetch recipient settings
+                const recipient = await prisma.user.findUnique({
+                    where: { id: data.userId }
+                });
+
+                const lang = recipient?.preferredLanguage || 'en';
+                const templates = {
+                    en: {
+                        like: "New Like",
+                        follow: "New Follower",
+                        reply: "New Reply"
+                    },
+                    hi: {
+                        like: "नई लाइक",
+                        follow: "नया फॉलोअर",
+                        reply: "नया जवाब"
+                    },
+                    es: {
+                        like: "Nuevo Me gusta",
+                        follow: "Nuevo Seguidor",
+                        reply: "Nueva Respuesta"
+                    },
+                    fr: {
+                        like: "Nouveau J'aime",
+                        follow: "Nouvel Abonné",
+                        reply: "Nouvelle Réponse"
+                    },
+                    de: {
+                        like: "Neues 'Gefällt mir'",
+                        follow: "Neuer Follower",
+                        reply: "Neue Antwort"
+                    }
+                };
+
+                const title = templates[lang]?.[data.type] || templates['en'][data.type] || "New Notification";
+                console.log(`[PUSH] Sending to ${data.userId} in ${lang}: ${title}`);
+
+            } catch (pushError) {
+                console.error("Push Notification Error:", pushError);
+            }
+
             return notification
         } catch (error) {
             console.error('❌ Error creating notification:', error)

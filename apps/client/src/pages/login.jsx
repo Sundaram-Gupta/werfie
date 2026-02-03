@@ -118,12 +118,7 @@ export default function Login() {
                     </a>
                 </p>
 
-                {/* Test Credentials */}
-                <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-sm font-medium mb-2">Test Credentials:</p>
-                    <p className="text-xs text-muted-foreground">Email: john@example.com</p>
-                    <p className="text-xs text-muted-foreground">Password: password123</p>
-                </div>
+
             </div>
         </div>
     )

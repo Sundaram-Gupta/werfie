@@ -5,7 +5,10 @@ import { Heart, User, Repeat2, MessageCircle, AtSign, Settings, Loader2 } from "
 import { BadgeCheck } from "lucide-react"
 import { getMediaUrl } from "@/lib/utils"
 
+import { useTranslation } from "react-i18next"
+
 export default function Notifications() {
+    const { t } = useTranslation()
     const [notifications, setNotifications] = useState([])
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('all') // 'all', 'verified', 'mentions'
@@ -37,7 +40,7 @@ export default function Notifications() {
         <div>
             <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
                 <div className="flex items-center justify-between px-4 py-3">
-                    <h1 className="text-[20px] font-bold">Notifications</h1>
+                    <h1 className="text-[20px] font-bold">{t('notifications.title')}</h1>
                     <Settings className="w-5 h-5 cursor-pointer hover:bg-muted/50 rounded-full transition" />
                 </div>
                 <div className="flex border-b border-border/50">
@@ -45,21 +48,21 @@ export default function Notifications() {
                         onClick={() => handleTabChange('all')}
                         className={`flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] ${activeTab === 'all' ? 'font-bold' : 'font-medium text-muted-foreground'} relative`}
                     >
-                        All
+                        {t('notifications.tabs.all')}
                         {activeTab === 'all' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 bg-primary rounded-full" />}
                     </div>
                     <div
                         onClick={() => handleTabChange('verified')}
                         className={`flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] ${activeTab === 'verified' ? 'font-bold' : 'font-medium text-muted-foreground'} relative`}
                     >
-                        Verified
+                        {t('notifications.tabs.verified')}
                         {activeTab === 'verified' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 bg-primary rounded-full" />}
                     </div>
                     <div
                         onClick={() => handleTabChange('mentions')}
                         className={`flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] ${activeTab === 'mentions' ? 'font-bold' : 'font-medium text-muted-foreground'} relative`}
                     >
-                        Mentions
+                        {t('notifications.tabs.mentions')}
                         {activeTab === 'mentions' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 bg-primary rounded-full" />}
                     </div>
                 </div>
@@ -69,7 +72,7 @@ export default function Notifications() {
                 {loading ? (
                     <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
                 ) : notifications.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground">No notifications yet</div>
+                    <div className="p-8 text-center text-muted-foreground">{t('notifications.empty')}</div>
                 ) : (
                     notifications.map((notification) => (
                         <div key={notification.id} className="p-4 flex gap-3 hover:bg-white/[0.03] transition-colors cursor-pointer">
@@ -92,11 +95,11 @@ export default function Notifications() {
                                     <span className="font-bold">{notification.actor?.profile?.name || notification.actor?.name}</span>
                                     {notification.actor?.profile?.isVerified && <BadgeCheck className="inline-block w-4 h-4 text-blue-500 ml-1 mb-0.5 fill-blue-500/10" />}
                                     <span className="text-foreground ml-1">
-                                        {notification.type === 'like' && 'liked your post'}
-                                        {notification.type === 'repost' && 'reposted your post'}
-                                        {notification.type === 'follow' && 'followed you'}
-                                        {notification.type === 'reply' && 'replied to your post'}
-                                        {notification.type === 'mention' && 'mentioned you'}
+                                        {notification.type === 'like' && t('notifications.types.like')}
+                                        {notification.type === 'repost' && t('notifications.types.repost')}
+                                        {notification.type === 'follow' && t('notifications.types.follow')}
+                                        {notification.type === 'reply' && t('notifications.types.reply')}
+                                        {notification.type === 'mention' && t('notifications.types.mention')}
                                     </span>
                                 </div>
 

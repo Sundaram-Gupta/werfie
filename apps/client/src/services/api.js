@@ -1,14 +1,19 @@
 import api from '@/lib/api'
+import axios from 'axios'
+
+import i18n from '@/i18n'
 
 // Authentication Services
 export const authService = {
     // Register new user
     register: async (email, password, name, handle) => {
+        const preferredLanguage = i18n.language || 'en'
         const { data } = await api.post('/api/auth/register', {
             email,
             password,
             name,
             handle,
+            preferredLanguage,
         })
 
         // Store tokens
@@ -80,6 +85,21 @@ export const authService = {
         return user ? JSON.parse(user) : null
     },
 }
+
+// Messaging API Instance
+const MESSAGING_API_URL = import.meta.env.VITE_MESSAGING_URL || 'http://localhost:3019'
+
+const messagingApi = axios.create({
+    baseURL: MESSAGING_API_URL,
+    headers: { 'Content-Type': 'application/json' }
+})
+
+// Add auth token to messaging requests
+messagingApi.interceptors.request.use((config) => {
+    const token = localStorage.getItem('accessToken')
+    if (token) config.headers.Authorization = `Bearer ${token}`
+    return config
+})
 
 // Post Services
 export const postService = {
@@ -237,7 +257,7 @@ export const searchService = {
 
     // Search users
     searchUsers: async (query, params = {}) => {
-        const { data } = await api.get('/api/search/users', {
+        const { data } = await api.get('/api/users/search', {
             params: { q: query, ...params },
         })
         return data
@@ -316,19 +336,25 @@ export const mediaService = {
 export const messagingService = {
     // Get conversations
     getConversations: async (params = {}) => {
-        const { data } = await api.get('/api/messages/conversations', { params })
+        const { data } = await messagingApi.get('/api/messages/conversations', { params })
+        return data
+    },
+
+    // Create or get conversation
+    createConversation: async (recipientId) => {
+        const { data } = await messagingApi.post('/api/messages/conversations', { recipientId })
         return data
     },
 
     // Get messages
     getMessages: async (conversationId, params = {}) => {
-        const { data } = await api.get(`/api/messages/conversations/${conversationId}/messages`, { params })
+        const { data } = await messagingApi.get(`/api/messages/conversations/${conversationId}/messages`, { params })
         return data
     },
 
-    // Send message
+    // Send message (via REST fallback if socket fails, or for initial dev)
     sendMessage: async (recipientId, content) => {
-        const { data } = await api.post('/api/messages/send', { recipientId, content })
+        const { data } = await messagingApi.post('/api/messages/send', { recipientId, content })
         return data
     },
 }

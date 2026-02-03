@@ -2,7 +2,7 @@ import api from '@/lib/axios';
 
 export const login = async (email, password, role) => {
     try {
-        const response = await api.post('/api/admin/login', { email, password });
+        const response = await api.post('/admin/login', { email, password });
 
         if (response.data.success) {
             const { user, token } = response.data;

@@ -15,6 +15,8 @@ model User {
   updatedAt              DateTime             @updatedAt
   role                   String               @default("USER")
   status                 String               @default("ACTIVE")
+  lastActiveAt           DateTime             @default(now())
+  preferredLanguage      String               @default("en")
   adCampaigns            AdCampaign[]
   businessProfile        BusinessProfile?
   communityMemberships   CommunityMember[]
@@ -35,6 +37,7 @@ model User {
   reportsSubmitted       Report[]             @relation("UserReports")
   retweets               Retweet[]
   hostedSpaces           Space[]
+  verificationRequests   VerificationRequest[]
 }
 
 model Report {
@@ -51,6 +54,17 @@ model Report {
 
   @@index([targetId])
   @@index([reporterId])
+  @@index([status])
+}
+
+model VerificationRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  status    String   @default("pending") // pending, approved, rejected
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([status])
 }
 

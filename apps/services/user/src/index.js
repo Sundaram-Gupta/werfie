@@ -319,9 +319,16 @@ app.put('/:id', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const { name, bio, location, website, avatar, banner } = req.body;
+    const { name, bio, location, website, avatar, banner, preferredLanguage } = req.body;
 
     try {
+        if (preferredLanguage) {
+            await prisma.user.update({
+                where: { id: req.params.id },
+                data: { preferredLanguage }
+            });
+        }
+
         const updateData = {};
         if (name !== undefined) updateData.name = name;
         if (bio !== undefined) updateData.bio = bio;
@@ -341,7 +348,7 @@ app.put('/:id', authenticateToken, async (req, res) => {
             }
         });
 
-        res.json(updatedProfile);
+        res.json({ ...updatedProfile, preferredLanguage });
     } catch (error) {
         console.error('Update Profile Error:', error);
         res.status(500).json({ error: 'Failed to update profile' });

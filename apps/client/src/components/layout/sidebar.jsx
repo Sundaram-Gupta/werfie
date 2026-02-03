@@ -12,12 +12,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ComposeModal } from "@/components/feed/compose-modal"
 import { useState, useEffect } from "react"
+import { useTranslation } from "react-i18next"
 
 
 
 export function Sidebar() {
     const location = useLocation()
     const { openLogin } = useAuthModal()
+    const { t } = useTranslation()
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark")
 
     useEffect(() => {
@@ -32,14 +34,14 @@ export function Sidebar() {
     }
 
     const navItems = [
-        { icon: Home, label: "Home", path: "/" },
-        { icon: Search, label: "Explore", path: "/explore" },
-        { icon: Bell, label: "Notifications", path: "/notifications" },
-        { icon: Brain, label: "Werfie AI", path: "/werfie-ai", gradient: true },
-        { icon: Users, label: "Follow", path: "/follow" },
-        { icon: Mail, label: "Chat", path: "/chat" },
-        { icon: User, label: "Profile", path: "/profile" },
-        { icon: MoreHorizontal, label: "More", isMore: true },
+        { icon: Home, label: t('nav.home'), path: "/" },
+        { icon: Search, label: t('nav.explore'), path: "/explore" },
+        { icon: Bell, label: t('nav.notifications'), path: "/notifications" },
+        { icon: Brain, label: t('nav.werfie_ai'), path: "/werfie-ai", gradient: true },
+        { icon: Users, label: t('nav.follow'), path: "/follow" },
+        { icon: Mail, label: t('nav.chat'), path: "/chat" },
+        { icon: User, label: t('nav.profile'), path: "/profile" },
+        { icon: MoreHorizontal, label: t('nav.more'), isMore: true },
     ]
 
     return (
@@ -69,43 +71,43 @@ export function Sidebar() {
                                     <Link to="/creator-studio">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Sparkles className="w-[18px] h-[18px]" />
-                                            Creator Studio
+                                            {t('more_menu.creator_studio')}
                                         </DropdownMenuItem>
                                     </Link>
                                     <Link to="/lists">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <List className="w-[18px] h-[18px]" />
-                                            Lists
+                                            {t('more_menu.lists')}
                                         </DropdownMenuItem>
                                     </Link>
                                     <Link to="/business">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Briefcase className="w-[18px] h-[18px]" />
-                                            Business
+                                            {t('more_menu.business')}
                                         </DropdownMenuItem>
                                     </Link>
                                     <Link to="/ads">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Megaphone className="w-[18px] h-[18px]" />
-                                            Ads
+                                            {t('more_menu.ads')}
                                         </DropdownMenuItem>
                                     </Link>
                                     <Link to="/spaces">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Mic className="w-[18px] h-[18px]" />
-                                            Create your Space
+                                            {t('more_menu.create_space')}
                                         </DropdownMenuItem>
                                     </Link>
                                     <Link to="/settings">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Settings className="w-[18px] h-[18px]" />
-                                            Settings and privacy
+                                            {t('more_menu.settings_privacy')}
                                         </DropdownMenuItem>
                                     </Link>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={toggleTheme} className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                         {theme === "dark" ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
-                                        Theme: {theme === "dark" ? "Dark" : "Light"}
+                                        {t('more_menu.theme')}: {theme === "dark" ? t('more_menu.dark') : t('more_menu.light')}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -159,7 +161,7 @@ export function Sidebar() {
                     <button
                         className="mt-4 bg-primary text-primary-foreground font-bold text-[17px] rounded-full w-[52px] h-[52px] xl:h-[52px] xl:w-[90%] hover:opacity-90 transition shadow-lg flex items-center justify-center transform active:scale-95 duration-200"
                     >
-                        <span className="hidden xl:inline">Post</span>
+                        <span className="hidden xl:inline">{t('nav.post')}</span>
                         <Feather className="xl:hidden w-6 h-6" />
                     </button>
                 </ComposeModal>

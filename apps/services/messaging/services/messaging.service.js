@@ -1,13 +1,18 @@
 import { PrismaClient } from '@prisma/client'
 import { getIO } from '../lib/socket.js'
 
-const prisma = new PrismaClient()
+let prisma
+
+if (!global.prisma) {
+    global.prisma = new PrismaClient()
+}
+prisma = global.prisma
 
 export class MessagingService {
     /**
      * Send a direct message
      */
-    static async sendMessage({ senderId, recipientId, content }) {
+    static async sendMessage({ senderId, recipientId, content, type = 'text', mediaUrl }) {
         // 1. Find or create conversation
         let conversation = await this.findDirectConversation(senderId, recipientId)
 
@@ -30,48 +35,73 @@ export class MessagingService {
             data: {
                 conversationId: conversation.id,
                 senderId,
-                content
+                content,
+                type,
+                mediaUrl,
+                status: 'sent'
             }
         })
 
-        // 3. Emit via WebSocket to recipient
+        // 3. Update Conversation Last Message
+        await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: {
+                lastMessageAt: new Date(),
+                lastMessageId: message.id
+            }
+        })
+
+        // 4. Emit via WebSocket to recipient
         const io = getIO()
         if (io) {
-            io.to(`user:${recipientId}`).emit('message', message)
+            io.to(`user:${recipientId}`).emit('receive_message', message)
+            // also emit to sender for consistency across devices
+            io.to(`user:${senderId}`).emit('receive_message', message)
         }
 
         return message
     }
 
     static async findDirectConversation(user1, user2) {
-        // Simplified query for now
-        const participants = await prisma.participant.findMany({
+        // Find conversation where both users are participants
+        // This is a bit tricky with Prisma without raw SQL for strict matching, 
+        // but for 1:1 we can find conversations with user1, then filter for user2
+
+        const conversations = await prisma.conversation.findMany({
             where: {
-                userId: { in: [user1, user2] }
+                type: 'direct',
+                participants: {
+                    some: { userId: user1 }
+                }
             },
-            select: { conversationId: true }
+            include: {
+                participants: true
+            }
         })
 
-        // Logic to find common conversation ID would go here
-        // For MVP, we might just assume if it exists we find it
-        return null
+        return conversations.find(c =>
+            c.participants.some(p => p.userId === user2)
+        )
     }
 
     static async getConversations(userId) {
-        return prisma.participant.findMany({
-            where: { userId },
-            include: {
-                conversation: {
-                    include: {
-                        messages: {
-                            take: 1,
-                            orderBy: { createdAt: 'desc' }
-                        },
-                        participants: true
-                    }
+        // Get conversations for user, sorted by last message
+        const conversations = await prisma.conversation.findMany({
+            where: {
+                participants: {
+                    some: { userId }
                 }
+            },
+            orderBy: {
+                lastMessageAt: 'desc'
+            },
+            include: {
+                participants: true,
+                lastMessage: true // Include the actual message object
             }
         })
+
+        return conversations
     }
 
     static async getMessages(conversationId) {

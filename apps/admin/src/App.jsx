@@ -17,6 +17,7 @@ import ConfigPage from '@/pages/config';
 import NotificationsPage from '@/pages/notifications';
 import ApiKeysPage from '@/pages/settings/ApiKeys';
 import PushNotificationsSettingsPage from '@/pages/settings/PushNotifications';
+import LanguagesPage from '@/pages/settings/Languages';
 import SpacesPage from '@/pages/spaces';
 import MessagingPage from '@/pages/messaging';
 import MediaModerationPage from '@/pages/media';
@@ -53,6 +54,7 @@ function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/api-keys" element={<ApiKeysPage />} />
         <Route path="/settings/notifications" element={<PushNotificationsSettingsPage />} />
+        <Route path="/settings/languages" element={<LanguagesPage />} />
         <Route path="/appeals" element={<AppealsPage />} />
         <Route path="/verification" element={<VerificationPage />} />
         <Route path="/config" element={<ConfigPage />} />

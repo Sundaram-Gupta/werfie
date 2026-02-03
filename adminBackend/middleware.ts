@@ -4,87 +4,99 @@ import { jwtVerify } from 'jose';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here_secure_it';
 
+// Define allowed origins securely
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5175',
+    'http://localhost:5176',
+    'http://127.0.0.1:5175',
+];
+
 export async function middleware(req: NextRequest) {
-    // 1. Handle CORS
-    const origin = req.headers.get('origin') || '*';
+    const origin = req.headers.get('origin') ?? '';
+    const isAllowedOrigin = allowedOrigins.includes(origin);
+
+    // Default CORS headers
     const corsHeaders = {
-        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-id, x-admin-role',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-id, x-admin-role, Accept, X-Requested-With',
         'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
     };
 
-    // Handle Preflight OPTIONS request
+    // Prepare response specifically for OPTIONS (Preflight)
     if (req.method === 'OPTIONS') {
-        return NextResponse.json({}, { headers: corsHeaders });
-    }
-
-    // Only protect /api/admin routes
-    if (!req.nextUrl.pathname.startsWith('/api/admin')) {
-        return NextResponse.next({ headers: corsHeaders });
-    }
-
-    // Explicitly allow public access to login route
-    if (req.nextUrl.pathname === '/api/admin/login') {
-        const response = NextResponse.next();
-        Object.entries(corsHeaders).forEach(([key, value]) => {
-            response.headers.set(key, value);
-        });
-        return response;
-    }
-
-    const authHeader = req.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-            { success: false, error: 'Unauthorized: No token provided' },
-            { status: 401, headers: corsHeaders }
-        );
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    try {
-        const { payload } = await jwtVerify(
-            token,
-            new TextEncoder().encode(JWT_SECRET)
-        );
-
-        const role = (payload.role as string) || 'USER';
-
-        // Enforce Admin Role
-        if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
-            return NextResponse.json(
-                { success: false, error: 'Forbidden: Insufficient permissions' },
-                { status: 403, headers: corsHeaders }
-            );
+        const response = new NextResponse(null, { status: 204 });
+        if (isAllowedOrigin) {
+            response.headers.set('Access-Control-Allow-Origin', origin);
+            Object.entries(corsHeaders).forEach(([key, value]) => {
+                response.headers.set(key, value);
+            });
         }
+        return response;
+    }
 
-        // Add user info to headers for downstream access if needed
-        const requestHeaders = new Headers(req.headers);
-        requestHeaders.set('x-admin-id', payload.userId as string);
-        requestHeaders.set('x-admin-role', role);
+    // Normal Request Processing
+    let response: NextResponse;
 
-        const response = NextResponse.next({
-            request: {
-                headers: requestHeaders,
-            },
-        });
+    // Skip Auth for public routes or non-api routes
+    if (!req.nextUrl.pathname.startsWith('/api/admin') || req.nextUrl.pathname === '/api/admin/login') {
+        response = NextResponse.next();
+    } else {
+        // Validation Logic
+        const authHeader = req.headers.get('authorization');
 
-        // Append CORS headers to normal response
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            response = NextResponse.json(
+                { success: false, error: 'Unauthorized: No token provided' },
+                { status: 401 }
+            );
+        } else {
+            const token = authHeader.split(' ')[1];
+            try {
+                const { payload } = await jwtVerify(
+                    token,
+                    new TextEncoder().encode(JWT_SECRET)
+                );
+
+                const role = (payload.role as string) || 'USER';
+
+                if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+                    response = NextResponse.json(
+                        { success: false, error: 'Forbidden: Insufficient permissions' },
+                        { status: 403 }
+                    );
+                } else {
+                    // Success logic
+                    const requestHeaders = new Headers(req.headers);
+                    requestHeaders.set('x-admin-id', payload.userId as string);
+                    requestHeaders.set('x-admin-role', role);
+
+                    response = NextResponse.next({
+                        request: {
+                            headers: requestHeaders,
+                        },
+                    });
+                }
+            } catch (error) {
+                console.error('JWT Verification Error:', error);
+                response = NextResponse.json(
+                    { success: false, error: 'Unauthorized: Invalid token' },
+                    { status: 401 }
+                );
+            }
+        }
+    }
+
+    // Apply CORS headers to the final response
+    if (isAllowedOrigin) {
+        response.headers.set('Access-Control-Allow-Origin', origin);
         Object.entries(corsHeaders).forEach(([key, value]) => {
             response.headers.set(key, value);
         });
-
-        return response;
-
-    } catch (error) {
-        console.error('JWT Verification Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Unauthorized: Invalid token' },
-            { status: 401, headers: corsHeaders }
-        );
     }
+
+    return response;
 }
 
 export const config = {

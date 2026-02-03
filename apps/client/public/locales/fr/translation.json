@@ -1,0 +1,173 @@
+{
+    "settings": "Paramètres",
+    "language": "Langue",
+    "select_language": "Choisir la langue",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "account": "Compte",
+    "privacy_safety": "Confidentialité et sécurité",
+    "display": "Affichage",
+    "notifications": "Notifications",
+    "data_usage": "Utilisation des données",
+    "dark_mode": "Mode sombre",
+    "feed": {
+        "title": "Accueil",
+        "for_you": "Pour vous",
+        "actions": {
+            "reply": "Répondre",
+            "repost": "Republier",
+            "like": "J'aime",
+            "view": "Vue",
+            "share": "Partager"
+        },
+        "unable_to_load_posts": "Impossible de charger les publications.",
+        "no_posts_yet": "Aucune publication pour le moment.",
+        "be_first_to_post": "Soyez le premier à publier quelque chose !",
+        "everyone_can_reply": "Tout le monde peut répondre",
+        "uploading": "Téléchargement...",
+        "posting": "Publication..."
+    },
+    "time": {
+        "s": "s",
+        "m": "m",
+        "h": "h",
+        "d": "j"
+    },
+    "profile_menu": {
+        "login_another_account": "Se connecter à un autre compte",
+        "logout_user": "Se déconnecter @{{userHandle}}"
+    },
+    "nav": {
+        "home": "Accueil",
+        "explore": "Explorer",
+        "notifications": "Notifications",
+        "werfie_ai": "Werfie IA",
+        "follow": "Suivre",
+        "chat": "Chat",
+        "profile": "Profil",
+        "more": "Plus",
+        "post": "Publier"
+    },
+    "more_menu": {
+        "creator_studio": "Creator Studio",
+        "lists": "Listes",
+        "business": "Entreprise",
+        "ads": "Publicités",
+        "create_space": "Créer un espace",
+        "settings_privacy": "Paramètres et confidentialité",
+        "theme": "Thème",
+        "dark": "Sombre",
+        "light": "Clair"
+    },
+    "right_sidebar": {
+        "search_placeholder": "Rechercher",
+        "whats_happening": "Ce qu'il se passe",
+        "who_to_follow": "Qui suivre",
+        "show_more": "Voir plus",
+        "terms": "Conditions d'utilisation",
+        "privacy": "Politique de confidentialité",
+        "cookies": "Politique relative aux cookies",
+        "accessibility": "Accessibilité",
+        "ads_info": "Info publicités",
+        "loading_trends": "Chargement des tendances...",
+        "no_trends": "Aucune tendance trouvée",
+        "no_suggestions": "Aucune suggestion"
+    },
+    "common": {
+        "following": "Abonné",
+        "loading": "Chargement..."
+    },
+    "explore": {
+        "tabs": {
+            "foryou": "Pour vous",
+            "trending": "Tendances",
+            "news": "Nouvelles",
+            "sports": "Sports",
+            "entertainment": "Divertissement"
+        },
+        "trends_for_you": "Tendances pour vous",
+        "no_trends": "Pas encore de tendances",
+        "no_items": "Aucun élément à afficher"
+    },
+    "notifications": {
+        "title": "Notifications",
+        "tabs": {
+            "all": "Tous",
+            "verified": "Vérifié",
+            "mentions": "Mentions"
+        },
+        "empty": "Pas encore de notifications",
+        "types": {
+            "like": "a aimé votre publication",
+            "repost": "a republié votre publication",
+            "follow": "vous a suivi",
+            "reply": "a répondu à votre publication",
+            "mention": "vous a mentionné"
+        }
+    },
+    "follow": {
+        "title": "Suivre",
+        "subtitle": "Personnes que vous pourriez connaître et comptes que vous suivez",
+        "section_following": "Suivi",
+        "section_suggested": "Suggéré pour vous",
+        "empty_following": "Vous ne suivez encore personne",
+        "empty_suggestions": "Aucune suggestion disponible"
+    },
+    "chat": {
+        "requests": "Demandes",
+        "sent": "Envoyé",
+        "start_new_message": "Démarrer un nouveau message",
+        "start_conversation": "Démarrer une conversation",
+        "choose_conversation": "Choisissez parmi vos conversations existantes ou commencez-en une nouvelle.",
+        "new_chat": "Nouvelle discussion"
+    },
+    "profile": {
+        "posts_count": "publications",
+        "edit_profile": "Modifier le profil",
+        "joined": "A rejoint",
+        "following_count": "Abonnements",
+        "followers_count": "Abonnés",
+        "message_user": "Message @{{handle}}",
+        "no_replies": "Pas encore de réponses",
+        "tabs": {
+            "posts": "Publications",
+            "replies": "Réponses",
+            "highlights": "À la une",
+            "articles": "Articles",
+            "media": "Médias",
+            "likes": "J'aime"
+        }
+    },
+    "settings_page": {
+        "username": "Nom d'utilisateur",
+        "email": "Email",
+        "change_password": "Changer votre mot de passe",
+        "change_password_desc": "Mettez à jour votre mot de passe à tout moment.",
+        "new_pass_error": "Les nouveaux mots de passe ne correspondent pas",
+        "pass_update_success": "Mot de passe mis à jour avec succès",
+        "pass_update_error": "Échec de la mise à jour du mot de passe",
+        "deactivate_account": "Désactivez votre compte",
+        "deactivate_account_desc": "Découvrez comment vous pouvez désactiver votre compte.",
+        "audience_tagging": "Audience et identification",
+        "audience_tagging_desc": "Gérez les informations que vous autorisez les autres à voir sur X.",
+        "mute_block": "Masquer et bloquer",
+        "mute_block_desc": "Gérez les comptes, les mots et les notifications que vous avez masqués ou bloqués.",
+        "display_desc": "Ajustez l'apparence de X.",
+        "notifications_push": "Notifications push",
+        "notifications_push_desc": "Recevez des notifications push pour savoir ce qui se passe lorsque vous n'êtes pas sur X.",
+        "notifications_email": "Notifications par email",
+        "notifications_sms": "Notifications par SMS",
+        "data_usage": "Utilisation des données",
+        "data_saver": "Économiseur de données",
+        "data_saver_desc": "Réduisez l'utilisation des données en chargeant des images et des vidéos de moindre qualité.",
+        "security_access": "Sécurité et accès au compte",
+        "security": "Sécurité",
+        "security_desc": "Gérez la sécurité de votre compte.",
+        "additional_resources": "Ressources supplémentaires",
+        "help_center": "Centre d'aide",
+        "change_password_title": "Changer le mot de passe",
+        "current_password": "Mot de passe actuel",
+        "new_password": "Nouveau mot de passe",
+        "confirm_new_password": "Confirmer le nouveau mot de passe"
+    }
+}
