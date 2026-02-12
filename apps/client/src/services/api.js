@@ -454,14 +454,16 @@ export const businessService = {
         return data
     },
     getTeamMembers: async () => {
-        // Mock data as backend doesn't exist yet
-        return [
-            { id: 1, name: "Sarath Chen", email: "sarath@acme.com", role: "Owner", avatar: "SC" },
-            { id: 2, name: "Mike Ross", email: "mike@acme.com", role: "Admin", avatar: "MR" }
-        ]
+        const { data } = await api.get('/api/business/team')
+        return data
     },
-    inviteTeamMember: async (email, role) => {
-        return { success: true }
+    addTeamMember: async (memberId, role) => {
+        const { data } = await api.post('/api/business/team', { memberId, role })
+        return data
+    },
+    removeTeamMember: async (memberId) => {
+        const { data } = await api.delete(`/api/business/team/${memberId}`)
+        return data
     }
 }
 

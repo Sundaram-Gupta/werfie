@@ -637,6 +637,203 @@
                     "response": []
                 }
             ]
+        },
+        {
+            "name": "Management",
+            "item": [
+                {
+                    "name": "GET Business Applications",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{authToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/business",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "business"
+                            ]
+                        },
+                        "description": "Allows admins to review all pending business profile and ad account requests."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Business Application",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{authToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id\": \"{{testUserId}}\",\n    \"status\": \"APPROVED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/business",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "business"
+                            ]
+                        },
+                        "description": "Approves or rejects a business/ad account application."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET Global Ads",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{authToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/ads",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "ads"
+                            ]
+                        },
+                        "description": "Provides a global view of all ad campaigns running on the platform."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Ad Campaign",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{authToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id\": \"{{testCampaignId}}\",\n    \"status\": \"SUSPENDED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/ads",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "ads"
+                            ]
+                        },
+                        "description": "Grants admins the ability to manually suspend or resume any campaign."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET Monetization Applications",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{authToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/monetization",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "monetization"
+                            ]
+                        },
+                        "description": "Lists all pending applications for the creator program."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Monetization Status",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{authToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id\": \"{{testUserId}}\",\n    \"status\": \"APPROVED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/monetization",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "monetization"
+                            ]
+                        },
+                        "description": "Approves, rejects, or suspends creator monetization access."
+                    },
+                    "response": []
+                }
+            ]
         }
     ]
 }

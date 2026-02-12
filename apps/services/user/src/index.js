@@ -16,10 +16,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Rewrite /api/users to / to support Gateway proxy
+// Rewrite /api/users or /api/business to / to support Gateway proxy
 app.use((req, res, next) => {
-    if (req.url.startsWith('/api/users')) {
-        let newUrl = req.url.replace('/api/users', '');
+    if (req.url.startsWith('/api/users') || req.url.startsWith('/api/business')) {
+        let newUrl = req.url.replace('/api/users', '').replace('/api/business', '');
         if (!newUrl.startsWith('/')) {
             newUrl = '/' + newUrl;
         }

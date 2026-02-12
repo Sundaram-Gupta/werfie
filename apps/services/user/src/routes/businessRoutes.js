@@ -62,8 +62,15 @@ router.post('/', authenticateToken, async (req, res) => {
 router.get('/team', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
-        const business = await prisma.businessProfile.findUnique({
-            where: { userId },
+
+        // Find business where user is owner OR member
+        const business = await prisma.businessProfile.findFirst({
+            where: {
+                OR: [
+                    { userId: userId },
+                    { members: { some: { userId: userId } } }
+                ]
+            },
             include: {
                 members: {
                     include: {
@@ -78,6 +85,7 @@ router.get('/team', authenticateToken, async (req, res) => {
         if (!business) return res.status(404).json({ error: 'Business profile not found' });
         res.json(business.members);
     } catch (error) {
+        console.error('Error fetching team:', error);
         res.status(500).json({ error: 'Failed to fetch team' });
     }
 });
@@ -106,26 +114,35 @@ router.post('/team', authenticateToken, async (req, res) => {
     }
 });
 
-// DELETE /team/:userId: Remove a team member
+// DELETE /team/:memberId: Remove a team member
 router.delete('/team/:memberId', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
         const { memberId } = req.params;
 
+        // Check if user is the owner
         const business = await prisma.businessProfile.findUnique({ where: { userId } });
         if (!business) return res.status(404).json({ error: 'Only owners can remove members' });
 
-        await prisma.businessMember.delete({
-            where: {
-                businessId_userId: {
-                    businessId: business.id,
-                    userId: memberId
+        try {
+            await prisma.businessMember.delete({
+                where: {
+                    businessId_userId: {
+                        businessId: business.id,
+                        userId: memberId
+                    }
                 }
+            });
+        } catch (delError) {
+            if (delError.code === 'P2025') {
+                return res.status(404).json({ error: 'Team member not found' });
             }
-        });
+            throw delError;
+        }
 
         res.json({ success: true });
     } catch (error) {
+        console.error('Error removing team member:', error);
         res.status(500).json({ error: 'Failed to remove member' });
     }
 });
@@ -133,16 +150,29 @@ router.delete('/team/:memberId', authenticateToken, async (req, res) => {
 // GET /stats: Fetch business stats
 router.get('/stats', authenticateToken, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.userId;
+
+        // Find business user belongs to (owner or member)
+        const business = await prisma.businessProfile.findFirst({
+            where: {
+                OR: [
+                    { userId: userId },
+                    { members: { some: { userId: userId } } }
+                ]
+            }
+        });
+
+        // Use business owner ID if found, otherwise fallback to current user
+        const targetUserId = business ? business.userId : userId;
 
         // 1. Get Followers Count
         const followersCount = await prisma.follow.count({
-            where: { followingId: userId }
+            where: { followingId: targetUserId }
         });
 
-        // 2. Get Engagement (Likes + Retweets + Replies on user's posts)
+        // 2. Get Engagement (Likes + Retweets + Replies on target user's posts)
         const userPosts = await prisma.post.findMany({
-            where: { userId: userId },
+            where: { userId: targetUserId },
             include: {
                 _count: {
                     select: {
@@ -159,11 +189,9 @@ router.get('/stats', authenticateToken, async (req, res) => {
             totalEngagement += (post._count.likes + post._count.retweets + post._count.replies);
         });
 
-        // 3. Get Ads Stats if Business Profile exists
-        const businessProfile = await prisma.businessProfile.findUnique({
-            where: { userId },
-            select: { totalSpent: true, totalImpressions: true }
-        });
+        // 3. Get Ads Stats from the business profile if it exists
+        const totalSpent = business?.totalSpent || "0";
+        const totalImpressionsVal = business?.totalImpressions || (totalEngagement * 20).toString();
 
         // Helper to format numbers (e.g. 1500 -> 1.5K)
         const formatNumber = (num) => {
@@ -177,8 +205,8 @@ router.get('/stats', authenticateToken, async (req, res) => {
         const stats = {
             followers: formatNumber(followersCount),
             engagement: formatNumber(totalEngagement),
-            impressions: formatNumber(businessProfile?.totalImpressions || (totalEngagement * 20)),
-            spent: businessProfile?.totalSpent || "0"
+            impressions: formatNumber(totalImpressionsVal),
+            spent: totalSpent
         };
 
         res.json(stats);
