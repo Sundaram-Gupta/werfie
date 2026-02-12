@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api', // Default to local backend
+    baseURL: (import.meta.env.VITE_API_URL || 'http://localhost:3012') + '/api', // Correctly point to /api endpoint
     headers: {
         'Content-Type': 'application/json',
     },
@@ -27,7 +27,10 @@ api.interceptors.response.use(
     (error) => {
         if (error.response && error.response.status === 401) {
             // Handle unauthorized access (e.g., redirect to login)
-            // window.location.href = '/login'; // Do not auto-redirect in interceptor for now to avoid loops
+            // Handle unauthorized access (e.g., redirect to login)
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('adminUser');
+            window.location.href = '/login';
         }
         return Promise.reject(error);
     }

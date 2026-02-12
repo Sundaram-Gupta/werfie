@@ -5,9 +5,11 @@ import { useState, useEffect } from "react"
 import { userService, searchService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
+import { useTranslation } from "react-i18next"
 
 
 function TrendsList({ navigate }) {
+    const { t } = useTranslation()
     const [trends, setTrends] = useState([])
     const [loading, setLoading] = useState(true)
 
@@ -25,8 +27,8 @@ function TrendsList({ navigate }) {
         fetchTrends()
     }, [])
 
-    if (loading) return <div className="p-4 text-center text-muted-foreground">Loading trends...</div>
-    if (trends.length === 0) return <div className="p-4 text-center text-muted-foreground">No trends found</div>
+    if (loading) return <div className="p-4 text-center text-muted-foreground">{t('right_sidebar.loading_trends')}</div>
+    if (trends.length === 0) return <div className="p-4 text-center text-muted-foreground">{t('right_sidebar.no_trends')}</div>
 
     return (
         <div>
@@ -51,6 +53,7 @@ function TrendsList({ navigate }) {
 }
 
 function SuggestionCard({ user, navigate, onFollowChange }) {
+    const { t } = useTranslation()
     const [isFollowing, setIsFollowing] = useState(false)
     const [loading, setLoading] = useState(false)
 
@@ -103,7 +106,7 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
                     : 'bg-foreground text-background hover:opacity-90'
                     }`}
             >
-                {loading ? '...' : (isFollowing ? 'Following' : 'Follow')}
+                {loading ? t('common.loading') : (isFollowing ? t('common.following') : t('nav.follow'))}
             </button>
         </div>
     )
@@ -112,6 +115,7 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
 export function RightSidebar() {
     const navigate = useNavigate()
     const { user: currentUser } = useAuth()
+    const { t } = useTranslation()
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
 
@@ -146,7 +150,7 @@ export function RightSidebar() {
                     <Search className="w-5 h-5" />
                     <input
                         type="text"
-                        placeholder="Search"
+                        placeholder={t('right_sidebar.search_placeholder')}
                         className="bg-transparent border-none outline-none text-[15px] text-foreground placeholder-muted-foreground w-full h-full"
                         onKeyDown={handleSearch}
                     />
@@ -155,24 +159,24 @@ export function RightSidebar() {
 
             {/* Trends Widget */}
             <div className="bg-muted/30 border border-border/40 rounded-[16px] overflow-hidden mb-4">
-                <h2 className="font-bold text-[20px] px-4 py-3 leading-6">What's happening</h2>
+                <h2 className="font-bold text-[20px] px-4 py-3 leading-6">{t('right_sidebar.whats_happening')}</h2>
                 <TrendsList navigate={navigate} />
                 <div
                     className="text-primary text-[15px] p-4 cursor-pointer hover:bg-white/[0.03] transition rounded-b-[16px]"
                     onClick={() => navigate('/explore')}
                 >
-                    Show more
+                    {t('right_sidebar.show_more')}
                 </div>
             </div>
 
             {/* Who to Follow Widget */}
             <div className="bg-muted/30 border border-border/40 rounded-[16px] overflow-hidden">
-                <h2 className="font-bold text-[20px] px-4 py-3 leading-6">Who to follow</h2>
+                <h2 className="font-bold text-[20px] px-4 py-3 leading-6">{t('right_sidebar.who_to_follow')}</h2>
                 <div>
                     {loading ? (
-                        <div className="p-4 text-center text-muted-foreground">Loading...</div>
+                        <div className="p-4 text-center text-muted-foreground">{t('common.loading')}</div>
                     ) : suggestions.length === 0 ? (
-                        <div className="p-4 text-center text-muted-foreground">No suggestions</div>
+                        <div className="p-4 text-center text-muted-foreground">{t('right_sidebar.no_suggestions')}</div>
                     ) : (
                         suggestions.slice(0, 3).map((user) => (
                             <SuggestionCard
@@ -188,16 +192,16 @@ export function RightSidebar() {
                     className="text-primary text-[15px] p-4 cursor-pointer hover:bg-white/[0.03] transition rounded-b-[16px]"
                     onClick={() => navigate('/follow')}
                 >
-                    Show more
+                    {t('right_sidebar.show_more')}
                 </div>
             </div>
 
             <div className="px-4 py-4 text-[13px] text-muted-foreground leading-4 flex flex-wrap gap-x-2">
-                <a href="#" className="hover:underline">Terms of Service</a>
-                <a href="#" className="hover:underline">Privacy Policy</a>
-                <a href="#" className="hover:underline">Cookie Policy</a>
-                <a href="#" className="hover:underline">Accessibility</a>
-                <a href="#" className="hover:underline">Ads info</a>
+                <a href="#" className="hover:underline">{t('right_sidebar.terms')}</a>
+                <a href="#" className="hover:underline">{t('right_sidebar.privacy')}</a>
+                <a href="#" className="hover:underline">{t('right_sidebar.cookies')}</a>
+                <a href="#" className="hover:underline">{t('right_sidebar.accessibility')}</a>
+                <a href="#" className="hover:underline">{t('right_sidebar.ads_info')}</a>
                 <span>© 2026 X Corp.</span>
             </div>
         </aside>

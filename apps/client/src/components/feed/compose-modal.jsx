@@ -3,30 +3,35 @@ import {
     DialogContent,
     DialogHeader,
     DialogTrigger,
+    DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { Image, X, MapPin, Smile, FileBarChart2, CalendarClock, Globe } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/context/AuthContext"
-import { postService, mediaService } from "@/services/api"
-import { getMediaUrl } from "@/lib/utils"
+import { postService } from "@/services/api"
 
 export function ComposeModal({ children }) {
     const [postContent, setPostContent] = useState("")
     const [open, setOpen] = useState(false)
     const [isPosting, setIsPosting] = useState(false)
-    const [mediaUrls, setMediaUrls] = useState([])
-    const [uploadingMedia, setUploadingMedia] = useState(false)
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-    const textareaRef = useRef(null)
+    const [selectedFiles, setSelectedFiles] = useState([])
+    const [filePreviews, setFilePreviews] = useState([])
     const fileInputRef = useRef(null)
+    const textareaRef = useRef(null)
     const { user } = useAuth()
+    const { t } = useTranslation()
 
     const MAX_CHARS = 280
     const progress = (postContent.length / MAX_CHARS) * 100
     const isOverLimit = postContent.length > MAX_CHARS
-    const isEmpty = postContent.trim().length === 0
+    const isEmpty = postContent.trim().length === 0 && selectedFiles.length === 0
 
     const adjustHeight = () => {
         const textarea = textareaRef.current
@@ -40,27 +45,39 @@ export function ComposeModal({ children }) {
         adjustHeight()
     }, [postContent])
 
-    const handleImageUpload = async (e) => {
+    const handleFileSelect = (e) => {
         const files = Array.from(e.target.files || [])
         if (files.length === 0) return
 
-        setUploadingMedia(true)
-        try {
-            const uploadPromises = files.map(file => mediaService.uploadMedia(file))
-            const results = await Promise.all(uploadPromises)
-            const urls = results.map(r => r.url)
-            setMediaUrls(prev => [...prev, ...urls])
-        } catch (error) {
-            console.error('Error uploading media:', error)
-            alert('Failed to upload media. Please try again.')
-        } finally {
-            setUploadingMedia(false)
-        }
+        setSelectedFiles(files)
+        
+        // Generate previews
+        const previews = files.map(file => {
+            let type = 'image';
+            if (file.type.startsWith('video/')) type = 'video';
+            if (file.type.startsWith('audio/')) type = 'audio';
+            
+            return {
+                file,
+                url: URL.createObjectURL(file),
+                type
+            }
+        })
+        setFilePreviews(previews)
     }
 
-    const handleRemoveMedia = (index) => {
-        setMediaUrls(prev => prev.filter((_, i) => i !== index))
+    const handleRemoveFile = (index) => {
+        const newFiles = selectedFiles.filter((_, i) => i !== index)
+        const newPreviews = filePreviews.filter((_, i) => i !== index)
+        
+        // Revoke URL to free memory
+        URL.revokeObjectURL(filePreviews[index].url)
+        
+        setSelectedFiles(newFiles)
+        setFilePreviews(newPreviews)
     }
+
+
 
     const handleEmojiClick = (emoji) => {
         const textarea = textareaRef.current
@@ -79,13 +96,14 @@ export function ComposeModal({ children }) {
     }
 
     const handleCreatePost = async () => {
-        if ((!postContent.trim() && mediaUrls.length === 0) || isPosting) return
+        if ((isEmpty || isPosting)) return
 
         setIsPosting(true)
         try {
-            await postService.createPost(postContent.trim(), mediaUrls)
+            await postService.createPost(postContent.trim(), selectedFiles)
             setPostContent("")
-            setMediaUrls([])
+            setSelectedFiles([])
+            setFilePreviews([])
             setOpen(false)
             // Refresh the feed
             window.location.reload()
@@ -106,6 +124,10 @@ export function ComposeModal({ children }) {
                 {children}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px] bg-black border-[rgb(47,51,54)] p-0 gap-0 top-[20%] translate-y-0 sm:top-[5%] sm:translate-y-0 text-white [&>button]:hidden">
+                <VisuallyHidden>
+                    <DialogTitle>Compose Post</DialogTitle>
+                    <DialogDescription>Create a new post with text and media</DialogDescription>
+                </VisuallyHidden>
                 <DialogHeader className="px-4 py-3 flex flex-row items-center justify-between border-b border-transparent">
                     <button className="rounded-full p-2 hover:bg-[rgb(239,243,244,0.1)] transition-colors w-fit h-fit -ml-2" onClick={() => setOpen(false)}>
                         <X className="w-5 h-5" />
@@ -127,53 +149,62 @@ export function ComposeModal({ children }) {
                             <textarea
                                 ref={textareaRef}
                                 className="w-full bg-transparent border-none outline-none text-[20px] placeholder-[rgb(113,118,123)] resize-none min-h-[120px] text-white mt-2"
-                                placeholder="What is happening?!"
+                                placeholder={t('right_sidebar.whats_happening')}
                                 value={postContent}
                                 onChange={(e) => setPostContent(e.target.value)}
                             />
 
-                            {/* Media Preview */}
-                            {mediaUrls.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2 mt-3 rounded-2xl overflow-hidden">
-                                    {mediaUrls.map((url, index) => (
-                                        <div key={index} className="relative group">
-                                            <img src={getMediaUrl(url)} alt="Upload" className="w-full h-auto rounded-2xl" />
+                            {/* Media Previews */}
+                            {filePreviews.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 mt-3">
+                                    {filePreviews.map((preview, index) => (
+                                        <div key={index} className="relative rounded-2xl overflow-hidden bg-[rgb(22,24,28)] border border-[rgb(47,51,54)]">
+                                            {preview.type === 'image' ? (
+                                                <img src={preview.url} alt="Preview" className="w-full h-48 object-cover" />
+                                            ) : preview.type === 'video' ? (
+                                                <video src={preview.url} className="w-full h-48 object-cover" controls />
+                                            ) : (
+                                                 <div className="w-full h-48 flex items-center justify-center bg-gray-900">
+                                                    <audio src={preview.url} controls className="w-full px-2" />
+                                                 </div>
+                                            )}
                                             <button
-                                                onClick={() => handleRemoveMedia(index)}
-                                                className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={() => handleRemoveFile(index)}
+                                                className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 rounded-full p-1.5 transition-colors"
                                             >
-                                                <X className="w-4 h-4" />
+                                                <X className="w-4 h-4 text-white" />
                                             </button>
                                         </div>
                                     ))}
                                 </div>
                             )}
 
+                            {/* Hidden File Input */}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*,video/*,audio/*"
+                                multiple
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+
+
                             <div className="border-b border-[rgb(47,51,54)] pb-3 mb-3">
                                 <button className="flex items-center gap-1 text-blue-500 hover:bg-blue-500/10 px-3 py-1 -ml-3 rounded-full transition-colors w-fit">
                                     <Globe className="w-4 h-4" />
-                                    <span className="text-[14px] font-bold">Everyone can reply</span>
+                                    <span className="font-bold text-[15px]">{t('feed.everyone_can_reply')}</span>
                                 </button>
                             </div>
 
                             <div className="flex items-center justify-between pt-1">
                                 <div className="flex gap-0 text-blue-500 -ml-2">
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        className="hidden"
-                                        accept="image/*,video/*"
-                                        multiple
-                                        onChange={handleImageUpload}
-                                    />
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
-                                        disabled={uploadingMedia}
-                                        className="p-2 hover:bg-blue-500/10 rounded-full transition-colors disabled:opacity-50"
+                                        className="p-2 hover:bg-blue-500/10 rounded-full transition-colors"
                                     >
                                         <Image className="w-5 h-5" />
                                     </button>
-                                    <button className="p-2 hover:bg-blue-500/10 rounded-full transition-colors"><FileBarChart2 className="w-5 h-5" /></button>
                                     <div className="relative">
                                         <button
                                             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -220,12 +251,13 @@ export function ComposeModal({ children }) {
                                             </svg>
                                         </div>
                                     )}
-                                    <Button
-                                        disabled={(isEmpty && mediaUrls.length === 0) || isOverLimit || isPosting || uploadingMedia}
+                                     <Button
+                                         disabled={isEmpty || isOverLimit || isPosting}
                                         className="bg-[rgb(29,155,240)] hover:bg-[rgb(26,140,216)] text-white font-bold rounded-full px-5 py-2 h-auto text-[15px] disabled:opacity-50 disabled:bg-[rgb(29,155,240)]"
                                         onClick={handleCreatePost}
                                     >
-                                        {uploadingMedia ? 'Uploading...' : (isPosting ? 'Posting...' : 'Post')}
+                                    
+                                        {isPosting ? t('feed.posting') : t('nav.post')}
                                     </Button>
                                 </div>
                             </div>

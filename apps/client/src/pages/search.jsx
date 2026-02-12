@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom"
-import { searchService } from "@/services/api"
+import { searchService, postService } from "@/services/api"
 import { PostCard } from "@/components/feed/post-card"
+import { toast } from "sonner"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,23 +23,42 @@ export default function SearchPage() {
 
         const performSearch = async () => {
             setLoading(true)
+            
+            // Fetch posts
             try {
-                // Fetch both for now, optimize later
-                const [postsData, usersData] = await Promise.all([
-                    searchService.searchPosts(query),
-                    searchService.searchUsers(query)
-                ])
+                const postsData = await searchService.searchPosts(query)
+                console.log('Search Debug - Posts:', postsData);
                 setPosts(postsData || [])
+            } catch (error) {
+                console.error("Search posts error:", error)
+                setPosts([]) // Fallback
+            }
+
+            // Fetch users
+            try {
+                const usersData = await searchService.searchUsers(query)
+                console.log('Search Debug - Users:', usersData);
                 setUsers(usersData || [])
             } catch (error) {
-                console.error("Search error:", error)
-            } finally {
-                setLoading(false)
+                console.error("Search users error:", error)
+                setUsers([]) // Fallback
             }
+
+            setLoading(false)
         }
 
         performSearch()
     }, [query])
+
+    const handleDeletePost = async (postId) => {
+        try {
+            await postService.deletePost(postId)
+            setPosts(prev => prev.filter(p => p.id !== postId))
+        } catch (err) {
+            console.error('Failed to delete post:', err)
+            throw err
+        }
+    }
 
     if (!query) {
         return <div className="p-8 text-center text-muted-foreground">Enter a keyword to search</div>
@@ -75,7 +95,7 @@ export default function SearchPage() {
                         <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
                     ) : posts.length > 0 ? (
                         <div className="divide-y divide-border/50">
-                            {posts.map(post => <PostCard key={post.id} post={post} />)}
+                            {posts.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
                         </div>
                     ) : (
                         <div className="p-8 text-center text-muted-foreground">No results for "{query}"</div>

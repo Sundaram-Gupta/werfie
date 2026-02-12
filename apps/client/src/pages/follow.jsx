@@ -6,8 +6,10 @@ import { useAuth } from "@/context/AuthContext"
 import { userService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
 import { useNavigate } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 
 function FollowCard({ user, initialFollowing = false, allowFollow = false, onFollowChange }) {
+    const { t } = useTranslation()
     const [isFollowing, setIsFollowing] = useState(initialFollowing)
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
@@ -63,7 +65,7 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
                     onClick={handleFollowClick}
                     disabled={loading}
                 >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isFollowing ? "Following" : "Follow")}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isFollowing ? t('common.following') : t('nav.follow'))}
                 </Button>
             ) : (
                 <Button
@@ -71,7 +73,7 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
                     disabled
                     className="rounded-full bg-[rgb(239,243,244)] text-black font-bold px-4 h-8 text-sm opacity-50 cursor-not-allowed"
                 >
-                    Following
+                    {t('common.following')}
                 </Button>
             )}
         </div>
@@ -80,6 +82,7 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
 
 export default function Follow() {
     const { user: currentUser } = useAuth()
+    const { t } = useTranslation()
     const [following, setFollowing] = useState([])
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
@@ -122,17 +125,17 @@ export default function Follow() {
     return (
         <div>
             <div className="sticky top-0 z-10 bg-black/60 backdrop-blur-md border-b border-border px-4 py-3">
-                <h1 className="text-xl font-bold">Follow</h1>
-                <p className="text-sm text-muted-foreground">People you may know and accounts you follow</p>
+                <h1 className="text-xl font-bold">{t('follow.title')}</h1>
+                <p className="text-sm text-muted-foreground">{t('follow.subtitle')}</p>
             </div>
 
             <div className="pb-20">
                 {/* Following Section */}
                 <div className="px-4 py-3 border-b border-border">
-                    <h2 className="text-xl font-bold mb-4">Following ({following.length})</h2>
+                    <h2 className="text-xl font-bold mb-4">{t('follow.section_following')} ({following.length})</h2>
                     {following.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
-                            You're not following anyone yet
+                            {t('follow.empty_following')}
                         </div>
                     ) : (
                         <div className="border border-border rounded-xl overflow-hidden bg-background">
@@ -150,10 +153,10 @@ export default function Follow() {
 
                 {/* Suggested Section */}
                 <div className="px-4 py-3">
-                    <h2 className="text-xl font-bold mb-4">Suggested for You ({suggestions.length})</h2>
+                    <h2 className="text-xl font-bold mb-4">{t('follow.section_suggested')} ({suggestions.length})</h2>
                     {suggestions.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
-                            No suggestions available
+                            {t('follow.empty_suggestions')}
                         </div>
                     ) : (
                         <div className="border border-border rounded-xl overflow-hidden bg-background">

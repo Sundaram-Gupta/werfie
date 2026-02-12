@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
@@ -11,73 +12,203 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3003;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
-// Configure Multer for local storage
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadDir = 'uploads/';
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir);
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Rewrite /api/posts to / to support direct access
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api/posts')) {
+        // Replace /api/posts with empty string
+        let newUrl = req.url.replace('/api/posts', '');
+        // Ensure it starts with /
+        if (!newUrl.startsWith('/')) {
+            newUrl = '/' + newUrl;
         }
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Append extension
+        req.url = newUrl;
+    } else if (req.path.startsWith('/api/')) {
+        // Generic rewrite for other API routes (explore, trends, etc.)
+        req.url = req.url.replace('/api', '');
     }
+    next();
 });
 
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
-});
-
-// app.use(cors()); // Handled by Gateway
 app.use(express.json());
-// Serve static files from uploads directory
-app.use('/media/uploads', express.static('uploads'));
+
+
+
 
 const adsRoutes = require('./routes/adsRoutes');
 const listsRoutes = require('./routes/listsRoutes');
 const spacesRoutes = require('./routes/spacesRoutes');
+const MediaService = require('./services/media.service');
+
+// Static serving for uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/ads', adsRoutes);
 app.use('/lists', listsRoutes);
 app.use('/spaces', spacesRoutes);
 
 // Auth Middleware
-// Auth Middleware (Imported)
 const authenticateToken = require('./middleware/auth');
+
+// Multer Config
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, path.join(__dirname, '../temp'));
+    },
+    filename: (req, file, cb) => {
+        cb(null, `${Date.now()}-${file.originalname}`);
+    }
+});
+
+const upload = multer({
+    storage,
+    limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB Max
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+            'video/mp4', 'video/quicktime', 'video/webm'
+        ];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Unsupported file type'), false);
+        }
+    }
+});
 
 // Health Check
 app.get('/health', (req, res) => {
     res.json({ status: 'healthy', service: 'content-service' });
 });
 
-// Create Post
-app.post('/', authenticateToken, async (req, res) => {
-    const { content, mediaUrls, replyToId } = req.body;
+// Search Posts
+app.get('/posts/search', async (req, res) => {
+    const { q, limit = 20, offset = 0 } = req.query;
+
+    if (!q || q.trim().length === 0) {
+        return res.json([]);
+    }
 
     try {
-        const post = await prisma.post.create({
-            data: {
-                userId: req.user.userId,
-                content,
-                mediaUrls: mediaUrls ? JSON.stringify(mediaUrls) : null,
-                replyToId
+        const posts = await prisma.post.findMany({
+            where: {
+                content: {
+                    contains: q,
+                    mode: 'insensitive'
+                }
             },
             include: {
-                user: { select: { id: true } } // Minimal return
+                user: {
+                    include: { profile: true }
+                },
+                media: true,
+                _count: {
+                    select: { likes: true, retweets: true, replies: true }
+                }
+            },
+            take: parseInt(limit),
+            skip: parseInt(offset),
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Sanitize
+        const safePosts = posts.map(post => {
+            if (post.user) {
+                const { passwordHash, ...safeUser } = post.user;
+                return {
+                    ...post,
+                    user: safeUser
+                };
+            }
+            return {
+                ...post,
+                user: { id: post.userId, profile: { handle: 'unknown', name: 'Deleted User' } }
+            };
+        });
+
+        res.json(safePosts);
+    } catch (error) {
+        console.error('Search Posts Error:', error);
+        res.status(500).json({ error: 'Failed to search posts', details: error.message });
+    }
+});
+
+// Create Post (Media Support)
+app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
+    const { content = '', replyToId } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+    const files = req.files || [];
+
+    console.log('[ContentService] Creating post:', { userId, contentLength: content.length, fileCount: files.length });
+
+    if (!userId) {
+        return res.status(401).json({ error: 'User ID missing from token' });
+    }
+
+    try {
+        // 1. Create Post first (or in transaction)
+        const post = await prisma.post.create({
+            data: {
+                userId,
+                content,
+                replyToId: replyToId || null
+            }
+        });
+
+        // 2. Process Media
+        const mediaPromises = files.map(async (file) => {
+            try {
+                let processedMedia;
+                if (file.mimetype.startsWith('image/')) {
+                    processedMedia = await MediaService.processImage(file);
+                } else if (file.mimetype.startsWith('video/')) {
+                    processedMedia = await MediaService.processVideo(file);
+                } else if (file.mimetype.startsWith('audio/')) {
+                    processedMedia = await MediaService.processAudio(file);
+                }
+
+                if (processedMedia) {
+                    await prisma.postMedia.create({
+                        data: {
+                            postId: post.id,
+                            ...processedMedia
+                        }
+                    });
+                }
+            } finally {
+                // Always clean up temp file
+                await MediaService.cleanup(file.path);
+            }
+        });
+
+        await Promise.all(mediaPromises);
+
+        // 3. Fetch full post with media
+        const finalPost = await prisma.post.findUnique({
+            where: { id: post.id },
+            include: {
+                user: { select: { id: true, profile: { select: { handle: true, name: true, avatar: true } } } },
+                media: true
             }
         });
 
         // Notify if Reply
         if (replyToId) {
             const originalPost = await prisma.post.findUnique({ where: { id: replyToId } });
-            if (originalPost && originalPost.userId !== req.user.userId) {
+            if (originalPost && originalPost.userId !== userId) {
                 await prisma.notification.create({
                     data: {
                         userId: originalPost.userId,
                         type: 'reply',
-                        actorId: req.user.userId,
+                        actorId: userId,
                         postId: post.id
                     }
                 });
@@ -88,20 +219,26 @@ app.post('/', authenticateToken, async (req, res) => {
         try {
             const kafkaProducer = require('./kafka');
             await kafkaProducer.send('POST_CREATED', {
-                id: post.id,
-                userId: post.userId,
-                content: post.content,
-                createdAt: post.createdAt
+                id: finalPost.id,
+                userId: finalPost.userId,
+                content: finalPost.content,
+                mediaCount: finalPost.media.length,
+                createdAt: finalPost.createdAt
             });
         } catch (kafkaError) {
             console.error('Failed to emit POST_CREATED event:', kafkaError);
-            // Don't fail request if Kafka fails
         }
 
-        res.json(post);
+        res.json(finalPost);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to create post' });
+        console.error('CREATE POST ERROR:', error);
+        // Attempt cleanup for all files on error
+        if (req.files) {
+            for (const file of req.files) {
+                await MediaService.cleanup(file.path);
+            }
+        }
+        res.status(500).json({ error: 'Failed to create post', details: error.message });
     }
 });
 
@@ -113,7 +250,8 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true, // In real microservices, we might just get IDs and hydrate later, or use replication 
+                user: true,
+                media: true,
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
@@ -227,10 +365,18 @@ app.get('/communities', async (req, res) => {
 
 
 // Get All Posts (Feed compatible)
+// Get All Posts (Feed compatible)
 app.get('/', authenticateToken, async (req, res) => {
+    console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId}`);
     try {
         const { userId, repliesOnly } = req.query;
-        const currentUserId = req.user.userId;
+        // Safe access to userId
+        const currentUserId = req.user?.userId || req.user?.id;
+
+        if (!currentUserId) {
+            console.error('[ContentService] Feed Error: User ID missing from token payload', req.user);
+            return res.status(401).json({ error: 'Unauthorized: Invalid token payload' });
+        }
 
         // Build where clause
         const where = {};
@@ -241,12 +387,16 @@ app.get('/', authenticateToken, async (req, res) => {
             where.replyToId = { not: null };
         }
 
+        console.log(`[ContentService] Fetching posts with where:`, where);
+
         const posts = await prisma.post.findMany({
             where,
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
                 user: true,
+                media: true,
+
                 _count: { select: { replies: true, likes: true, retweets: true } },
                 likes: {
                     where: { userId: currentUserId },
@@ -258,10 +408,21 @@ app.get('/', authenticateToken, async (req, res) => {
                 }
             }
         });
-        res.json({ posts }); // Wrap in object as expected by usePosts hook which expects data.posts
+        console.log(`[ContentService] Fetched ${posts.length} posts.`);
+
+        // Sanitize users in posts (remove passwordHash)
+        const safePosts = posts.map(post => {
+            if (post.user) {
+                const { passwordHash, ...safeUser } = post.user;
+                post.user = safeUser;
+            }
+            return post;
+        });
+
+        res.json({ posts: safePosts });
     } catch (error) {
-        console.error('Feed Error:', error);
-        res.status(500).json({ error: 'Failed to fetch posts' });
+        console.error('[ContentService] Feed Error:', error);
+        res.status(500).json({ error: 'Failed to fetch posts', details: error.message });
     }
 });
 
@@ -287,6 +448,8 @@ app.get('/following', authenticateToken, async (req, res) => {
             orderBy: { createdAt: 'desc' },
             include: {
                 user: true,
+                media: true,
+
                 _count: { select: { replies: true, likes: true, retweets: true } },
                 likes: {
                     where: { userId: currentUserId },
@@ -299,7 +462,17 @@ app.get('/following', authenticateToken, async (req, res) => {
             }
         });
 
-        res.json({ posts });
+
+        // Sanitize users in posts (remove passwordHash)
+        const safePosts = posts.map(post => {
+            if (post.user) {
+                const { passwordHash, ...safeUser } = post.user;
+                post.user = safeUser;
+            }
+            return post;
+        });
+
+        res.json({ posts: safePosts });
     } catch (error) {
         console.error('Following Feed Error:', error);
         res.status(500).json({ error: 'Failed to fetch following feed' });
@@ -456,6 +629,7 @@ app.get('/:id/replies', async (req, res) => {
             orderBy: { createdAt: 'desc' },
             include: {
                 user: true,
+                media: true,
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
@@ -466,25 +640,7 @@ app.get('/:id/replies', async (req, res) => {
     }
 });
 
-// Upload Media Endpoint
-app.post('/media/upload', authenticateToken, upload.single('file'), (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
-        // Construct public URL. 
-        // Gateway maps /api/media/ -> http://content_service/media/
-        // We serve /media/uploads via express.static('uploads')
-        // So file 'abc.png' in 'uploads/' is at http://content_service/media/uploads/abc.png
-        // Authenticated client sees: http://localhost:3001/api/media/uploads/abc.png
 
-        const fileUrl = `/api/media/uploads/${req.file.filename}`;
-        res.json({ url: fileUrl });
-    } catch (error) {
-        console.error('Upload Error:', error);
-        res.status(500).json({ error: 'Failed to upload file' });
-    }
-});
 
 // Delete Post
 app.delete('/:id', authenticateToken, async (req, res) => {
@@ -563,6 +719,7 @@ app.get('/bookmarks', authenticateToken, async (req, res) => {
                 post: {
                     include: {
                         user: { include: { profile: true } },
+                        media: true,
                         _count: {
                             select: { likes: true, retweets: true, replies: true }
                         }
@@ -637,6 +794,47 @@ app.put('/notifications/:id/read', authenticateToken, async (req, res) => {
     }
 });
 
+// Get Spaces
+app.get('/spaces', async (req, res) => {
+    try {
+        const spaces = await prisma.space.findMany({
+            include: {
+                host: {
+                    include: { profile: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(spaces);
+    } catch (error) {
+        console.error('Get Spaces Error:', error);
+        res.status(500).json({ error: 'Failed to get spaces' });
+    }
+});
+
+// Create Space
+app.post('/spaces', authenticateToken, async (req, res) => {
+    const { title, topics, status = 'scheduled', scheduledAt } = req.body;
+    const hostId = req.user.userId;
+
+    try {
+        const space = await prisma.space.create({
+            data: {
+                title,
+                topics,
+                status, // 'live' or 'scheduled'
+                scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+                startedAt: status === 'live' ? new Date() : null,
+                hostId
+            }
+        });
+        res.json(space);
+    } catch (error) {
+        console.error('Create Space Error:', error);
+        res.status(500).json({ error: 'Failed to create space' });
+    }
+});
+
 // Get Single Post - Moved to bottom to avoid conflicts
 app.get('/:id', async (req, res) => {
     console.log('GET /:id hit', req.params.id);
@@ -672,6 +870,6 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '127.0.0.1', () => {
     console.log(`Content Service running on port ${PORT}`);
 });

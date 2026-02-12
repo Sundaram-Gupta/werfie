@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
-import { hash, compare } from "bcryptjs"
+import bcrypt from "bcrypt"
 import { NextResponse } from "next/server"
 
 export async function POST(request) {
@@ -24,13 +24,13 @@ export async function POST(request) {
         }
 
         // Verify current password
-        const isValid = await compare(currentPassword, user.password)
+        const isValid = await bcrypt.compare(currentPassword, user.password)
         if (!isValid) {
             return NextResponse.json({ error: "Incorrect current password" }, { status: 400 })
         }
 
         // Hash new password
-        const hashedPassword = await hash(newPassword, 10)
+        const hashedPassword = await bcrypt.hash(newPassword, 10)
 
         await prisma.user.update({
             where: { id: user.id },

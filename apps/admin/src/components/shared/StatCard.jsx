@@ -3,22 +3,27 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 
-export function StatCard({ title, value, icon: Icon, trend, trendValue, className }) {
+export function StatCard({ title, value, icon: Icon, trend, trendValue, className, color = "blue" }) {
     const isUp = trend === 'up';
 
     return (
-        <Card className={cn("bg-[#151516] border-white/5 shadow-none overflow-hidden hover:border-white/10 transition-colors", className)}>
+        <Card className={cn("bg-card border-border shadow-none overflow-hidden hover:border-foreground/10 transition-colors", className)}>
             <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                     <div className="space-y-1">
                         <p className="text-sm font-medium text-muted-foreground">{title}</p>
-                        <h3 className="text-2xl font-bold tracking-tight text-white">{value}</h3>
+                        <h3 className="text-2xl font-bold tracking-tight text-foreground">{value}</h3>
                     </div>
 
                     <div className={cn(
-                        "h-10 w-10 rounded-xl flex items-center justify-center border border-white/5",
-                        // Dynamic icon background colors based on content type could be added here
-                        "bg-blue-500/10 text-blue-500"
+                        "h-10 w-10 rounded-xl flex items-center justify-center border border-border",
+                         // Dynamic icon colors
+                         color === "blue" && "bg-blue-500/10 text-blue-500",
+                         color === "purple" && "bg-purple-500/10 text-purple-500",
+                         color === "green" && "bg-green-500/10 text-green-500",
+                         color === "orange" && "bg-orange-500/10 text-orange-500",
+                         color === "red" && "bg-red-500/10 text-red-500",
+                         !color && "bg-primary/10 text-primary"
                     )}>
                         <Icon className="h-5 w-5" />
                     </div>

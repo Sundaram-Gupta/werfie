@@ -1,26 +1,21 @@
-// Mock Auth Service
+import api from '@/lib/axios';
 
 export const login = async (email, password, role) => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        const response = await api.post('/admin/login', { email, password });
 
-    if (email === 'admin@example.com' && password === 'admin') {
-        const user = {
-            id: '1',
-            name: 'Admin User',
-            email: 'admin@example.com',
-            role: role || 'admin',
-            avatar: 'https://github.com/shadcn.png'
-        };
-
-        // Persist mock token
-        localStorage.setItem('adminToken', 'mock-jwt-token');
-        localStorage.setItem('adminUser', JSON.stringify(user));
-
-        return user;
+        if (response.data.success) {
+            const { user, token } = response.data;
+            localStorage.setItem('adminToken', token);
+            localStorage.setItem('adminUser', JSON.stringify(user));
+            return user;
+        } else {
+            throw new Error('Login failed');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        throw new Error(error.response?.data?.error || 'Invalid credentials');
     }
-
-    throw new Error('Invalid credentials');
 };
 
 export const logout = async () => {

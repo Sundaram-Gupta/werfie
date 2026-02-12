@@ -16,7 +16,7 @@ export function AdminLayout() {
                     <Outlet />
                 </main>
             </div>
-            <Toaster position="top-right" theme="dark" />
+            <Toaster position="top-right" theme="system" />
         </div>
     );
 }

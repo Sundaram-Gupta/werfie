@@ -1,29 +1,38 @@
-const { NextResponse } = require('next/server')
-const { prisma } = require('@/lib/prisma')
-const { generateAccessToken, generateRefreshToken } = require('@/lib/jwt')
-const bcrypt = require('bcrypt')
-const { z } = require('zod')
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { generateAccessToken, generateRefreshToken } from '@/lib/jwt'
+import bcrypt from 'bcrypt'
+import { z } from 'zod'
 
 const registerSchema = z.object({
     email: z.string().email(),
     password: z.string().min(8),
     name: z.string().min(1),
-    handle: z.string().min(3).regex(/^[a-zA-Z0-9_]+$/)
+    handle: z.string().min(3).regex(/^[a-zA-Z0-9_]+$/),
+    preferredLanguage: z.string().optional()
 })
 
-async function POST(request) {
+export async function POST(request) {
     try {
         const body = await request.json()
-        const { email, password, name, handle } = registerSchema.parse(body)
+        const { email, password, name, handle, preferredLanguage } = registerSchema.parse(body)
 
-        // Check if user already exists
-        const existingUser = await prisma.user.findUnique({
-            where: { email }
-        })
+        // Check if email or handle already exists
+        const [existingEmail, existingHandle] = await Promise.all([
+            prisma.user.findUnique({ where: { email } }),
+            prisma.profile.findUnique({ where: { handle } })
+        ])
 
-        if (existingUser) {
+        if (existingEmail) {
             return NextResponse.json(
-                { error: 'User already exists' },
+                { error: 'Email already exists' },
+                { status: 400 }
+            )
+        }
+
+        if (existingHandle) {
+            return NextResponse.json(
+                { error: 'Handle already taken' },
                 { status: 400 }
             )
         }
@@ -36,6 +45,7 @@ async function POST(request) {
             data: {
                 email,
                 passwordHash,
+                preferredLanguage: preferredLanguage || 'en',
                 profile: {
                     create: {
                         name,
@@ -85,11 +95,10 @@ async function POST(request) {
         }
 
         console.error('Registration error:', error)
+        if (error.stack) console.error(error.stack)
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: 'Internal server error', message: error.message },
             { status: 500 }
         )
     }
 }
-
-module.exports = { POST }

@@ -1,8 +1,22 @@
 {
+  "name": "werfie-repo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:dev": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop all",
+    "pm2:restart": "pm2 restart all",
+    "pm2:delete": "pm2 delete all",
+    "pm2:logs": "pm2 logs",
+    "pm2:monit": "pm2 monit"
+  },
   "dependencies": {
-    "axios": "^1.13.2"
+    "axios": "^1.13.5",
+    "pg": "^8.17.2"
   },
   "devDependencies": {
+    "pm2": "^6.0.14",
     "prisma": "^5.22.0"
   }
 }

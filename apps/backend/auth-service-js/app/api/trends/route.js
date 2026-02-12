@@ -1,7 +1,7 @@
-const { NextResponse } = require('next/server')
-const { prisma } = require('@/lib/prisma')
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 
-async function GET(request) {
+export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url)
         const category = searchParams.get('category')
@@ -11,7 +11,7 @@ async function GET(request) {
 
         const trends = await prisma.trend.findMany({
             where,
-            orderBy: { tweetCount: 'desc' },
+            orderBy: { posts: 'desc' },
             take: limit,
         })
 
@@ -21,5 +21,3 @@ async function GET(request) {
         return NextResponse.json({ error: 'Failed to fetch trends' }, { status: 500 })
     }
 }
-
-module.exports = { GET }

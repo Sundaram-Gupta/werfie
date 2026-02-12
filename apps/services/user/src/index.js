@@ -10,8 +10,24 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 const businessRoutes = require('./routes/businessRoutes');
 
-// app.use(cors()); // Handled by Gateway
+app.use(cors({
+    origin: true, // Reflects the request origin
+    credentials: true
+}));
 app.use(express.json());
+
+// Rewrite /api/users or /api/business to / to support Gateway proxy
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api/users') || req.url.startsWith('/api/business')) {
+        let newUrl = req.url.replace('/api/users', '').replace('/api/business', '');
+        if (!newUrl.startsWith('/')) {
+            newUrl = '/' + newUrl;
+        }
+        console.log(`[User Service] Path Rewrite: ${req.url} -> ${newUrl}`);
+        req.url = newUrl;
+    }
+    next();
+});
 
 app.use('/business', businessRoutes);
 
@@ -316,9 +332,16 @@ app.put('/:id', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const { name, bio, location, website, avatar, banner } = req.body;
+    const { name, bio, location, website, avatar, banner, preferredLanguage } = req.body;
 
     try {
+        if (preferredLanguage) {
+            await prisma.user.update({
+                where: { id: req.params.id },
+                data: { preferredLanguage }
+            });
+        }
+
         const updateData = {};
         if (name !== undefined) updateData.name = name;
         if (bio !== undefined) updateData.bio = bio;
@@ -338,7 +361,7 @@ app.put('/:id', authenticateToken, async (req, res) => {
             }
         });
 
-        res.json(updatedProfile);
+        res.json({ ...updatedProfile, preferredLanguage });
     } catch (error) {
         console.error('Update Profile Error:', error);
         res.status(500).json({ error: 'Failed to update profile' });

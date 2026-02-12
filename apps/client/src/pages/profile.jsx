@@ -1,4 +1,5 @@
 import { ArrowLeft, MoreHorizontal, Calendar, Link as LinkIcon, MapPin, Mail, Loader2, MessageCircle } from "lucide-react"
+import { toast } from "sonner"
 import { useNavigate, useParams } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -10,8 +11,12 @@ import { useAuth } from "@/context/AuthContext"
 import { userService, postService } from "@/services/api"
 import { EditProfileModal } from "@/components/profile/edit-profile-modal"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { SetupProgress } from "@/components/profile/setup-progress"
+
+import { useTranslation } from "react-i18next"
 
 export default function Profile() {
+    const { t } = useTranslation()
     const navigate = useNavigate()
     const { userId } = useParams() // Get userId from URL
     const { user: currentUser, updateUser } = useAuth()
@@ -52,11 +57,19 @@ export default function Profile() {
 
             // Then fetch user's posts
             const userPosts = await postService.getPosts({ userId: profileUserId })
-            setPosts(userPosts.posts)
+            const hydratedPosts = userPosts.posts.map(post => ({
+                ...post,
+                user: post.user || userData
+            }))
+            setPosts(hydratedPosts)
 
             // Fetch user's replies (posts where replyToId is not null)
             const userReplies = await postService.getPosts({ userId: profileUserId, repliesOnly: true })
-            setReplies(userReplies.posts)
+            const hydratedReplies = userReplies.posts.map(post => ({
+                ...post,
+                user: post.user || userData
+            }))
+            setReplies(hydratedReplies)
         } catch (err) {
             console.error("Failed to load profile:", err)
             setError("Failed to load profile data")
@@ -83,6 +96,18 @@ export default function Profile() {
             console.error('Follow/unfollow error:', err)
         } finally {
             setFollowLoading(false)
+        }
+    }
+
+    const handleDeletePost = async (postId) => {
+        try {
+            await postService.deletePost(postId)
+            setPosts(prev => prev.filter(p => p.id !== postId))
+            setReplies(prev => prev.filter(p => p.id !== postId))
+            // Update stats if needed, or rely on refetch
+        } catch (err) {
+            console.error('Failed to delete post:', err)
+            throw err // Re-throw so the dropdown knows it failed
         }
     }
 
@@ -121,7 +146,8 @@ export default function Profile() {
     const bio = userProfile?.bio || ""
     const location = userProfile?.location || ""
     const website = userProfile?.website || ""
-    const joinDate = new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+    const joinDate = userProfile?.createdAt ? new Date(userProfile.createdAt) : new Date() 
     const avatar = userProfile?.avatar || "/websplash.png"
     const banner = userProfile?.banner || null
 
@@ -134,7 +160,7 @@ export default function Profile() {
                 </div>
                 <div>
                     <h1 className="text-[20px] font-bold leading-5">{name}</h1>
-                    <span className="text-[13px] text-muted-foreground">{stats?.posts || 0} posts</span>
+                    <span className="text-[13px] text-muted-foreground">{stats?.posts || 0} {t('profile.posts_count')}</span>
                 </div>
             </div>
 
@@ -160,7 +186,7 @@ export default function Profile() {
                                 {currentUser?.id !== profile.id && (
                                     <DropdownMenuItem onClick={() => navigate('/chat', { state: { userId: profile.id, userName: name, userHandle: handle } })}>
                                         <MessageCircle className="w-4 h-4 mr-2" />
-                                        Message @{handle}
+                                        {t('profile.message_user', { handle })}
                                     </DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>
@@ -171,7 +197,7 @@ export default function Profile() {
                                     variant="outline"
                                     className="rounded-full font-bold h-[36px] border-border hover:bg-white/10"
                                 >
-                                    Edit profile
+                                    {t('profile.edit_profile')}
                                 </Button>
                             </EditProfileModal>
                         ) : (
@@ -184,9 +210,9 @@ export default function Profile() {
                                 {followLoading ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : isFollowing ? (
-                                    "Following"
+                                    t('common.following')
                                 ) : (
-                                    "Follow"
+                                    t('nav.follow')
                                 )}
                             </Button>
                         )}
@@ -221,7 +247,7 @@ export default function Profile() {
                     )}
                     <div className="flex items-center gap-1">
                         <Calendar className="w-[18px] h-[18px]" />
-                        <span>Joined {joinDate}</span>
+                        <span>{t('profile.joined')} {joinDate.toLocaleDateString()}</span>
                     </div>
                 </div>
 
@@ -232,14 +258,14 @@ export default function Profile() {
                         onClick={() => navigate('/follow')}
                     >
                         <span className="font-bold text-foreground">{followingCount}</span>
-                        <span className="text-muted-foreground"> Following</span>
+                        <span className="text-muted-foreground"> {t('profile.following_count')}</span>
                     </div>
                     <div
                         className="hover:underline cursor-pointer"
                         onClick={() => navigate('/follow')}
                     >
                         <span className="font-bold text-foreground">{followerCount}</span>
-                        <span className="text-muted-foreground"> Followers</span>
+                        <span className="text-muted-foreground"> {t('profile.followers_count')}</span>
                     </div>
                 </div>
             </div>
@@ -248,29 +274,38 @@ export default function Profile() {
             {/* Tabs */}
             <Tabs defaultValue="posts" className="w-full">
                 <TabsList className="w-full h-[53px] bg-transparent border-b border-border/50 p-0 overflow-x-auto justify-between no-scrollbar">
-                    {["Posts", "Replies", "Media", "Likes"].map(tab => (
+                    {["posts", "replies", "highlights", "articles", "media", "likes"].map(tab => (
                         <TabsTrigger
                             key={tab}
                             value={tab.toLowerCase()}
                             className="flex-1 rounded-none border-b-[4px] border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent h-full text-[15px] hover:bg-muted/50 transition font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-bold"
                         >
-                            {tab}
+                            {t(`profile.tabs.${tab}`)}
                         </TabsTrigger>
                     ))}
                 </TabsList>
 
                 <TabsContent value="posts" className="mt-0">
+                    {currentUser?.id === profile.id && <SetupProgress />}
                     <div className="divide-y divide-border/50">
-                        {posts.map(post => <PostCard key={post.id} post={post} />)}
-                        {posts.length === 0 && <div className="p-8 text-center text-muted-foreground">No posts yet</div>}
+                        {posts.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
+                        {posts.length === 0 && <div className="p-8 text-center text-muted-foreground">{t('feed.no_posts_yet')}</div>}
                     </div>
                 </TabsContent>
 
                 <TabsContent value="replies" className="mt-0">
                     <div className="divide-y divide-border/50">
-                        {replies.map(post => <PostCard key={post.id} post={post} />)}
-                        {replies.length === 0 && <div className="p-8 text-center text-muted-foreground">No replies yet</div>}
+                        {replies.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
+                        {replies.length === 0 && <div className="p-8 text-center text-muted-foreground">{t('profile.no_replies')}</div>}
                     </div>
+                </TabsContent>
+
+                <TabsContent value="highlights" className="mt-0">
+                    <div className="p-8 text-center text-muted-foreground">No highlights yet</div>
+                </TabsContent>
+
+                <TabsContent value="articles" className="mt-0">
+                    <div className="p-8 text-center text-muted-foreground">No articles yet</div>
                 </TabsContent>
 
                 <TabsContent value="media" className="mt-0">

@@ -2,7 +2,7 @@ import { KafkaConsumer } from '../../lib/kafka.js'
 import { NotificationService } from '../../services/notification.service.js'
 
 export async function startNotificationConsumers() {
-    const consumer = new KafkaConsumer('notification-service-group', ['POST_LIKED', 'FOLLOW_CREATED'])
+    const consumer = new KafkaConsumer('notification-service-group', ['POST_LIKED', 'FOLLOW_CREATED', 'MESSAGE_SENT'])
 
     consumer.on('POST_LIKED', async (data) => {
         // data: { postId, userId (owner), actorId (liker) }
@@ -22,6 +22,16 @@ export async function startNotificationConsumers() {
             userId: data.followingId,
             type: 'follow',
             actorId: data.followerId
+        })
+    })
+
+    consumer.on('MESSAGE_SENT', async (data) => {
+        // data: { messageId, senderId, recipientId, conversationId, content, type }
+        await NotificationService.createNotification({
+            userId: data.recipientId,
+            type: 'message', // new notification type
+            actorId: data.senderId,
+            postId: null // not a post
         })
     })
 

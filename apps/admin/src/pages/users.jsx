@@ -16,6 +16,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -26,7 +27,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { MoreHorizontal, Shield, Ban, CheckCircle, Search, Eye } from 'lucide-react';
+import { MoreHorizontal, Shield, Ban, CheckCircle, Search, Eye, Trash2, UserCog } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function UsersPage() {
@@ -36,37 +37,45 @@ export default function UsersPage() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
+    const fetchUsers = async () => {
+        setLoading(true);
+        try {
+            const data = await userService.getUsers(1, 10, search);
+            // Handle both array response (if no pagination wrapper) or object response
+            const usersList = Array.isArray(data) ? data : data.users || [];
+            setUsers(usersList);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchUsers = async () => {
-            setLoading(true);
-            try {
-                const data = await userService.getUsers(1, 10, search);
-                setUsers(data.users);
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setLoading(false);
-            }
-        };
         // Debounce would be better here in real app
         const timer = setTimeout(fetchUsers, 300);
         return () => clearTimeout(timer);
     }, [search]);
 
-    const handleAction = async (userId, action) => {
-        // Optimistic update
-        setUsers(users.map(u => {
-            if (u.id === userId) {
-                let newStatus = u.status;
-                if (action === 'ban') newStatus = 'banned';
-                if (action === 'suspend') newStatus = 'suspended';
-                if (action === 'verify') newStatus = 'verified';
-                if (action === 'activate') newStatus = 'active';
-                return { ...u, status: newStatus };
+    const handleAction = async (userId, action, value) => {
+        try {
+            if (action === 'status') {
+               await userService.updateUserStatus(userId, value);
+            } else if (action === 'role') {
+               await userService.updateUserRole(userId, value);
+            } else if (action === 'delete') {
+               if (!confirm('Are you sure you want to delete this user?')) return;
+               await userService.deleteUser(userId);
+            } else if (action === 'verify') {
+                await userService.updateUserVerification(userId, value);
             }
-            return u;
-        }));
-        await userService.updateUserStatus(userId, action);
+            
+            // Refresh list
+            fetchUsers();
+        } catch (error) {
+            console.error('Action failed:', error);
+            alert('Failed to update user');
+        }
     };
 
     const openProfile = (user) => {
@@ -76,10 +85,19 @@ export default function UsersPage() {
 
     const getStatusBadge = (status) => {
         switch (status) {
-            case 'verified': return <Badge className="bg-blue-500 hover:bg-blue-600">Verified</Badge>;
-            case 'banned': return <Badge variant="destructive">Banned</Badge>;
-            case 'suspended': return <Badge variant="warning" className="bg-yellow-500 hover:bg-yellow-600 text-white">Suspended</Badge>;
-            default: return <Badge variant="secondary">Active</Badge>;
+            case 'ACTIVE': return <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>;
+            case 'SUSPENDED': return <Badge variant="warning" className="bg-yellow-500 hover:bg-yellow-600 text-white">Suspended</Badge>;
+            case 'DELETED': return <Badge variant="destructive">Deleted</Badge>;
+            default: return <Badge variant="secondary">{status}</Badge>;
+        }
+    };
+
+    const getRoleBadge = (role) => {
+        switch (role) {
+            case 'SUPER_ADMIN': return <Badge className="bg-purple-600">Super Admin</Badge>;
+            case 'ADMIN': return <Badge className="bg-blue-600">Admin</Badge>;
+            case 'MODERATOR': return <Badge className="bg-indigo-500">Moderator</Badge>;
+            default: return <Badge variant="outline">User</Badge>;
         }
     };
 
@@ -106,20 +124,22 @@ export default function UsersPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>User</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Role</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Verified</TableHead>
                             <TableHead>Joined</TableHead>
-                            <TableHead className="text-right">Posts</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">Loading...</TableCell>
+                                <TableCell colSpan={7} className="h-24 text-center">Loading...</TableCell>
                             </TableRow>
                         ) : users.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">No users found.</TableCell>
+                                <TableCell colSpan={7} className="h-24 text-center">No users found.</TableCell>
                             </TableRow>
                         ) : (
                             users.map((user) => (
@@ -127,17 +147,26 @@ export default function UsersPage() {
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-2">
                                             <Avatar className="h-8 w-8">
-                                                <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                                                <AvatarImage src={user.profile?.avatar} />
+                                                <AvatarFallback>{user.profile?.name?.charAt(0) || user.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex flex-col">
-                                                <span>{user.name}</span>
-                                                <span className="text-xs text-muted-foreground">{user.handle}</span>
+                                                <span>{user.profile?.name || 'Unknown'}</span>
+                                                <span className="text-xs text-muted-foreground">{user.profile?.handle || user.email}</span>
                                             </div>
                                         </div>
                                     </TableCell>
+                                    <TableCell>{user.email}</TableCell>
+                                    <TableCell>{getRoleBadge(user.role)}</TableCell>
                                     <TableCell>{getStatusBadge(user.status)}</TableCell>
-                                    <TableCell>{user.joined}</TableCell>
-                                    <TableCell className="text-right">{user.posts}</TableCell>
+                                    <TableCell>
+                                        {user.isVerified ? (
+                                            <CheckCircle className="h-4 w-4 text-green-500" />
+                                        ) : (
+                                            <span className="text-muted-foreground text-xs">No</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
@@ -151,14 +180,51 @@ export default function UsersPage() {
                                                 <DropdownMenuItem onClick={() => openProfile(user)}>
                                                     <Eye className="mr-2 h-4 w-4" /> View Profile
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleAction(user.id, 'verify')}>
-                                                    <CheckCircle className="mr-2 h-4 w-4 text-blue-500" /> Verify User
+                                                <DropdownMenuSeparator />
+                                                
+                                                <DropdownMenuLabel>Verification</DropdownMenuLabel>
+                                                {user.isVerified ? (
+                                                    <DropdownMenuItem onClick={() => handleAction(user.id, 'verify', false)}>
+                                                        <Shield className="mr-2 h-4 w-4 text-red-500" /> Remove Verification
+                                                    </DropdownMenuItem>
+                                                ) : (
+                                                    <DropdownMenuItem onClick={() => handleAction(user.id, 'verify', true)}>
+                                                        <CheckCircle className="mr-2 h-4 w-4 text-blue-500" /> Verify User
+                                                    </DropdownMenuItem>
+                                                )}
+
+                                                <DropdownMenuSeparator />
+                                                
+                                                <DropdownMenuLabel>Status</DropdownMenuLabel>
+                                                {user.status !== 'ACTIVE' && (
+                                                    <DropdownMenuItem onClick={() => handleAction(user.id, 'status', 'ACTIVE')}>
+                                                        <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Activate
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {user.status !== 'SUSPENDED' && (
+                                                    <DropdownMenuItem onClick={() => handleAction(user.id, 'status', 'SUSPENDED')}>
+                                                        <Ban className="mr-2 h-4 w-4 text-yellow-500" /> Suspend
+                                                    </DropdownMenuItem>
+                                                )}
+                                                
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuLabel>Role</DropdownMenuLabel>
+                                                <DropdownMenuItem onClick={() => handleAction(user.id, 'role', 'USER')}>
+                                                    Make User
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleAction(user.id, 'suspend')}>
-                                                    <Shield className="mr-2 h-4 w-4 text-yellow-500" /> Suspend
+                                                <DropdownMenuItem onClick={() => handleAction(user.id, 'role', 'MODERATOR')}>
+                                                    Make Moderator
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleAction(user.id, 'ban')} className="text-red-500 focus:text-red-500">
-                                                    <Ban className="mr-2 h-4 w-4" /> Ban User
+                                                <DropdownMenuItem onClick={() => handleAction(user.id, 'role', 'ADMIN')}>
+                                                    Make Admin
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem 
+                                                    onClick={() => handleAction(user.id, 'delete')} 
+                                                    className="text-red-500 focus:text-red-500"
+                                                >
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete User
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
@@ -182,11 +248,15 @@ export default function UsersPage() {
                         <div className="grid gap-4 py-4">
                             <div className="flex flex-col items-center gap-2 mb-4">
                                 <Avatar className="h-20 w-20">
-                                    <AvatarFallback className="text-2xl">{selectedUser.name.charAt(0)}</AvatarFallback>
+                                    <AvatarImage src={selectedUser.profile?.avatar} />
+                                    <AvatarFallback className="text-2xl">{selectedUser.profile?.name?.charAt(0) || selectedUser.email.charAt(0)}</AvatarFallback>
                                 </Avatar>
-                                <h3 className="text-xl font-bold">{selectedUser.name}</h3>
-                                <p className="text-sm text-muted-foreground">{selectedUser.handle}</p>
-                                {getStatusBadge(selectedUser.status)}
+                                <h3 className="text-xl font-bold">{selectedUser.profile?.name || 'Unknown'}</h3>
+                                <p className="text-sm text-muted-foreground">@{selectedUser.profile?.handle || selectedUser.email}</p>
+                                <div className="flex gap-2 mt-2">
+                                    {getRoleBadge(selectedUser.role)}
+                                    {getStatusBadge(selectedUser.status)}
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
@@ -195,15 +265,15 @@ export default function UsersPage() {
                                 </div>
                                 <div>
                                     <span className="font-semibold">Joined:</span>
-                                    <p className="text-muted-foreground">{selectedUser.joined}</p>
+                                    <p className="text-muted-foreground">{new Date(selectedUser.createdAt).toLocaleDateString()}</p>
                                 </div>
                                 <div>
-                                    <span className="font-semibold">Total Posts:</span>
-                                    <p className="text-muted-foreground">{selectedUser.posts}</p>
+                                    <span className="font-semibold">Verified:</span>
+                                    <p className="text-muted-foreground">{selectedUser.isVerified ? 'Yes' : 'No'}</p>
                                 </div>
                                 <div>
                                     <span className="font-semibold">User ID:</span>
-                                    <p className="text-muted-foreground">{selectedUser.id}</p>
+                                    <p className="text-muted-foreground truncate" title={selectedUser.id}>{selectedUser.id}</p>
                                 </div>
                             </div>
                         </div>

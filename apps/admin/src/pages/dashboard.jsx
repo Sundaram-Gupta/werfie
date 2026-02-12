@@ -3,21 +3,70 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/shared/StatCard';
 import { GettingStartedCard } from '@/components/shared/GettingStartedCard';
-import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, ArrowRight, DollarSign, Mail, MessageSquare } from 'lucide-react';
+import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, ArrowRight, DollarSign, Mail, MessageSquare, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import api from '@/lib/axios';
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    Legend
+} from 'recharts';
+
+// Mock Data for Charts
+const userGrowthData = [
+    { name: 'Jan', users: 4000, active: 2400 },
+    { name: 'Feb', users: 3000, active: 1398 },
+    { name: 'Mar', users: 2000, active: 9800 },
+    { name: 'Apr', users: 2780, active: 3908 },
+    { name: 'May', users: 1890, active: 4800 },
+    { name: 'Jun', users: 2390, active: 3800 },
+    { name: 'Jul', users: 3490, active: 4300 },
+];
+
+const revenueData = [
+    { name: 'Mon', revenue: 4000 },
+    { name: 'Tue', revenue: 3000 },
+    { name: 'Wed', revenue: 2000 },
+    { name: 'Thu', revenue: 2780 },
+    { name: 'Fri', revenue: 1890 },
+    { name: 'Sat', revenue: 2390 },
+    { name: 'Sun', revenue: 3490 },
+];
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState(null);
+    const [activities, setActivities] = useState([]);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                // Mock loading delay
-                await new Promise(resolve => setTimeout(resolve, 800));
-                setLoading(false);
+                setLoading(true);
+                const [statsRes, activityRes] = await Promise.all([
+                    api.get('/admin/dashboard/stats'),
+                    api.get('/admin/dashboard/recent-activity')
+                ]);
+
+                if (statsRes.data.success) {
+                    setStats(statsRes.data.data.stats);
+                }
+                if (activityRes.data.success) {
+                    setActivities(activityRes.data.data);
+                }
+                setError(null);
             } catch (error) {
                 console.error("Failed to load dashboard data", error);
+                setError("Failed to connect to the server. Please try again later.");
+            } finally {
                 setLoading(false);
             }
         };
@@ -27,7 +76,17 @@ export default function Dashboard() {
     if (loading) {
         return (
             <div className="flex h-[50vh] items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
+                <AlertTriangle className="h-12 w-12 text-red-500" />
+                <p className="text-lg font-medium text-foreground">{error}</p>
+                <Button onClick={() => window.location.reload()}>Retry</Button>
             </div>
         );
     }
@@ -35,139 +94,190 @@ export default function Dashboard() {
     return (
         <div className="space-y-6 pt-0 pb-8">
 
-            {/* Dark Premium Banner (Reference Match) */}
-            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#1a1a2e] to-[#0a0a0b] border border-white/5 p-8 md:p-10 shadow-2xl group">
-                {/* Subtle radial glow */}
-                <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 blur-[130px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />
 
-                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-5">
-                        <div className="relative">
-                            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-white/10 to-transparent border border-white/10 flex items-center justify-center backdrop-blur-sm">
-                                {/* User Avatar */}
-                                <div className="h-14 w-14 rounded-full bg-black flex items-center justify-center overflow-hidden relative border border-white/10">
-                                    <img src="https://github.com/shadcn.png" alt="Admin" className="h-full w-full object-cover" />
-                                </div>
-                            </div>
-                            <div className="absolute bottom-0 right-0 h-4 w-4 bg-green-500 border-[3px] border-[#0a0a0b] rounded-full"></div>
-                        </div>
 
-                        <div>
-                            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Welcome back, Admin!</h1>
-                            <div className="flex items-center gap-3">
-                                <span className="text-gray-400 text-sm">Werfie Admin Console</span>
-                                <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded text-[10px] font-bold border border-yellow-500/20 uppercase tracking-wider flex items-center gap-1">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse"></span> Super Admin
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-4 mt-3 text-xs font-medium text-gray-500">
-                                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5">
-                                    <Users className="h-3 w-3 text-blue-400" />
-                                    <span className="text-gray-300">12.5M</span> users
-                                </span>
-                                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5">
-                                    <Activity className="h-3 w-3 text-purple-400" />
-                                    <span className="text-gray-300">98.2%</span> uptime
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <Button asChild className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-6 py-5 shadow-lg shadow-blue-600/20 font-medium transition-all hover:scale-105 active:scale-95">
-                            <Link to="/reports">
-                                View Reports
-                            </Link>
-                        </Button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Stat Cards (Social Media Context) */}
+            {/* Stat Cards */}
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard
                     title="Total Users"
-                    value="12.5M"
+                    value={stats?.totalUsers?.value || "0"}
                     icon={Users}
-                    trend="up"
-                    trendValue="+120K"
-                    className="bg-[#151516]"
+                    color="blue"
+                    trend={stats?.totalUsers?.trend}
+                    trendValue={stats?.totalUsers?.trendValue}
                 />
                 <StatCard
                     title="Daily Active Users"
-                    value="8.2M"
+                    value={stats?.dau?.value || "0"}
                     icon={Activity}
-                    trend="up"
-                    trendValue="+5.4%"
-                    className="bg-[#151516]"
+                    color="purple"
+                    trend={stats?.dau?.trend}
+                    trendValue={stats?.dau?.trendValue}
                 />
                 <StatCard
                     title="Verification Requests"
-                    value="842"
+                    value={stats?.verifications?.value || "0"}
                     icon={Shield}
-                    trend="up"
-                    trendValue="+12"
-                    className="bg-[#151516]"
+                    color="green"
+                    trend={stats?.verifications?.trend}
+                    trendValue={stats?.verifications?.trendValue}
                 />
                 <StatCard
-                    title="New Reports"
-                    value="156"
+                    title="Reports"
+                    value={stats?.reports?.value || "0"}
                     icon={AlertTriangle}
-                    trend="down"
-                    trendValue="-3%"
-                    className="bg-[#151516]"
+                    color="red"
+                    trend={stats?.reports?.trend}
+                    trendValue={stats?.reports?.trendValue}
                 />
             </div>
 
-            {/* Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-2">
-                {/* Getting Started Checklist */}
-                <GettingStartedCard />
+            {/* Charts Section */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+                {/* User Growth Chart */}
+                <Card className="col-span-4 bg-card border-border shadow-sm">
+                    <CardHeader>
+                        <CardTitle>User Growth</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pl-2">
+                        <ResponsiveContainer width="100%" height={350}>
+                            <AreaChart data={userGrowthData}>
+                                <defs>
+                                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                                />
+                                <Area type="monotone" dataKey="users" stroke="#8884d8" fillOpacity={1} fill="url(#colorUsers)" />
+                                <Area type="monotone" dataKey="active" stroke="#82ca9d" fillOpacity={1} fill="url(#colorActive)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
 
-                {/* Recent Activity Feed */}
-                <Card className="bg-[#151516] border-white/5 shadow-none h-full">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-                            <Activity className="h-5 w-5 text-blue-500" />
+                {/* Revenue & Action Items */}
+                <div className="col-span-3 space-y-6">
+                    {/* Revenue Card */}
+                    <Card className="bg-card border-border shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                                <span>Weekly Revenue</span>
+                                <DollarSign className="h-4 w-4 text-green-500" />
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">$45,231.89</div>
+                            <p className="text-xs text-muted-foreground">+20.1% from last month</p>
+                            <div className="mt-4 h-[200px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={revenueData}>
+                                        <Bar dataKey="revenue" fill="#adfa1d" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Action Items */}
+                    <Card className="bg-card border-border shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Zap className="h-5 w-5 text-yellow-500" />
+                                Action Items
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {[
+                                    { title: "Review 5 flagged posts", urgent: true },
+                                    { title: "Approve 3 new creator verifications", urgent: false },
+                                    { title: "Resolve 2 payment disputes", urgent: true },
+                                ].map((item, i) => (
+                                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                        <span className="text-sm font-medium">{item.title}</span>
+                                        {item.urgent && (
+                                            <span className="text-[10px] font-bold bg-red-500/10 text-red-500 px-2 py-1 rounded-full">
+                                                URGENT
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                                <Button variant="outline" className="w-full text-xs">View All Tasks</Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+
+            {/* Content Grid */}
+            <div className="grid gap-6 lg:grid-cols-3">
+                {/* Getting Started Checklist - Takes up 1 column */}
+                <div className="lg:col-span-1 h-full">
+                    <GettingStartedCard className="h-full" />
+                </div>
+
+                {/* Recent Activity Feed - Takes up 2 columns */}
+                <Card className="lg:col-span-2 bg-card border-border shadow-sm h-full">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/50">
+                        <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-indigo-500" />
                             Recent Activity
                         </CardTitle>
-                        <Button variant="link" className="text-gray-400 text-xs h-auto p-0 hover:text-white">View all <ArrowRight className="ml-1 h-3 w-3" /></Button>
+                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                            View all <ArrowRight className="ml-1 h-3 w-3" />
+                        </Button>
                     </CardHeader>
-                    <CardContent>
-                        <div className="space-y-6 relative pl-2 pt-2">
+                    <CardContent className="pt-6">
+                        <div className="space-y-6 relative pl-2">
                             {/* Vertical Line */}
-                            <div className="absolute left-[19px] top-4 bottom-4 w-[2px] bg-white/5" />
+                            <div className="absolute left-[19px] top-2 bottom-6 w-[2px] bg-border/60" />
 
-                            {[
-                                { user: "Sarah Miller", action: "verified account @elonmusk", time: "16m ago", color: "blue" },
-                                { user: "Mike Chen", action: "reviewed report #12345", time: "45m ago", color: "purple" },
-                                { user: "System", action: "flagged suspicious activity", time: "2h ago", color: "yellow" },
-                                { user: "Emily Davis", action: "banned bot network", time: "3h ago", color: "red" },
-                                { user: "John Doe", action: "approved ad campaign", time: "5h ago", color: "purple" },
-                                { user: "Chris Wilson", action: "updated platform policies", time: "1d ago", color: "blue" },
-                            ].map((item, idx) => (
-                                <div key={idx} className="flex gap-4 relative z-10">
-                                    <div className={cn(
-                                        "flex-shrink-0 h-9 w-9 rounded-full border border-[#0a0a0b] ring-2 ring-[#151516] flex items-center justify-center font-bold text-xs",
-                                        item.color === 'blue' ? "bg-blue-600/20 text-blue-500" :
-                                            item.color === 'purple' ? "bg-purple-600/20 text-purple-500" :
-                                                item.color === 'yellow' ? "bg-yellow-600/20 text-yellow-500" :
-                                                    "bg-red-600/20 text-red-500"
-                                    )}>
-                                        {item.user === "System" ? <Server className="h-4 w-4" /> :
-                                            <Users className="h-4 w-4" />}
-                                    </div>
-                                    <div className="flex-1 pb-1">
-                                        <p className="text-sm text-gray-400">
-                                            <span className="font-semibold text-white">{item.user}</span> {item.action}
-                                        </p>
-                                        <p className="text-xs text-gray-600 mt-0.5 font-medium">{item.time}</p>
-                                    </div>
-                                    <div className="h-8 w-8 rounded-full bg-white/5 flex items-center justify-center">
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user}`} alt={item.user} className="h-5 w-5 rounded-full" />
-                                    </div>
+                            {activities.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-20" />
+                                    <p className="text-sm text-muted-foreground">No recent activity found</p>
                                 </div>
-                            ))}
+                            ) : (
+                                activities.map((item, idx) => (
+                                    <div key={idx} className="flex gap-4 relative z-10 group">
+                                        <div className={cn(
+                                            "flex-shrink-0 h-9 w-9 rounded-full border-2 border-background ring-1 ring-border flex items-center justify-center font-bold text-xs shadow-sm transition-transform group-hover:scale-110",
+                                            item.color === 'blue' ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" :
+                                            item.color === 'purple' ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" :
+                                            item.color === 'yellow' ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
+                                            item.color === 'green' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                                            "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                                        )}>
+                                            {item.type === "system" ? <Server className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+                                        </div>
+                                        <div className="flex-1 pb-1">
+                                            <p className="text-sm text-muted-foreground">
+                                                <span className="font-semibold text-foreground">{item.user}</span> {item.action}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5 font-medium flex items-center gap-1">
+                                                <span className="w-1 h-1 rounded-full bg-border inline-block"></span>
+                                                {item.time}
+                                            </p>
+                                        </div>
+                                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity overflow-hidden">
+                                            {item.type !== 'system' && (
+                                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user}`} alt={item.user} className="h-6 w-6 rounded-full" />
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </CardContent>
                 </Card>

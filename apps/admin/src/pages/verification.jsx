@@ -23,35 +23,35 @@ export default function VerificationPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white">Verification Requests</h1>
-                <p className="text-gray-400 mt-1">Review and manage accumulated verification requests from users.</p>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">Verification Requests</h1>
+                <p className="text-muted-foreground mt-1">Review and manage accumulated verification requests from users.</p>
             </div>
 
-            <Card className="bg-[#151516] border-white/5 shadow-sm">
+            <Card className="bg-card border-border shadow-sm">
                 <CardHeader>
                     <CardTitle>Pending Requests</CardTitle>
-                    <CardDescription className="text-gray-500">Queue of accounts requesting verification badges.</CardDescription>
+                    <CardDescription className="text-muted-foreground">Queue of accounts requesting verification badges.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
-                            <TableRow className="border-white/5 hover:bg-transparent">
-                                <TableHead className="text-gray-400">User</TableHead>
-                                <TableHead className="text-gray-400">Name</TableHead>
-                                <TableHead className="text-gray-400">Type</TableHead>
-                                <TableHead className="text-gray-400">Date</TableHead>
-                                <TableHead className="text-gray-400">Evidence</TableHead>
-                                <TableHead className="text-gray-400">Status</TableHead>
-                                <TableHead className="text-right text-gray-400">Actions</TableHead>
+                            <TableRow className="border-border hover:bg-transparent">
+                                <TableHead className="text-muted-foreground">User</TableHead>
+                                <TableHead className="text-muted-foreground">Name</TableHead>
+                                <TableHead className="text-muted-foreground">Type</TableHead>
+                                <TableHead className="text-muted-foreground">Date</TableHead>
+                                <TableHead className="text-muted-foreground">Evidence</TableHead>
+                                <TableHead className="text-muted-foreground">Status</TableHead>
+                                <TableHead className="text-right text-muted-foreground">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {requests.map((req) => (
-                                <TableRow key={req.id} className="border-white/5 hover:bg-white/5">
-                                    <TableCell className="font-medium text-white">{req.user}</TableCell>
-                                    <TableCell className="text-gray-300">{req.name}</TableCell>
-                                    <TableCell className="text-gray-400">{req.type}</TableCell>
-                                    <TableCell className="text-gray-500">{req.date}</TableCell>
+                                <TableRow key={req.id} className="border-border hover:bg-muted/50">
+                                    <TableCell className="font-medium text-foreground">{req.user}</TableCell>
+                                    <TableCell className="text-muted-foreground">{req.name}</TableCell>
+                                    <TableCell className="text-muted-foreground">{req.type}</TableCell>
+                                    <TableCell className="text-muted-foreground">{req.date}</TableCell>
                                     <TableCell>
                                         <Button variant="link" className="p-0 h-auto text-blue-400 hover:text-blue-300 flex items-center gap-1">
                                             {req.doc} <ExternalLink className="h-3 w-3" />
