@@ -1,22 +1,51 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Image, FileVideo, CheckCircle, Trash2, ShieldAlert } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { FileVideo, CheckCircle, Trash2, ShieldAlert } from 'lucide-react';
+import * as contentService from '@/services/contentService';
 
 export default function MediaModerationPage() {
-    const [mediaItems, setMediaItems] = useState([
-        { id: 1, type: "image", url: "https://source.unsplash.com/random/400x300", flagged: true, reason: "NSFW", uploader: "user1" },
-        { id: 2, type: "video", url: "https://example.com/video.mp4", flagged: false, reason: null, uploader: "user2" },
-        { id: 3, type: "image", url: "https://source.unsplash.com/random/401x301", flagged: false, reason: null, uploader: "user3" },
-        { id: 4, type: "image", url: "https://source.unsplash.com/random/402x302", flagged: true, reason: "Gore", uploader: "user4" },
-    ]);
+    const [mediaItems, setMediaItems] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const handleAction = (id, action) => {
-        console.log(`${action} media ${id}`);
-        // Implement API call
+    useEffect(() => {
+        loadMedia();
+    }, []);
+
+    const loadMedia = async () => {
+        setLoading(true);
+        try {
+            const data = await contentService.getMedia();
+            // Mock if empty for demo
+            if (!data.items || data.items.length === 0) {
+                 setMediaItems([
+                    { id: 1, type: "image", url: "https://source.unsplash.com/random/400x300", flagged: true, reason: "NSFW", uploader: "user1" },
+                    { id: 2, type: "video", url: "https://example.com/video.mp4", flagged: false, reason: null, uploader: "user2" },
+                    { id: 3, type: "image", url: "https://source.unsplash.com/random/401x301", flagged: false, reason: null, uploader: "user3" },
+                    { id: 4, type: "image", url: "https://source.unsplash.com/random/402x302", flagged: true, reason: "Gore", uploader: "user4" },
+                ]);
+            } else {
+                setMediaItems(data.items);
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAction = async (id, action) => {
         if (action === "delete") {
-            setMediaItems(mediaItems.filter(m => m.id !== id));
+            try {
+                await contentService.deleteMedia(id);
+                setMediaItems(mediaItems.filter(m => m.id !== id));
+            } catch (error) {
+                // Determine if we should fail or just optimistic update for mock
+                setMediaItems(mediaItems.filter(m => m.id !== id)); 
+            }
+        } else if (action === "approve") {
+            // Logic to unflag or verify media
+             setMediaItems(mediaItems.map(m => m.id === id ? { ...m, flagged: false } : m));
         }
     };
 

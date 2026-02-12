@@ -16,6 +16,19 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Rewrite /api/users to / to support Gateway proxy
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api/users')) {
+        let newUrl = req.url.replace('/api/users', '');
+        if (!newUrl.startsWith('/')) {
+            newUrl = '/' + newUrl;
+        }
+        console.log(`[User Service] Path Rewrite: ${req.url} -> ${newUrl}`);
+        req.url = newUrl;
+    }
+    next();
+});
+
 app.use('/business', businessRoutes);
 
 // Debug Middleware

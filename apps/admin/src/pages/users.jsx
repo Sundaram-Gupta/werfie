@@ -66,6 +66,8 @@ export default function UsersPage() {
             } else if (action === 'delete') {
                if (!confirm('Are you sure you want to delete this user?')) return;
                await userService.deleteUser(userId);
+            } else if (action === 'verify') {
+                await userService.updateUserVerification(userId, value);
             }
             
             // Refresh list
@@ -178,6 +180,19 @@ export default function UsersPage() {
                                                 <DropdownMenuItem onClick={() => openProfile(user)}>
                                                     <Eye className="mr-2 h-4 w-4" /> View Profile
                                                 </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                
+                                                <DropdownMenuLabel>Verification</DropdownMenuLabel>
+                                                {user.isVerified ? (
+                                                    <DropdownMenuItem onClick={() => handleAction(user.id, 'verify', false)}>
+                                                        <Shield className="mr-2 h-4 w-4 text-red-500" /> Remove Verification
+                                                    </DropdownMenuItem>
+                                                ) : (
+                                                    <DropdownMenuItem onClick={() => handleAction(user.id, 'verify', true)}>
+                                                        <CheckCircle className="mr-2 h-4 w-4 text-blue-500" /> Verify User
+                                                    </DropdownMenuItem>
+                                                )}
+
                                                 <DropdownMenuSeparator />
                                                 
                                                 <DropdownMenuLabel>Status</DropdownMenuLabel>

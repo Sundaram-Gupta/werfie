@@ -1,4 +1,5 @@
 import { ArrowLeft, MoreHorizontal, Calendar, Link as LinkIcon, MapPin, Mail, Loader2, MessageCircle } from "lucide-react"
+import { toast } from "sonner"
 import { useNavigate, useParams } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -56,11 +57,19 @@ export default function Profile() {
 
             // Then fetch user's posts
             const userPosts = await postService.getPosts({ userId: profileUserId })
-            setPosts(userPosts.posts)
+            const hydratedPosts = userPosts.posts.map(post => ({
+                ...post,
+                user: post.user || userData
+            }))
+            setPosts(hydratedPosts)
 
             // Fetch user's replies (posts where replyToId is not null)
             const userReplies = await postService.getPosts({ userId: profileUserId, repliesOnly: true })
-            setReplies(userReplies.posts)
+            const hydratedReplies = userReplies.posts.map(post => ({
+                ...post,
+                user: post.user || userData
+            }))
+            setReplies(hydratedReplies)
         } catch (err) {
             console.error("Failed to load profile:", err)
             setError("Failed to load profile data")
@@ -87,6 +96,18 @@ export default function Profile() {
             console.error('Follow/unfollow error:', err)
         } finally {
             setFollowLoading(false)
+        }
+    }
+
+    const handleDeletePost = async (postId) => {
+        try {
+            await postService.deletePost(postId)
+            setPosts(prev => prev.filter(p => p.id !== postId))
+            setReplies(prev => prev.filter(p => p.id !== postId))
+            // Update stats if needed, or rely on refetch
+        } catch (err) {
+            console.error('Failed to delete post:', err)
+            throw err // Re-throw so the dropdown knows it failed
         }
     }
 
@@ -267,14 +288,14 @@ export default function Profile() {
                 <TabsContent value="posts" className="mt-0">
                     {currentUser?.id === profile.id && <SetupProgress />}
                     <div className="divide-y divide-border/50">
-                        {posts.map(post => <PostCard key={post.id} post={post} />)}
+                        {posts.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
                         {posts.length === 0 && <div className="p-8 text-center text-muted-foreground">{t('feed.no_posts_yet')}</div>}
                     </div>
                 </TabsContent>
 
                 <TabsContent value="replies" className="mt-0">
                     <div className="divide-y divide-border/50">
-                        {replies.map(post => <PostCard key={post.id} post={post} />)}
+                        {replies.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
                         {replies.length === 0 && <div className="p-8 text-center text-muted-foreground">{t('profile.no_replies')}</div>}
                     </div>
                 </TabsContent>

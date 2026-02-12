@@ -4,7 +4,7 @@ module.exports = {
             name: 'auth-service',
             cwd: './apps/backend/auth-service-js',
             script: 'node',
-            args: 'node_modules/next/dist/bin/next start -p 3001',
+            args: 'server.js',
             instances: 1,
             exec_mode: 'fork',
             autorestart: true,
@@ -14,7 +14,7 @@ module.exports = {
             out_file: './logs/auth-service-out.log',
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
-                NODE_ENV: 'development',
+                NODE_ENV: 'production',
                 PORT: 3001,
                 DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
                 JWT_SECRET: "dev-secret",
@@ -186,7 +186,7 @@ module.exports = {
             name: 'messaging-service',
             cwd: './apps/services/messaging',
             script: 'node',
-            args: 'node_modules/next/dist/bin/next start -p 3007',
+            args: 'server.js',
             instances: 1,
             exec_mode: 'fork',
             autorestart: true,
@@ -197,38 +197,18 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
                 NODE_ENV: 'development',
-                PORT: 3007,
+                PORT: 3019,
                 DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
                 KAFKA_BROKER: "localhost:9092"
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3007,
+                PORT: 3019,
                 DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
                 KAFKA_BROKER: "localhost:9092"
             }
         },
-        {
-            name: 'media-service',
-            cwd: './apps/services/media',
-            script: 'src/index.js', // Assuming media is Express based on success
-            instances: 1,
-            exec_mode: 'fork',
-            autorestart: true,
-            watch: false,
-            max_memory_restart: '500M',
-            error_file: './logs/media-service-error.log',
-            out_file: './logs/media-service-out.log',
-            log_date_format: 'YYYY-MM-DD HH:mm:ss',
-            env: {
-                NODE_ENV: 'development',
-                PORT: 3008
-            },
-            env_production: {
-                NODE_ENV: 'production',
-                PORT: 3008
-            }
-        },
+
         {
             name: 'analytics-service',
             cwd: './apps/services/analytics',

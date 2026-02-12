@@ -12,7 +12,7 @@
     "pm2:monit": "pm2 monit"
   },
   "dependencies": {
-    "axios": "^1.13.2",
+    "axios": "^1.13.5",
     "pg": "^8.17.2"
   },
   "devDependencies": {

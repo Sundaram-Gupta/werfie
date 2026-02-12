@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom"
-import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain } from "lucide-react"
+import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuthModal } from "../auth/auth-modal-context"
 import { UserProfileMenu } from "./user-profile-menu"
@@ -90,6 +90,12 @@ export function Sidebar() {
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Megaphone className="w-[18px] h-[18px]" />
                                             {t('more_menu.ads')}
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link to="/monetization">
+                                        <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                            <Wallet className="w-[18px] h-[18px]" />
+                                            Monetization
                                         </DropdownMenuItem>
                                     </Link>
                                     <Link to="/spaces">

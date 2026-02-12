@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "node server.js",
     "dev:socket": "node socket-server.js",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "node server.js",
     "lint": "eslint"
   },
   "dependencies": {
@@ -14,8 +14,9 @@
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
-    "express": "^5.2.1",
+    "express": "^4.19.2",
     "fluent-ffmpeg": "^2.1.3",
+    "http-proxy": "^1.18.1",
     "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.3",
     "next": "16.1.1",

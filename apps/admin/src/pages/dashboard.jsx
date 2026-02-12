@@ -7,6 +7,39 @@ import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, Arr
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/axios';
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    Legend
+} from 'recharts';
+
+// Mock Data for Charts
+const userGrowthData = [
+    { name: 'Jan', users: 4000, active: 2400 },
+    { name: 'Feb', users: 3000, active: 1398 },
+    { name: 'Mar', users: 2000, active: 9800 },
+    { name: 'Apr', users: 2780, active: 3908 },
+    { name: 'May', users: 1890, active: 4800 },
+    { name: 'Jun', users: 2390, active: 3800 },
+    { name: 'Jul', users: 3490, active: 4300 },
+];
+
+const revenueData = [
+    { name: 'Mon', revenue: 4000 },
+    { name: 'Tue', revenue: 3000 },
+    { name: 'Wed', revenue: 2000 },
+    { name: 'Thu', revenue: 2780 },
+    { name: 'Fri', revenue: 1890 },
+    { name: 'Sat', revenue: 2390 },
+    { name: 'Sun', revenue: 3490 },
+];
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
@@ -97,6 +130,94 @@ export default function Dashboard() {
                     trend={stats?.reports?.trend}
                     trendValue={stats?.reports?.trendValue}
                 />
+            </div>
+
+            {/* Charts Section */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+                {/* User Growth Chart */}
+                <Card className="col-span-4 bg-card border-border shadow-sm">
+                    <CardHeader>
+                        <CardTitle>User Growth</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pl-2">
+                        <ResponsiveContainer width="100%" height={350}>
+                            <AreaChart data={userGrowthData}>
+                                <defs>
+                                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                                />
+                                <Area type="monotone" dataKey="users" stroke="#8884d8" fillOpacity={1} fill="url(#colorUsers)" />
+                                <Area type="monotone" dataKey="active" stroke="#82ca9d" fillOpacity={1} fill="url(#colorActive)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+
+                {/* Revenue & Action Items */}
+                <div className="col-span-3 space-y-6">
+                    {/* Revenue Card */}
+                    <Card className="bg-card border-border shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                                <span>Weekly Revenue</span>
+                                <DollarSign className="h-4 w-4 text-green-500" />
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">$45,231.89</div>
+                            <p className="text-xs text-muted-foreground">+20.1% from last month</p>
+                            <div className="mt-4 h-[200px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={revenueData}>
+                                        <Bar dataKey="revenue" fill="#adfa1d" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Action Items */}
+                    <Card className="bg-card border-border shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Zap className="h-5 w-5 text-yellow-500" />
+                                Action Items
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {[
+                                    { title: "Review 5 flagged posts", urgent: true },
+                                    { title: "Approve 3 new creator verifications", urgent: false },
+                                    { title: "Resolve 2 payment disputes", urgent: true },
+                                ].map((item, i) => (
+                                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                        <span className="text-sm font-medium">{item.title}</span>
+                                        {item.urgent && (
+                                            <span className="text-[10px] font-bold bg-red-500/10 text-red-500 px-2 py-1 rounded-full">
+                                                URGENT
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                                <Button variant="outline" className="w-full text-xs">View All Tasks</Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
 
             {/* Content Grid */}

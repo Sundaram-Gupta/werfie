@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next" // Added useTranslation import
 
 export function Feed({ tab = 'for-you' }) {
     const { t } = useTranslation() // Added useTranslation hook
-    const { posts, loading, likePost, unlikePost, retweetPost, unretweetPost } = usePosts({ tab })
+    const { posts, loading, likePost, unlikePost, retweetPost, unretweetPost, deletePost } = usePosts({ tab })
 
 
     if (loading) {
@@ -52,6 +52,7 @@ export function Feed({ tab = 'for-you' }) {
                     onUnlike={unlikePost}
                     onRetweet={retweetPost}
                     onUnretweet={unretweetPost}
+                    onDelete={deletePost}
                 />
             ))}
         </div>

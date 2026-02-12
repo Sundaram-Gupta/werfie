@@ -42,3 +42,13 @@ export const deleteUser = async (userId) => {
         throw error;
     }
 };
+
+export const updateUserVerification = async (userId, isVerified) => {
+    try {
+        const response = await api.patch(`/admin/users/${userId}/verification`, { isVerified });
+        return response.data;
+    } catch (error) {
+        console.error('Error updating user verification:', error);
+        throw error;
+    }
+};

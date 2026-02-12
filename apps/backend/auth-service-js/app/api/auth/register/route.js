@@ -17,14 +17,22 @@ export async function POST(request) {
         const body = await request.json()
         const { email, password, name, handle, preferredLanguage } = registerSchema.parse(body)
 
-        // Check if user already exists
-        const existingUser = await prisma.user.findUnique({
-            where: { email }
-        })
+        // Check if email or handle already exists
+        const [existingEmail, existingHandle] = await Promise.all([
+            prisma.user.findUnique({ where: { email } }),
+            prisma.profile.findUnique({ where: { handle } })
+        ])
 
-        if (existingUser) {
+        if (existingEmail) {
             return NextResponse.json(
-                { error: 'User already exists' },
+                { error: 'Email already exists' },
+                { status: 400 }
+            )
+        }
+
+        if (existingHandle) {
+            return NextResponse.json(
+                { error: 'Handle already taken' },
                 { status: 400 }
             )
         }
@@ -87,8 +95,9 @@ export async function POST(request) {
         }
 
         console.error('Registration error:', error)
+        if (error.stack) console.error(error.stack)
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: 'Internal server error', message: error.message },
             { status: 500 }
         )
     }

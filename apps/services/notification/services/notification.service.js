@@ -30,27 +30,32 @@ export class NotificationService {
                     en: {
                         like: "New Like",
                         follow: "New Follower",
-                        reply: "New Reply"
+                        reply: "New Reply",
+                        message: "New Message"
                     },
                     hi: {
                         like: "नई लाइक",
                         follow: "नया फॉलोअर",
-                        reply: "नया जवाब"
+                        reply: "नया जवाब",
+                        message: "नया संदेश"
                     },
                     es: {
                         like: "Nuevo Me gusta",
                         follow: "Nuevo Seguidor",
-                        reply: "Nueva Respuesta"
+                        reply: "Nueva Respuesta",
+                        message: "Nuevo Mensaje"
                     },
                     fr: {
                         like: "Nouveau J'aime",
                         follow: "Nouvel Abonné",
-                        reply: "Nouvelle Réponse"
+                        reply: "Nouvelle Réponse",
+                        message: "Nouveau Message"
                     },
                     de: {
                         like: "Neues 'Gefällt mir'",
                         follow: "Neuer Follower",
-                        reply: "Neue Antwort"
+                        reply: "Neue Antwort",
+                        message: "Neue Nachricht"
                     }
                 };
 
@@ -69,11 +74,33 @@ export class NotificationService {
     }
 
     static async getNotifications(userId, limit = 20) {
-        return prisma.notification.findMany({
+        const notifications = await prisma.notification.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
             take: limit
         })
+
+        // Manual enrichment as fallback for relationship issues
+        const enriched = await Promise.all(notifications.map(async (n) => {
+            try {
+                if (!n.actorId) return n;
+                const actor = await prisma.user.findUnique({
+                    where: { id: n.actorId }
+                });
+                if (actor) {
+                    const profile = await prisma.profile.findUnique({
+                        where: { userId: n.actorId }
+                    });
+                    actor.profile = profile;
+                }
+                return { ...n, actor };
+            } catch (err) {
+                console.error(`Failed to enrich notification ${n.id}:`, err);
+                return n;
+            }
+        }));
+
+        return enriched;
     }
 
     static async markAsRead(id) {

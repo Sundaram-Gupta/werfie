@@ -1,8 +1,19 @@
-import { MessageCircle, Repeat2, Heart, Share, BarChart2 } from "lucide-react"
+import { MessageCircle, Repeat2, Heart, Share, BarChart2, Link2, MessageSquareShare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ReplyModal } from "./reply-modal"
+import { ShareModal } from "./share-modal"
+import { useState } from "react"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { toast } from "sonner"
 
 export function PostActions({ stats, post, onLike, onUnlike, onRetweet, onUnretweet }) {
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+    const postUrl = `${window.location.origin}/post/${post.id}`
     // Use post data from props (updated by parent via usePosts hook)
     const likes = post._count?.likes || stats.likes || 0
     // Check if current user has liked (backend returns array with user's like if exists)
@@ -71,11 +82,45 @@ export function PostActions({ stats, post, onLike, onUnlike, onRetweet, onUnretw
                 <span className="text-[13px] leading-4">{stats.views}</span>
             </button>
 
-            <button className="flex items-center gap-3 group hover:text-blue-500 transition-colors -mr-2">
-                <div className="p-2 rounded-full group-hover:bg-blue-500/10 transition-colors">
-                    <Share className="w-[18px] h-[18px]" />
-                </div>
-            </button>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-3 group hover:text-blue-500 transition-colors -mr-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-2 rounded-full group-hover:bg-blue-500/10 transition-colors">
+                            <Share className="w-[18px] h-[18px]" />
+                        </div>
+                    </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[180px] bg-[#15202b] border-[#38444d] text-foreground">
+                    <DropdownMenuItem 
+                        className="flex items-center gap-3 py-3 cursor-pointer hover:bg-white/[0.03] focus:bg-white/[0.03]"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            const postUrl = `${window.location.origin}/post/${post.id}`;
+                            navigator.clipboard.writeText(postUrl);
+                            toast.success("Link copied to clipboard");
+                        }}
+                    >
+                        <Link2 className="w-4 h-4" />
+                        <span className="font-medium">Copy link</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                        className="flex items-center gap-3 py-3 cursor-pointer hover:bg-white/[0.03] focus:bg-white/[0.03]"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsShareModalOpen(true);
+                        }}
+                    >
+                        <MessageSquareShare className="w-4 h-4" />
+                        <span className="font-medium">Share via chat</span>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <ShareModal 
+                isOpen={isShareModalOpen} 
+                onClose={() => setIsShareModalOpen(false)} 
+                postUrl={postUrl} 
+            />
         </div>
     )
 }

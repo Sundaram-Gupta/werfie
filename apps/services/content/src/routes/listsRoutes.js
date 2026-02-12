@@ -92,4 +92,92 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /:id/members: Add a user to a list
+router.post('/:id/members', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.body;
+        const listId = req.params.id;
+
+        // Verify ownership
+        const list = await prisma.list.findUnique({
+            where: { id: listId }
+        });
+
+        if (!list || list.ownerId !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized or list not found' });
+        }
+
+        const member = await prisma.listMember.create({
+            data: {
+                listId,
+                userId
+            }
+        });
+
+        res.status(201).json(member);
+    } catch (error) {
+        console.error('Error adding member to list:', error);
+        if (error.code === 'P2002') {
+            return res.status(400).json({ error: 'User already in list' });
+        }
+        res.status(500).json({ error: 'Failed to add member' });
+    }
+});
+
+// DELETE /:id/members/:userId: Remove a user from a list
+router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
+    try {
+        const { id: listId, userId } = req.params;
+
+        // Verify ownership
+        const list = await prisma.list.findUnique({
+            where: { id: listId }
+        });
+
+        if (!list || list.ownerId !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        await prisma.listMember.delete({
+            where: {
+                listId_userId: {
+                    listId,
+                    userId
+                }
+            }
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error removing member from list:', error);
+        res.status(500).json({ error: 'Failed to remove member' });
+    }
+});
+
+// GET /membership/:userId: Check membership status
+router.get('/membership/:userId', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const yourLists = await prisma.list.findMany({
+            where: { ownerId: req.user.id },
+            include: {
+                members: {
+                    where: { userId }
+                }
+            }
+        });
+
+        const status = yourLists.map(list => ({
+            id: list.id,
+            name: list.name,
+            isMember: list.members.length > 0
+        }));
+
+        res.json(status);
+    } catch (error) {
+        console.error('Error checking membership status:', error);
+        res.status(500).json({ error: 'Failed to check membership' });
+    }
+});
+
 module.exports = router;

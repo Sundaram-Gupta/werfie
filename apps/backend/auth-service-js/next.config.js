@@ -1,6 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // CORS handled by middleware
+  // Force restart 2026-02-05
+  // CORS handled by middleware and headers
+  async headers() {
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Credentials", value: "true" },
+          { key: "Access-Control-Allow-Origin", value: "http://localhost:5173" },
+          { key: "Access-Control-Allow-Methods", value: "GET,DELETE,PATCH,POST,PUT,OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization" },
+        ]
+      }
+    ]
+  },
   async rewrites() {
     return [
       // User Service (Port 3002)
@@ -70,14 +84,10 @@ const nextConfig = {
       // Messaging Service (Port 3007)
       {
         source: '/api/messages/:path*',
-        destination: 'http://localhost:3007/api/messages/:path*',
+        destination: 'http://localhost:3019/api/messages/:path*',
       },
 
-      // Media Service (Port 3008)
-      {
-        source: '/api/media/:path*',
-        destination: 'http://localhost:3008/:path*',
-      },
+
 
       // Analytics Service (Port 3009)
       {

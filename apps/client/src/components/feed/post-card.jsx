@@ -1,17 +1,31 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BadgeCheck } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
+
 import { getMediaUrl } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
 
-export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
+export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDelete }) {
     const { t } = useTranslation()
+    const navigate = useNavigate()
+    
+    const handleUserClick = (e) => {
+        e.stopPropagation()
+        const userId = post.user?.id || post.userId
+        if (userId) {
+            navigate(`/profile/${userId}`)
+        }
+    }
+
     // Handle backend data structure
     // Backend returns: { id, userId, content, createdAt, user: { id, profile: { name, handle } } }
     // Frontend expects: { id, user: { name, handle, avatar }, content, timestamp, stats }
 
     const user = {
+        id: post.user?.id || post.userId,
+        userId: post.user?.id || post.userId,
         name: post.user?.profile?.name || post.user?.name || 'Unknown User',
         handle: post.user?.profile?.handle || post.user?.handle || 'unknown',
         avatar: post.user?.profile?.avatar || post.user?.avatar || '/websplash.png',
@@ -44,27 +58,13 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
         views: post.stats?.views || '0'
     }
 
-    // Parse media URLs
-    let mediaUrls = []
-    try {
-        if (post.mediaUrls) {
-            // Backend stores as JSON string
-            mediaUrls = typeof post.mediaUrls === 'string'
-                ? JSON.parse(post.mediaUrls)
-                : post.mediaUrls
-        } else if (post.image) {
-            // Legacy single image support
-            mediaUrls = [post.image]
-        }
-    } catch (e) {
-        console.error('Failed to parse mediaUrls:', e)
-    }
+
 
     return (
         <div className="flex gap-3 px-4 py-3 border-b border-border hover:bg-white/[0.03] transition-colors cursor-pointer">
             {/* User avatar column */}
-            <div className="flex-shrink-0">
-                <Avatar className="w-10 h-10">
+            <div className="flex-shrink-0" onClick={handleUserClick}>
+                <Avatar className="w-10 h-10 hover:opacity-90 transition-opacity">
                     <AvatarImage src={getMediaUrl(user.avatar)} />
                     <AvatarFallback>{user.name[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
@@ -74,14 +74,14 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
             <div className="flex-1 min-w-0">
                 {/* Header: user info and more options */}
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 overflow-hidden text-[15px]">
-                        <span className="font-bold truncate text-foreground">{user.name}</span>
+                    <div className="flex items-center gap-1 overflow-hidden text-[15px]" onClick={handleUserClick}>
+                        <span className="font-bold truncate text-foreground hover:underline">{user.name}</span>
                         {user.verified && <BadgeCheck className="w-[18px] h-[18px] text-blue-500 fill-blue-500/10" />}
-                        <span className="text-muted-foreground truncate">@{user.handle}</span>
+                        <span className="text-muted-foreground truncate hover:underline">@{user.handle}</span>
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground whitespace-nowrap">{timestamp}</span>
                     </div>
-                    <MoreOptionsDropdown user={user} contentId={post.id} />
+                    <MoreOptionsDropdown user={user} contentId={post.id} onDelete={onDelete} />
                 </div>
 
                 {/* Post content text */}
@@ -89,25 +89,52 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet }) {
                     {post.content}
                 </div>
 
-                {/* Post images (support multiple images) */}
-                {mediaUrls.length > 0 && (
-                    <div className={`mt-3 rounded-2xl overflow-hidden border border-border/50 ${mediaUrls.length === 1 ? '' : 'grid grid-cols-2 gap-0.5'
-                        }`}>
-                        {mediaUrls.map((url, index) => (
-                            <img
-                                key={index}
-                                src={getMediaUrl(url)}
-                                alt={`Post media ${index + 1}`}
-                                className="w-full h-auto object-cover max-h-[500px]"
-                                loading="lazy"
-                                onError={(e) => {
-                                    console.error('Image failed to load:', url)
-                                    e.target.style.display = 'none'
-                                }}
-                            />
-                        ))}
+                {/* Media Attachments */}
+                {post.media && post.media.length > 0 && (
+                    <div className={`mt-3 rounded-2xl overflow-hidden border border-border ${
+                        post.media.length === 1 ? '' : 'grid grid-cols-2 gap-0.5'
+                    }`}>
+                        {post.media.map((media, index) => {
+                            // Handle both R2 URLs (absolute) and local URLs (relative)
+                            const mediaUrl = media.mediaUrl?.startsWith('http') 
+                                ? media.mediaUrl 
+                                : `http://localhost:3003${media.mediaUrl}`;
+                            const thumbnailUrl = media.thumbnailUrl?.startsWith('http')
+                                ? media.thumbnailUrl
+                                : `http://localhost:3003${media.thumbnailUrl}`;
+
+                            return (
+                                <div key={media.id || index} className="relative bg-black">
+                                    {media.mediaType === 'image' ? (
+                                        <img
+                                            src={mediaUrl}
+                                            alt="Post media"
+                                            className="w-full h-auto object-cover"
+                                            style={{ maxHeight: post.media.length === 1 ? '500px' : '250px' }}
+                                            onError={(e) => {
+                                                console.error('Image load failed:', mediaUrl);
+                                                e.target.style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <video
+                                            src={mediaUrl}
+                                            poster={thumbnailUrl}
+                                            controls
+                                            className="w-full h-auto"
+                                            style={{ maxHeight: post.media.length === 1 ? '500px' : '250px' }}
+                                            onError={(e) => {
+                                                console.error('Video load failed:', mediaUrl);
+                                            }}
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
+
+
 
                 {/* Post interaction buttons */}
                 <PostActions

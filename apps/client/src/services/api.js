@@ -31,12 +31,19 @@ export const authService = {
             password,
         })
 
+        const user = {
+            id: data.id,
+            email: data.email,
+            profile: data.profile,
+            preferredLanguage: data.preferredLanguage
+        }
+
         // Store tokens
         localStorage.setItem('accessToken', data.accessToken)
         localStorage.setItem('refreshToken', data.refreshToken)
-        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('user', JSON.stringify(user))
 
-        return data
+        return { ...data, user }
     },
 
     // Logout
@@ -82,7 +89,14 @@ export const authService = {
     // Get stored user
     getStoredUser: () => {
         const user = localStorage.getItem('user')
-        return user ? JSON.parse(user) : null
+        if (!user || user === 'undefined') return null
+        try {
+            return JSON.parse(user)
+        } catch (e) {
+            console.error('Failed to parse user from localStorage:', e)
+            localStorage.removeItem('user') // Clear invalid data
+            return null
+        }
     },
 }
 
@@ -115,19 +129,28 @@ export const postService = {
         return data
     },
 
-    // Create post
-    createPost: async (content, mediaUrls = [], replyToId = null) => {
-        const payload = { content, mediaUrls }
-        if (replyToId) payload.replyToId = replyToId
+    // Create post (with optional media)
+    createPost: async (content, files = []) => {
+        const formData = new FormData();
+        formData.append('content', content);
 
-        const { data } = await api.post('/api/posts', payload)
-        return data
+        // Append media files
+        files.forEach((file) => {
+            formData.append('media', file);
+        });
+
+        const { data } = await api.post('/api/posts', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        return data;
     },
 
     // Delete post
     deletePost: async (postId) => {
-        const { data } = await api.delete(`/api/posts/${postId}`)
-        return data
+        const { data } = await api.delete(`/api/posts/${postId}`);
+        return data;
     },
 
     // Like post
@@ -319,7 +342,7 @@ export const spaceService = {
 // Media Services
 export const mediaService = {
     // Upload media
-    uploadMedia: async (file) => {
+    uploadMedia: async (file, onProgress) => {
         const formData = new FormData()
         formData.append('file', file)
 
@@ -327,6 +350,12 @@ export const mediaService = {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
+            onUploadProgress: (progressEvent) => {
+                if (onProgress) {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                    onProgress(percentCompleted)
+                }
+            }
         })
         return data
     },
@@ -343,6 +372,22 @@ export const messagingService = {
     // Create or get conversation
     createConversation: async (recipientId) => {
         const { data } = await messagingApi.post('/api/messages/conversations', { recipientId })
+        return data
+    },
+
+    // Get single conversation
+    getConversation: async (conversationId) => {
+        const { data } = await messagingApi.get(`/api/messages/conversations/${conversationId}`)
+        return data
+    },
+
+    // Upload Media
+    uploadMedia: async (formData) => {
+        const { data } = await messagingApi.post('/api/messages/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        })
         return data
     },
 
@@ -377,11 +422,11 @@ export const analyticsService = {
 // Ad Services
 export const adService = {
     getCampaigns: async () => {
-        const { data } = await api.get('/api/ads')
+        const { data } = await api.get('/api/ads/campaigns')
         return data
     },
     createCampaign: async (campaignData) => {
-        const { data } = await api.post('/api/ads', campaignData)
+        const { data } = await api.post('/api/ads/campaigns', campaignData)
         return data
     },
     getPerformance: async () => {
@@ -399,6 +444,44 @@ export const businessService = {
     boostPost: async (postId) => {
         const { data } = await api.post('/api/business/boost', { postId })
         return data
+    },
+    getProfile: async () => {
+        const { data } = await api.get('/api/business')
+        return data
+    },
+    updateProfile: async (profileData) => {
+        const { data } = await api.post('/api/business', profileData)
+        return data
+    },
+    getTeamMembers: async () => {
+        // Mock data as backend doesn't exist yet
+        return [
+            { id: 1, name: "Sarath Chen", email: "sarath@acme.com", role: "Owner", avatar: "SC" },
+            { id: 2, name: "Mike Ross", email: "mike@acme.com", role: "Admin", avatar: "MR" }
+        ]
+    },
+    inviteTeamMember: async (email, role) => {
+        return { success: true }
+    }
+}
+
+// Monetization Services
+export const monetizationService = {
+    getRevenueStats: async () => {
+        // Mock API call
+        return { totalRev: 4280.00, subscribers: 142 }
+    },
+    getSubscribers: async () => {
+        // Mock API call
+        return []
+    },
+    updateTier: async (tierId, data) => {
+        // Mock API call
+        return { success: true }
+    },
+    getPayouts: async () => {
+        // Mock API call
+        return []
     }
 }
 
@@ -418,6 +501,18 @@ export const listService = {
     },
     createList: async (listData) => {
         const { data } = await api.post('/api/lists', listData)
+        return data
+    },
+    addMember: async (listId, userId) => {
+        const { data } = await api.post(`/api/lists/${listId}/members`, { userId })
+        return data
+    },
+    removeMember: async (listId, userId) => {
+        const { data } = await api.delete(`/api/lists/${listId}/members/${userId}`)
+        return data
+    },
+    getMembershipStatus: async (userId) => {
+        const { data } = await api.get(`/api/lists/membership/${userId}`)
         return data
     }
 }

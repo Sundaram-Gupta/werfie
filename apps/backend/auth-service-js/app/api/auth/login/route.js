@@ -11,24 +11,41 @@ const loginSchema = z.object({
 
 export async function POST(request) {
     try {
+        console.log('[Login] Received login request');
         const body = await request.json()
+        console.log('[Login] Parsed body:', { email: body.email, hasPassword: !!body.password });
+
         const { email, password } = loginSchema.parse(body)
 
         // Find user
+        console.log(`[Login] Looking up user: ${email}`);
         const user = await prisma.user.findUnique({
             where: { email },
             include: { profile: true }
         })
 
         if (!user) {
+            console.log('[Login] User not found');
             return NextResponse.json(
                 { error: 'Invalid credentials' },
                 { status: 401 }
             )
         }
 
+        console.log('[Login] User found, verifying password');
+
+        // Safety check for password hash
+        if (!user.passwordHash) {
+            console.error('[Login] User has no password hash set!');
+            return NextResponse.json(
+                { error: 'Account setup incomplete (no password set)' },
+                { status: 400 }
+            )
+        }
+
         // Verify password
         const isValid = await bcrypt.compare(password, user.passwordHash)
+        console.log(`[Login] Password valid: ${isValid}`);
 
         if (!isValid) {
             return NextResponse.json(
@@ -38,6 +55,7 @@ export async function POST(request) {
         }
 
         // Generate tokens
+        console.log('[Login] Generating tokens');
         const accessToken = await generateAccessToken(user.id, user.email)
         const refreshToken = await generateRefreshToken(user.id, user.email)
 
@@ -53,6 +71,7 @@ export async function POST(request) {
             }
         })
 
+        console.log('[Login] Login successful');
         return NextResponse.json({
             accessToken,
             refreshToken,
@@ -64,15 +83,16 @@ export async function POST(request) {
 
     } catch (error) {
         if (error instanceof z.ZodError) {
+            console.warn('[Login] Validation error:', error.issues);
             return NextResponse.json(
                 { error: 'Validation error', details: error.issues },
                 { status: 400 }
             )
         }
 
-        console.error('Login error:', error)
+        console.error('[Login] Internal Error:', error)
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: 'Internal server error', details: error.message }, // Exposed details for debugging
             { status: 500 }
         )
     }

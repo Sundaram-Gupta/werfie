@@ -1,47 +1,77 @@
+import 'dotenv/config'; // Load environment variables first
+import express from 'express'
 import { createServer } from 'http'
 import { parse } from 'url'
 import next from 'next'
+import cors from 'cors'
 import { getSocketServer } from './lib/socket.js'
 
 const dev = process.env.NODE_ENV !== 'production'
-const app = next({ dev })
-const handle = app.getRequestHandler()
+const hostname = 'localhost'
 const port = process.env.PORT || 3019
 
-app.prepare().then(() => {
-    console.log('🚀 Messaging Service Starting...')
-    console.log('🔐 JWT Strategy: Using local env or dev-secret')
+// Prepare Next.js app
+const nextApp = next({ dev, hostname, port })
+const handle = nextApp.getRequestHandler()
 
-    // Check if secret is loaded
-    const secret = process.env.JWT_SECRET || 'dev-secret'
-    console.log(`🔐 Active Secret: ${secret.substring(0, 3)}...${secret.substring(secret.length - 3)}`)
+let isAppPrepared = false
 
-    const server = createServer((req, res) => {
-        const parsedUrl = parse(req.url, true)
+console.log('[MessagingService] Starting server in parallel with Next.js preparation...')
 
-        // Manual CORS to ensure preflights pass for Client (port 5173)
-        res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-        res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Authorization, x-user-id');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+const expressApp = express()
+const httpServer = createServer()
 
-        // Handle preflight requests
-        if (req.method === 'OPTIONS') {
-            res.statusCode = 200;
-            res.end();
-            return;
+// 1. CORS Middleware - Global
+const corsOptions = {
+    origin: 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token', 'x-user-id'],
+    credentials: true,
+    optionsSuccessStatus: 200
+}
+
+expressApp.use(cors(corsOptions))
+
+// 2. Health Check
+expressApp.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' })
+})
+
+// 3. Handle Next.js Requests
+expressApp.all('*', (req, res, nextCallback) => {
+    if (req.url.includes('/api/messages/ws')) {
+        return nextCallback()
+    }
+    if (!isAppPrepared) {
+        if (req.url.startsWith('/api/')) {
+            return res.status(503).json({ error: 'Messaging Service warming up' });
         }
+        return res.status(503).send('Next.js is still preparing. Please wait...')
+    }
+    const parsedUrl = parse(req.url, true)
+    return handle(req, res, parsedUrl)
+})
 
-        handle(req, res, parsedUrl)
+// 4. Initialize Socket.IO
+getSocketServer(httpServer)
+
+// Attach Express to httpServer
+httpServer.on('request', expressApp)
+
+// 5. Start Server
+httpServer.listen(port, '127.0.0.1', (err) => {
+    if (err) {
+        console.error('[MessagingService] Failed to listen:', err.message)
+        return
+    }
+    console.log(`> Messaging Service listening on http://127.0.0.1:${port}`)
+
+    // Prepare app in background
+    console.log('[MessagingService] Preparing Next.js in background...')
+    nextApp.prepare().then(() => {
+        isAppPrepared = true
+        console.log('[MessagingService] Next.js prepared.')
+    }).catch(err => {
+        console.error('[MessagingService] Next.js preparation FAILED:', err.message)
     })
-
-    // Initialize WebSocket Server
-    getSocketServer(server)
-
-    server.listen(port, () => {
-        console.log(`> Ready on http://localhost:${port}`)
-        console.log(`> Messaging WS ready at /api/messages/ws`)
-    })
-}).catch(err => {
-    console.error('Error starting server:', err)
 })

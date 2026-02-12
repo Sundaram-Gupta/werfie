@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { BadgeCheck, Mail, Search, Settings, Image as ImageIcon, Smile, Send, Info, X } from "lucide-react"
+import { toast } from "sonner"
 import { useState, useRef, useEffect } from "react"
 import { cn, getMediaUrl } from "@/lib/utils"
 import EmojiPicker from 'emoji-picker-react'
@@ -9,17 +10,30 @@ import { mediaService, searchService, messagingService, userService, authService
 import { socketService } from "@/services/socket"
 import { useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
+import { useAuth } from "@/context/AuthContext"
+
+const normalizeUser = (user) => {
+    if (!user) return null;
+    return {
+        id: user.id || user._id,
+        name: user.name || user.profile?.name || 'Unknown',
+        handle: user.handle || user.username || user.profile?.handle || 'unknown',
+        avatar: user.avatar || user.profile?.avatar,
+        verified: user.verified || user.profile?.verified
+    };
+};
 
 export default function Chat() {
     const { t } = useTranslation()
     const location = useLocation()
     const [activeTab, setActiveTab] = useState("all")
     const [searchQuery, setSearchQuery] = useState("")
+    const { user: authUser, loading: authLoading } = useAuth()
+    const currentUser = normalizeUser(authUser)
     const [conversations, setConversations] = useState([])
     const [selectedChat, setSelectedChat] = useState(null)
     const [messages, setMessages] = useState([])
     const [newMessage, setNewMessage] = useState("")
-    const [currentUser, setCurrentUser] = useState(null)
     const [loading, setLoading] = useState(true)
 
     // New State for Media/Emoji
@@ -27,27 +41,27 @@ export default function Chat() {
     const [isUploading, setIsUploading] = useState(false)
     const [mediaAttachment, setMediaAttachment] = useState(null) // { url, type }
     const fileInputRef = useRef(null)
+    const messagesEndRef = useRef(null)
     const [searchResults, setSearchResults] = useState([])
     const [typingUsers, setTypingUsers] = useState({}) // { conversationId: [userIds] }
 
     // Initialize Socket & Load Data
     useEffect(() => {
-        const init = async () => {
-            const user = authService.getStoredUser()
-            if (!user) return
-            setCurrentUser(user)
+        if (authLoading || !currentUser) return
 
+        const init = async () => {
             // Connect Socket
             const socket = socketService.connect()
             
             if (socket) {
                 // Listen for messages
                 socket.on('receive_message', handleReceiveMessage)
+                socket.on('new_message_notification', handleReceiveMessage)
                 socket.on('typing_start', handleTypingStart)
                 socket.on('typing_stop', handleTypingStop)
             }
 
-            await loadConversations(user.id)
+            await loadConversations(currentUser.id)
         }
 
         init()
@@ -56,12 +70,13 @@ export default function Chat() {
             const socket = socketService.getSocket()
             if (socket) {
                 socket.off('receive_message')
+                socket.off('new_message_notification')
                 socket.off('typing_start')
                 socket.off('typing_stop')
             }
             socketService.disconnect()
         }
-    }, [])
+    }, [authLoading, currentUser?.id])
 
     const loadConversations = async (currentUserId) => {
         try {
@@ -79,11 +94,14 @@ export default function Chat() {
 
             const users = await userService.getUsers(Array.from(otherUserIds))
             const userMap = {}
-            users.forEach(u => userMap[u.id] = u)
+            users.forEach(u => {
+                const normalized = normalizeUser(u)
+                userMap[normalized.id] = normalized
+            })
 
             const enriched = data.map(c => {
                 const otherParticipant = c.participants.find(p => p.userId !== currentUserId)
-                const otherUser = userMap[otherParticipant?.userId] || { name: 'Unknown', handle: 'unknown' }
+                const otherUser = userMap[otherParticipant?.userId] || { id: 'unknown', name: 'Unknown', handle: 'unknown' }
                 
                 return {
                     id: c.id,
@@ -102,37 +120,108 @@ export default function Chat() {
         }
     }
 
-    const handleReceiveMessage = (message) => {
-        // message has conversationId
+    const handleReceiveMessage = async (message) => {
         // Update messages if selected chat
         setSelectedChat(prev => {
-            if (prev && prev.id === message.conversationId) {
-                setMessages(msgs => [...msgs, formatMessage(message)])
+            // Force string comparison for safety
+            if (prev && String(prev.id) === String(message.conversationId)) {
+                setMessages(msgs => {
+                    // 1. Check for exact ID match (duplicates)
+                    if (msgs.some(m => String(m.id) === String(message.id))) {
+                        return msgs;
+                    }
+
+                    // 2. Check for Optimistic Match (Sender matches + Content matches + Recent)
+                    const isOwnMessage = message.senderId === currentUser?.id;
+                    if (isOwnMessage) {
+                        // Find a numeric ID message (optimistic) with same content/media
+                        const optimisticMatchIndex = msgs.findIndex(m => 
+                            typeof m.id === 'number' && 
+                            ((m.text === message.content) || (m.mediaUrl && m.mediaUrl === message.mediaUrl))
+                        );
+
+                        if (optimisticMatchIndex !== -1) {
+                            const newMsgs = [...msgs];
+                            newMsgs[optimisticMatchIndex] = formatMessage(message);
+                            return newMsgs;
+                        }
+                    }
+
+                    return [...msgs, formatMessage(message)]
+                })
+                
+                // Mark as read immediately if window focused (simplified)
+                socketService.markRead(message.conversationId, [message.id])
             }
             return prev
         })
 
         // Update conversation list
         setConversations(prev => {
-            const existing = prev.find(c => c.id === message.conversationId)
-            if (existing) {
-                return prev.map(c => 
-                    c.id === message.conversationId 
-                        ? { 
-                            ...c, 
-                            lastMessage: message.content || "Attachment", 
-                            timestamp: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                            unread: selectedChat?.id !== message.conversationId 
-                        } 
-                        : c
-                ) // Move to top would be better, but map is stable
+            const existingIndex = prev.findIndex(c => c.id === message.conversationId)
+            
+            if (existingIndex > -1) {
+                const updatedConversations = [...prev]
+                const conversation = updatedConversations[existingIndex]
+                
+                // Update conversation details
+                let previewText = "Attachment";
+                if (message.content) previewText = message.content;
+                else if (message.type === 'image') previewText = "Sent an image";
+                else if (message.type === 'video') previewText = "Sent a video";
+                else if (message.type === 'audio') previewText = "Sent an audio clip";
+
+                updatedConversations[existingIndex] = {
+                    ...conversation,
+                    lastMessage: previewText,
+                    timestamp: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    unread: selectedChat?.id !== message.conversationId
+                }
+
+                // Move to top
+                updatedConversations.sort((a, b) => {
+                     if (a.id === message.conversationId) return -1
+                     if (b.id === message.conversationId) return 1
+                     return 0
+                })
+                
+                return updatedConversations
+                
             } else {
-                // New conversation incoming? 
-                // We'd need to fetch details or just reload. Reload simpler for now.
-                // loadConversations(currentUser.id) 
-                return prev 
+                // Conversation not found in list -> Fetch it!
+                fetchNewConversation(message.conversationId)
+                return prev
             }
         })
+    }
+
+    const fetchNewConversation = async (conversationId) => {
+        try {
+            const newConv = await messagingService.getConversation(conversationId)
+            
+            // Normalize for frontend
+            const otherParticipant = newConv.participants.find(p => p.userId !== currentUser.id)
+            // Ideally we need user details here. 
+            // If participant has no user detail in response (depends on backend include), we fetch user.
+            let userData = { id: 'unknown', name: 'Unknown' }
+            
+            if (otherParticipant) {
+                const users = await userService.getUsers([otherParticipant.userId])
+                if (users.length > 0) userData = normalizeUser(users[0])
+            }
+
+            const chatObj = {
+                id: newConv.id,
+                user: userData,
+                lastMessage: newConv.lastMessage?.content || "New Message",
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                unread: true
+            }
+
+            setConversations(prev => [chatObj, ...prev])
+        } catch (error) {
+            console.error("Failed to fetch new conversation", error)
+        }
     }
 
     const handleTypingStart = ({ conversationId, userId }) => {
@@ -165,6 +254,16 @@ export default function Chat() {
         }
     }, [selectedChat?.id])
 
+    // Scroll to bottom
+    useEffect(() => {
+        if (messagesEndRef.current) {
+             const timeout = setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }, 100);
+            return () => clearTimeout(timeout);
+        }
+    }, [messages, mediaAttachment])
+
 
     const formatMessage = (msg) => ({
         id: msg.id,
@@ -172,6 +271,8 @@ export default function Chat() {
         text: msg.content,
         mediaUrl: msg.mediaUrl,
         mediaType: msg.type,
+        thumbnailUrl: msg.thumbnailUrl,
+        duration: msg.duration,
         timestamp: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
 
@@ -194,36 +295,51 @@ export default function Chat() {
     }, [searchQuery])
 
     const startChatWithUser = async (user) => {
-        if (!currentUser) return
+        toast.info("Select request received...")
+        if (!currentUser) {
+            toast.error("User not logged in")
+            return
+        }
 
         try {
-            // Optimistic UI update or find existing in list
-            const recipientId = user._id || user.id
+            const normalizedUser = normalizeUser(user)
+            const recipientId = normalizedUser.id
+            
+            if (!recipientId) {
+                toast.error("Invalid user selection: Missing ID")
+                console.error("Invalid user object:", user)
+                return
+            }
+
+            toast.info(`Attempting chat with ${normalizedUser.name}...`)
+            
             const existing = conversations.find(c => c.user.id === recipientId)
             
             if (existing) {
                 setSelectedChat(existing)
+                toast.success("Opened existing conversation")
             } else {
                 // Create on backend
                 const newConv = await messagingService.createConversation(recipientId)
                 
-                // Formatted structure
                 const chatObj = {
                     id: newConv.id,
-                    user: user,
+                    user: normalizedUser,
                     lastMessage: "",
                     timestamp: "New",
                     unread: false
                 }
                 
-                setConversations([chatObj, ...conversations])
+                setConversations(prev => [chatObj, ...prev])
                 setSelectedChat(chatObj)
+                toast.success("New conversation started")
             }
-            
-            setSearchQuery("")
-            setSearchResults([])
         } catch (error) {
             console.error("Failed to start chat", error)
+            toast.error(`Start Chat Error: ${error.response?.data?.error || error.message}`)
+        } finally {
+            setSearchQuery("")
+            setSearchResults([])
         }
     }
 
@@ -247,16 +363,34 @@ export default function Chat() {
         if (!file) return
 
         setIsUploading(true)
+        const toastId = toast.loading("Uploading media...")
+
         try {
-            const { url } = await mediaService.uploadMedia(file)
+            const formData = new FormData()
+            formData.append('file', file)
+            
+            const response = await messagingService.uploadMedia(formData)
+            
+            let type = 'image';
+            if (file.type.startsWith('video/')) type = 'video';
+            if (file.type.startsWith('audio/')) type = 'audio';
+
             setMediaAttachment({
-                url,
-                type: file.type.startsWith('video/') ? 'video' : 'image'
+                url: response.url,
+                thumbnailUrl: response.thumbnailUrl,
+                duration: response.duration,
+                size: response.size,
+                mimeType: response.mimeType,
+                type
             })
+
+            toast.success("Media uploaded", { id: toastId })
         } catch (error) {
             console.error("Upload failed", error)
+            toast.error("Failed to upload media", { id: toastId })
         } finally {
             setIsUploading(false)
+            if (fileInputRef.current) fileInputRef.current.value = ''
         }
     }
 
@@ -267,17 +401,25 @@ export default function Chat() {
             conversationId: selectedChat.id,
             content: newMessage,
             type: mediaAttachment ? mediaAttachment.type : 'text',
-            mediaUrl: mediaAttachment?.url
+            mediaUrl: mediaAttachment?.url,
+            thumbnailUrl: mediaAttachment?.thumbnailUrl,
+            duration: mediaAttachment?.duration,
+            size: mediaAttachment?.size,
+            mimeType: mediaAttachment?.mimeType
         }
 
         // Optimistic update
         const tempMsg = {
-           id: Date.now(),
+           id: Date.now(), // Temporary ID
            senderId: currentUser.id,
            content: newMessage,
            type: payload.type,
            mediaUrl: payload.mediaUrl,
-           createdAt: new Date()
+           thumbnailUrl: payload.thumbnailUrl,
+           duration: payload.duration,
+           size: payload.size,
+           mimeType: payload.mimeType,
+           createdAt: new Date().toISOString()
         }
         
         setMessages(prev => [...prev, formatMessage(tempMsg)])
@@ -355,25 +497,29 @@ export default function Chat() {
                     {searchQuery.trim() ? (
                         /* Search Results */
                         searchResults.length > 0 ? (
-                            searchResults.map((user) => (
-                                <div
-                                    key={user._id || user.id}
-                                    onClick={() => startChatWithUser(user)}
-                                    className="flex items-center gap-3 px-4 py-4 hover:bg-white/[0.03] transition-colors cursor-pointer border-r-2 border-transparent"
-                                >
-                                    <Avatar className="w-10 h-10 border border-border">
-                                        <AvatarImage src={user.avatar || user.profile?.avatar || "https://github.com/shadcn.png"} />
-                                        <AvatarFallback>{(user.name?.[0] || 'U').toUpperCase()}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1">
-                                            <span className="font-bold text-[15px] truncate">{user.name || user.profile?.name}</span>
-                                            {user.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                            searchResults.map((user) => {
+                                const normalized = normalizeUser(user);
+                                return (
+                                    <div
+                                        key={normalized.id}
+                                        onMouseDown={() => startChatWithUser(user)}
+                                        onClick={() => startChatWithUser(user)}
+                                        className="flex items-center gap-3 px-4 py-4 hover:bg-white/[0.03] transition-colors cursor-pointer border-r-2 border-transparent active:bg-white/10"
+                                    >
+                                        <Avatar className="w-10 h-10 border border-border pointer-events-none">
+                                            <AvatarImage src={getMediaUrl(normalized.avatar) || "https://github.com/shadcn.png"} />
+                                            <AvatarFallback>{(normalized.name?.[0] || 'U').toUpperCase()}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0 pointer-events-none">
+                                            <div className="flex items-center gap-1">
+                                                <span className="font-bold text-[15px] truncate">{normalized.name}</span>
+                                                {normalized.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                                            </div>
+                                            <span className="text-muted-foreground text-[14px]">@{normalized.handle}</span>
                                         </div>
-                                        <span className="text-muted-foreground text-[14px]">@{user.handle || user.username || user.profile?.handle}</span>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         ) : (
                             <div className="px-4 py-8 text-center text-muted-foreground">
                                 No users found
@@ -391,7 +537,7 @@ export default function Chat() {
                             )}
                         >
                             <Avatar className="w-10 h-10 border border-border">
-                                <AvatarImage src={chat.user.avatar || "https://github.com/shadcn.png"} />
+                                <AvatarImage src={getMediaUrl(chat.user.avatar)} />
                                 <AvatarFallback>{chat.user.name?.[0] || "U"}</AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
@@ -432,7 +578,7 @@ export default function Chat() {
                             {/* Profile Info in Chat */}
                             <div className="flex flex-col items-center justify-center py-8 hover:bg-white/[0.03] rounded-xl transition-colors mb-4 border-b border-border/50">
                                 <Avatar className="w-16 h-16 mb-2">
-                                    <AvatarImage src={selectedChat.user.avatar || "https://github.com/shadcn.png"} />
+                                    <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} />
                                     <AvatarFallback>{selectedChat.user.name?.[0]}</AvatarFallback>
                                 </Avatar>
                                 <h3 className="text-lg font-bold flex items-center gap-1">
@@ -460,7 +606,28 @@ export default function Chat() {
                                     >
                                         {msg.mediaUrl && (
                                             msg.mediaType === 'video' ? (
-                                                <video src={getMediaUrl(msg.mediaUrl)} controls className="rounded-lg mb-2 max-h-[300px] w-full object-cover" />
+                                                <div className="relative">
+                                                    <video 
+                                                        src={getMediaUrl(msg.mediaUrl)} 
+                                                        controls 
+                                                        poster={getMediaUrl(msg.thumbnailUrl)}
+                                                        className="rounded-lg mb-2 max-h-[300px] w-full object-cover bg-black" 
+                                                    />
+                                                    {msg.duration && (
+                                                        <span className="absolute bottom-4 right-2 bg-black/60 text-white text-xs px-1 rounded">
+                                                            {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ) : msg.mediaType === 'audio' ? (
+                                                <div className="w-[200px] bg-gray-900 rounded-lg p-2 mb-2">
+                                                    <audio src={getMediaUrl(msg.mediaUrl)} controls className="w-full" />
+                                                    {msg.duration && (
+                                                         <div className="text-xs text-muted-foreground text-right mt-1">
+                                                            {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
+                                                         </div>
+                                                    )}
+                                                </div>
                                             ) : (
                                                 <img
                                                     src={getMediaUrl(msg.mediaUrl)}
@@ -476,6 +643,7 @@ export default function Chat() {
                                     </span>
                                 </div>
                             ))}
+                            <div ref={messagesEndRef} />
                         </div>
 
                         <div className="p-3 border-t border-border bg-black relative">
@@ -492,6 +660,10 @@ export default function Chat() {
                                     <div className="relative group">
                                         {mediaAttachment.type === 'video' ? (
                                              <video src={getMediaUrl(mediaAttachment.url)} className="h-20 w-20 object-cover rounded-lg border border-border" />
+                                        ) : mediaAttachment.type === 'audio' ? (
+                                            <div className="h-20 w-40 flex items-center justify-center bg-gray-800 rounded-lg border border-border">
+                                                <span className="text-xs text-muted-foreground">Audio Clip</span>
+                                            </div>
                                         ) : (
                                             <img src={getMediaUrl(mediaAttachment.url)} className="h-20 w-20 object-cover rounded-lg border border-border" />
                                         )}
@@ -513,7 +685,7 @@ export default function Chat() {
                                     ref={fileInputRef}
                                     className="hidden"
                                     onChange={handleFileSelect}
-                                    accept="image/*,video/*"
+                                    accept="image/*,video/*,audio/*"
                                 />
                                 <Button
                                     variant="ghost"
@@ -559,7 +731,10 @@ export default function Chat() {
                             </div>
                             <h2 className="text-[31px] font-bold mb-2">{t('chat.start_conversation')}</h2>
                             <p className="text-[15px] text-muted-foreground mb-7">{t('chat.choose_conversation')}</p>
-                            <Button className="rounded-full bg-white text-black hover:bg-white/90 font-bold px-8 h-[52px] text-[17px]">
+                            <Button 
+                                onClick={() => document.querySelector('input[placeholder="' + t('right_sidebar.search_placeholder') + '"]')?.focus()}
+                                className="rounded-full bg-white text-black hover:bg-white/90 font-bold px-8 h-[52px] text-[17px]"
+                            >
                                 {t('chat.new_chat')}
                             </Button>
                         </div>

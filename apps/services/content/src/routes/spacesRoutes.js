@@ -22,8 +22,9 @@ router.post('/', authenticateToken, async (req, res) => {
                 privacy: privacy || 'public',
                 status: scheduledAt ? 'scheduled' : 'live',
                 scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-                isLive: !scheduledAt, // Set true if starting now
-                startedAt: !scheduledAt ? new Date() : null
+                isLive: !scheduledAt,
+                startedAt: !scheduledAt ? new Date() : null,
+                time: scheduledAt ? new Date(scheduledAt).toLocaleString() : "Live" // For legacy compatibility
             },
             include: {
                 host: {
