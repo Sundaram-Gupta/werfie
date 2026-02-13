@@ -387,6 +387,8 @@ model AdAccount {
   status          String   @default("active") // active, suspended
   currency        String   @default("USD")
   balance         Float    @default(0.0)
+  paymentMethod   String?  // card, upi
+  paymentDetails  String?  // JSON
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

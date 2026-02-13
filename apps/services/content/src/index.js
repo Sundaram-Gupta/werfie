@@ -12,6 +12,8 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3003;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
+app.use(express.json());
+
 app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
@@ -19,7 +21,18 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Rewrite /api/posts to / to support direct access
+const adsRoutes = require('./routes/adsRoutes');
+const listsRoutes = require('./routes/listsRoutes');
+const spacesRoutes = require('./routes/spacesRoutes');
+const MediaService = require('./services/media.service');
+
+app.use('/api/ads', adsRoutes);
+app.use('/ads', adsRoutes);
+
+// Static serving for uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Generic Rewrite Middleware
 app.use((req, res, next) => {
     if (req.path.startsWith('/api/posts')) {
         // Replace /api/posts with empty string
@@ -36,20 +49,11 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json());
 
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', service: 'content-service' });
+});
 
-
-
-const adsRoutes = require('./routes/adsRoutes');
-const listsRoutes = require('./routes/listsRoutes');
-const spacesRoutes = require('./routes/spacesRoutes');
-const MediaService = require('./services/media.service');
-
-// Static serving for uploads
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-app.use('/ads', adsRoutes);
 app.use('/lists', listsRoutes);
 app.use('/spaces', spacesRoutes);
 

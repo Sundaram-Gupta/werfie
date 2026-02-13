@@ -16,10 +16,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Rewrite /api/users or /api/business to / to support Gateway proxy
+app.use('/api/business', businessRoutes);
+app.use('/business', businessRoutes);
+
+// Rewrite /api/users to / to support Gateway proxy
 app.use((req, res, next) => {
-    if (req.url.startsWith('/api/users') || req.url.startsWith('/api/business')) {
-        let newUrl = req.url.replace('/api/users', '').replace('/api/business', '');
+    if (req.url.startsWith('/api/users')) {
+        let newUrl = req.url.replace('/api/users', '');
         if (!newUrl.startsWith('/')) {
             newUrl = '/' + newUrl;
         }
@@ -28,8 +31,6 @@ app.use((req, res, next) => {
     }
     next();
 });
-
-app.use('/business', businessRoutes);
 
 // Debug Middleware
 app.use((req, res, next) => {

@@ -95,25 +95,63 @@ router.post('/campaigns', authenticateToken, async (req, res) => {
 // POST /ads: Create new ad creative
 router.post('/ads', authenticateToken, async (req, res) => {
     try {
-        const { campaignId, name, headline, bodyText, primaryMediaUrl, mediaType, linkUrl, ctaType } = req.body;
+        const {
+            campaign_id,
+            ad_name,
+            ad_type,
+            primary_text,
+            headline,
+            media_url,
+            thumbnail_url,
+            cta_type,
+            destination_url,
+            status
+        } = req.body;
 
         const ad = await prisma.ad.create({
             data: {
-                campaignId,
-                name,
+                campaignId: campaign_id,
+                name: ad_name,
+                adType: ad_type,
+                primaryText: primary_text,
                 headline,
-                bodyText,
-                primaryMediaUrl,
-                mediaType,
-                linkUrl,
-                ctaType,
-                status: 'active'
+                mediaUrl: media_url,
+                thumbnailUrl: thumbnail_url,
+                ctaType: cta_type,
+                destinationUrl: destination_url,
+                status: status || 'active'
             }
         });
         res.status(201).json(ad);
     } catch (error) {
         console.error('[Ads API] Error creating ad:', error);
         res.status(500).json({ error: 'Failed to create ad', details: error.message });
+    }
+});
+
+// GET /creatives: Fetch all ads for user
+router.get('/creatives', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const ads = await prisma.ad.findMany({
+            where: {
+                campaign: {
+                    adAccount: {
+                        business: { userId }
+                    }
+                }
+            },
+            include: {
+                campaign: {
+                    select: { name: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(ads);
+    } catch (error) {
+        console.error('Error fetching ads:', error);
+        res.status(500).json({ error: 'Failed to fetch ads' });
     }
 });
 
@@ -141,6 +179,35 @@ router.get('/performance', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error fetching performance:', error);
         res.status(500).json({ error: 'Failed to fetch performance' });
+    }
+});
+
+// PUT /account/billing: Update ad account billing details
+router.put('/account/billing', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { method, details } = req.body;
+
+        const business = await prisma.businessProfile.findUnique({
+            where: { userId }
+        });
+
+        if (!business) {
+            return res.status(404).json({ error: 'Business profile not found' });
+        }
+
+        const adAccount = await prisma.adAccount.updateMany({
+            where: { businessId: business.id },
+            data: {
+                paymentMethod: method,
+                paymentDetails: JSON.stringify(details)
+            }
+        });
+
+        res.json({ message: 'Billing details updated', adAccount });
+    } catch (error) {
+        console.error('Billing Update Error:', error);
+        res.status(500).json({ error: 'Failed to update billing details' });
     }
 });
 

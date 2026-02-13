@@ -387,6 +387,8 @@ model AdAccount {
   status          String   @default("active") // active, suspended
   currency        String   @default("USD")
   balance         Float    @default(0.0)
+  paymentMethod   String?  // card, upi
+  paymentDetails  String?  // JSON
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -425,17 +427,18 @@ model Campaign { // Renamed from AdCampaign for clarity
 
 model Ad {
   id              String   @id @default(uuid())
-  campaignId      String
-  name            String
-  status          String   @default("active") // active, paused, rejected
+  campaignId      String   @map("campaign_id")
+  name            String   @map("ad_name")
+  status          String   @default("active")  // active, paused
   
   // Creative
-  headline        String
-  bodyText        String?
-  primaryMediaUrl String   // Image or Video
-  mediaType       String   // "image" | "video"
-  linkUrl         String?
-  ctaType         String   @default("LEARN_MORE")
+  adType          String   @map("ad_type")      // image, video, text
+  primaryText     String   @map("primary_text")
+  headline        String?  @map("headline")
+  mediaUrl        String?  @map("media_url")
+  thumbnailUrl    String?  @map("thumbnail_url")
+  ctaType         String?  @map("cta_type")      // LEARN_MORE, INSTALL, SIGN_UP, etc.
+  destinationUrl  String?  @map("destination_url")
   
   // Metrics
   impressions     Int      @default(0)

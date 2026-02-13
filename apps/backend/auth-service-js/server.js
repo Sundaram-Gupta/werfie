@@ -99,6 +99,7 @@ const microservices = [
     { path: '/api/analytics', port: 3009 },
     { path: '/api/moderation', port: 3010 },
     { path: '/api/settings', port: 3011 },
+    { path: '/api/monetization', port: 3014 },
 ];
 
 microservices.forEach(svc => {
