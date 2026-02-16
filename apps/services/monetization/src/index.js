@@ -166,10 +166,31 @@ app.get('/transactions', authenticateToken, async (req, res) => {
             },
             orderBy: { createdAt: 'desc' }
         });
-
         res.json(transactions);
     } catch (error) {
+        console.error('Transactions Error:', error);
         res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+});
+
+// PUT /payout-method: Update payout details
+app.put('/payout-method', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { method, details } = req.body;
+
+        const profile = await prisma.monetizationProfile.update({
+            where: { userId },
+            data: {
+                payoutMethod: method,
+                payoutDetails: JSON.stringify(details)
+            }
+        });
+
+        res.json(profile);
+    } catch (error) {
+        console.error('Payout Method Error:', error);
+        res.status(500).json({ error: 'Failed to update payout method' });
     }
 });
 

@@ -105,6 +105,12 @@ const nextConfig = {
         destination: 'http://localhost:3010/api/moderation/:path*',
       },
 
+      // Monetization Service (Port 3014)
+      {
+        source: '/api/monetization/:path*',
+        destination: 'http://localhost:3014/api/monetization/:path*',
+      },
+
       // Settings Service (Port 3011)
       {
         source: '/api/settings/:path*',

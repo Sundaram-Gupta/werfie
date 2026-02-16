@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { LayoutDashboard, Megaphone, Settings, CreditCard, ArrowLeft, MoreHorizontal, HelpCircle, Store } from "lucide-react"
+import { LayoutDashboard, Megaphone, Settings, CreditCard, ArrowLeft, MoreHorizontal, HelpCircle, Store, BarChart3, FileText } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 import AdsDashboard from "./AdsDashboard"
 import CampaignManager from "./CampaignManager"
+import AdManager from "./AdManager"
 import CreateCampaign from "./CreateCampaign"
+import CreateAd from "./CreateAd"
 import Billing from "./Billing"
 
 export default function AdsLayout() {
@@ -19,10 +21,16 @@ export default function AdsLayout() {
     const tabs = [
         { id: "dashboard", label: "Overview", icon: LayoutDashboard },
         { id: "campaigns", label: "Campaigns", icon: Megaphone },
-        { id: "create", label: "Create Ad", icon: null }, // Hidden from nav, routed via action
+        { id: "ads", label: "Ads", icon: FileText },
+        { id: "create", label: "Create Campaign", icon: null }, // Hidden from nav
+        { id: "create-ad", label: "Create Ad", icon: null }, // Hidden from nav
         { id: "billing", label: "Billing", icon: CreditCard },
         { id: "settings", label: "Settings", icon: Settings },
     ]
+
+    const handleTabChange = (id) => {
+        setActiveTab(id)
+    }
 
     useEffect(() => {
         const checkAccount = async () => {
@@ -39,14 +47,6 @@ export default function AdsLayout() {
         }
         checkAccount()
     }, [])
-
-    const handleTabChange = (id) => {
-        if (id === 'create') {
-            setActiveTab('create')
-        } else {
-            setActiveTab(id)
-        }
-    }
 
     const renderContent = () => {
         if (isLoading) {
@@ -85,7 +85,9 @@ export default function AdsLayout() {
         switch (activeTab) {
             case "dashboard": return <AdsDashboard />
             case "campaigns": return <CampaignManager onCreateClick={() => setActiveTab('create')} />
-            case "create": return <CreateCampaign onFinish={() => setActiveTab('campaigns')} />
+            case "ads": return <AdManager onCreateClick={() => setActiveTab('create-ad')} />
+            case "create": return <CreateCampaign onFinish={() => setActiveTab('campaigns')} onBack={() => setActiveTab('campaigns')} />
+            case "create-ad": return <CreateAd onFinish={() => setActiveTab('ads')} onBack={() => setActiveTab('ads')} />
             case "billing": return <Billing />
             case "settings": return <div className="p-10 text-center text-muted-foreground">Ad Account Settings Coming Soon</div>
             default: return <AdsDashboard />

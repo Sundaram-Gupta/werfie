@@ -210,6 +210,32 @@ module.exports = {
         },
 
         {
+            name: 'monetization-service',
+            cwd: './apps/services/monetization',
+            script: 'src/index.js',
+            instances: 1,
+            exec_mode: 'fork',
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '500M',
+            error_file: './logs/monetization-service-error.log',
+            out_file: './logs/monetization-service-out.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+            env: {
+                NODE_ENV: 'development',
+                PORT: 3014,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
+            },
+            env_production: {
+                NODE_ENV: 'production',
+                PORT: 3014,
+                DATABASE_URL: "postgresql://postgres:12345678@localhost:5432/xclone_db",
+                JWT_SECRET: "dev-secret"
+            }
+        },
+
+        {
             name: 'analytics-service',
             cwd: './apps/services/analytics',
             script: 'node',

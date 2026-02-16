@@ -62,13 +62,13 @@ export default function CreateCampaign({ onFinish }) {
 
             // 2. Create Ad Creative
             const adRes = await api.post('/api/ads/ads', {
-                campaignId: campaign.id,
-                name: `${formData.name} Ad`,
+                campaign_id: campaign.id,
+                ad_name: `${formData.name} Ad`,
+                ad_type: "image",
+                primary_text: formData.description,
                 headline: formData.headline,
-                bodyText: formData.description,
-                primaryMediaUrl: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&q=80", // Placeholder
-                mediaType: "image",
-                ctaType: "LEARN_MORE"
+                media_url: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&q=80", // Placeholder
+                cta_type: "LEARN_MORE"
             });
 
             toast.success("Campaign launched successfully!");

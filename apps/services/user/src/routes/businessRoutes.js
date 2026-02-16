@@ -94,15 +94,27 @@ router.get('/team', authenticateToken, async (req, res) => {
 router.post('/team', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { memberId, role } = req.body;
+        const { identifier, role } = req.body; // identifier can be email or handle
 
         const business = await prisma.businessProfile.findUnique({ where: { userId } });
         if (!business) return res.status(404).json({ error: 'Only owners can add members' });
 
+        // Find user by email or handle
+        const targetUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: identifier },
+                    { profile: { handle: identifier.startsWith('@') ? identifier.substring(1) : identifier } }
+                ]
+            }
+        });
+
+        if (!targetUser) return res.status(404).json({ error: 'User not found' });
+
         const member = await prisma.businessMember.create({
             data: {
                 businessId: business.id,
-                userId: memberId,
+                userId: targetUser.id,
                 role: role || 'member'
             }
         });
@@ -110,7 +122,35 @@ router.post('/team', authenticateToken, async (req, res) => {
         res.status(201).json(member);
     } catch (error) {
         if (error.code === 'P2002') return res.status(400).json({ error: 'User is already a member' });
+        console.error('Error adding team member:', error);
         res.status(500).json({ error: 'Failed to add member' });
+    }
+});
+
+// PATCH /team/:memberId: Update team member role
+router.patch('/team/:memberId', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { memberId } = req.params;
+        const { role } = req.body;
+
+        const business = await prisma.businessProfile.findUnique({ where: { userId } });
+        if (!business) return res.status(404).json({ error: 'Only owners can update member roles' });
+
+        const member = await prisma.businessMember.update({
+            where: {
+                businessId_userId: {
+                    businessId: business.id,
+                    userId: memberId
+                }
+            },
+            data: { role }
+        });
+
+        res.json(member);
+    } catch (error) {
+        console.error('Error updating team member role:', error);
+        res.status(500).json({ error: 'Failed to update role' });
     }
 });
 
