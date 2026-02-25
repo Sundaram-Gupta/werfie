@@ -19,6 +19,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   role          String   @default("USER")
+  institutionType String?
   status        String   @default("ACTIVE")
   lastActiveAt  DateTime @default(now())
   preferredLanguage String @default("en")
@@ -60,6 +61,65 @@ model User {
   moderatedCommunities  CommunityModerator[]
   hostedSpaces          Space[]
   verificationRequests  VerificationRequest[]
+
+  // Relations from Institutional
+  institutionalProfile InstitutionalProfile?
+}
+
+model InstitutionalProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  
+  // 1. Basic Institution Information
+  institutionName String
+  institutionType String   // e.g., "government", "ministry", "central_bank", etc.
+  country         String?
+  state           String?
+  website         String?
+  officialEmailDomain String?
+  description     String?  @db.Text
+  logoUrl         String?
+  bannerUrl       String?
+  
+  // 2. Authorized Representative Details
+  repFullName     String?
+  repJobTitle     String?
+  repDepartment   String?
+  repOfficialEmail String?
+  repPhone        String?
+  repIdUrl        String?  // URL to government/work ID
+  repLinkedInUrl  String?
+  repAuthLetterUrl String? // URL to authorization letter
+  
+  // 3. Account Credentials & Access Control
+  twoFactorEnabled Boolean @default(false)
+  primaryRole      String  @default("publisher") // publisher, editor, viewer, admin
+  recoveryEmail    String?
+  recoveryPhone    String?
+
+  // 4. Verification & Trust Information
+  isVerified      Boolean  @default(false)
+  isDomainVerified Boolean @default(false)
+  supportingDocs  Json?    // Array of URLs or metadata
+  transparencyAccepted Boolean @default(false)
+  termsAccepted      Boolean @default(false)
+  
+  // 4. Public Profile Settings
+  publicDisplayName String?
+  publicBio         String?  @db.Text
+  headquarters      String?
+  categories        Json?    // Array of categories: ["Economy", "Health", etc.]
+  languages         Json?    // Array of languages
+  
+  // 5. Admin Review Fields
+  status          String   @default("pending") // pending, under_review, approved, rejected
+  adminNotes      String?  @db.Text
+  badgeType       String?  // official, sovereign, emergency
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
@@ -87,6 +147,7 @@ model Profile {
   birthdate   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  verified    Boolean  @default(false)
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   

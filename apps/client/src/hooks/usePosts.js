@@ -1,4 +1,4 @@
-import { postService, userService } from '@/services/api'
+import { postService, userService, authService, announcementService } from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 import { useState, useEffect } from 'react'
 
@@ -11,20 +11,48 @@ export function usePosts(params = {}) {
     const fetchPosts = async () => {
         try {
             setLoading(true)
-            // Use following feed if tab is 'following'
-            const data = params.tab === 'following'
-                ? await postService.getFollowingPosts()
-                : await postService.getPosts(params)
-            let fetchedPosts = []
+            let data;
+            let announcementsData = [];
 
+            if (params.tab === 'following') {
+                data = await postService.getFollowingPosts()
+            } else if (params.tab === 'for-you') {
+                // Fetch posts and announcements concurrently as requested
+                const [postsRes, annRes] = await Promise.all([
+                    authService.getFeed(),
+                    announcementService.getFeed().catch(e => {
+                        console.error('Failed to fetch announcements feed:', e);
+                        return [];
+                    })
+                ]);
+                data = postsRes;
+                announcementsData = Array.isArray(annRes) ? annRes : (annRes.posts || []);
+            } else {
+                data = await postService.getPosts(params)
+            }
+            let fetchedPosts = [];
             if (Array.isArray(data)) {
-                fetchedPosts = data
+                fetchedPosts = data;
             } else if (data && Array.isArray(data.posts)) {
-                fetchedPosts = data.posts
+                fetchedPosts = data.posts;
             }
 
-            // Extract unique user IDs
-            const userIds = [...new Set(fetchedPosts.map(post => post.userId))];
+            // Merge with announcements and annotate
+            const annotatedAnnouncements = announcementsData.map(ann => ({
+                ...ann,
+                isOfficialAnnouncement: true
+            }));
+
+            fetchedPosts = [...fetchedPosts, ...annotatedAnnouncements].sort((a, b) =>
+                new Date(b.createdAt) - new Date(a.createdAt)
+            );
+
+            // Extract unique user IDs (excluding announcements)
+            const userIds = [...new Set(
+                fetchedPosts
+                    .filter(item => !item.isOfficialAnnouncement && item.userId)
+                    .map(item => item.userId)
+            )];
 
             // Bulk fetch users
             if (userIds.length > 0) {
@@ -34,23 +62,27 @@ export function usePosts(params = {}) {
                     userMap[user.id] = user;
                 });
 
-                // Hydrate posts
-                fetchedPosts = fetchedPosts.map(post => ({
-                    ...post,
-                    user: userMap[post.userId] || {
-                        id: post.userId,
-                        name: 'Unknown',
-                        handle: 'unknown',
-                        profile: { name: 'Unknown', handle: 'unknown', avatar: null }
-                    }
-                }));
+                // Hydrate posts (only if not an announcement)
+                fetchedPosts = fetchedPosts.map(item => {
+                    if (item.isOfficialAnnouncement) return item;
+                    return {
+                        ...item,
+                        user: userMap[item.userId] || {
+                            id: item.userId,
+                            name: 'Unknown',
+                            handle: 'unknown',
+                            profile: { name: 'Unknown', handle: 'unknown', avatar: null }
+                        }
+                    };
+                });
             }
 
+            console.log(`[FE_DEBUG_FEED] Items: ${fetchedPosts.length}, Announcements: ${fetchedPosts.filter(i => i.isOfficialAnnouncement).length}`);
             setPosts(fetchedPosts)
             setError(null)
         } catch (err) {
             console.error('Error fetching posts:', err)
-            setError(err.message)
+            setError(err.response?.data?.details || err.message)
         } finally {
             setLoading(false)
         }

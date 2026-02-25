@@ -21,7 +21,10 @@ export async function POST(request) {
         console.log(`[Login] Looking up user: ${email}`);
         const user = await prisma.user.findUnique({
             where: { email },
-            include: { profile: true }
+            include: {
+                profile: true,
+                institutionalProfile: true
+            }
         })
 
         if (!user) {
@@ -78,6 +81,8 @@ export async function POST(request) {
             id: user.id,
             email: user.email,
             profile: user.profile,
+            institutionType: user.institutionType,
+            institutionalProfile: user.institutionalProfile,
             preferredLanguage: user.preferredLanguage
         })
 

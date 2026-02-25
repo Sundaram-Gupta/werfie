@@ -82,6 +82,10 @@ mainServer.all('/api/ads*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 
+mainServer.all('/api/announcements*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
 // 3. User Service Proxy
 mainServer.all('/api/users*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
@@ -91,9 +95,14 @@ mainServer.all('/api/business*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
 });
 
+mainServer.all('/api/institutional*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+});
+
+
 // 4. Other Microservices Catch-all
 const microservices = [
-    { path: '/api/timeline', port: 3004 },
+    { path: '/api/timeline', port: 3003 },
     { path: '/api/notifications', port: 3003 },
     { path: '/api/search', port: 3006 },
     { path: '/api/analytics', port: 3009 },

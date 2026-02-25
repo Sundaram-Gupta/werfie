@@ -658,3 +658,38 @@ model PushTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Announcement {
+  id                    String    @id @default(uuid())
+  institutionId         String    // Link to InstitutionalProfile in User Service
+  title                 String
+  content               String    @db.Text
+  category              String    // Markets, Health, Conflict, Policy, etc.
+  severityLevel         Int       @default(1) // 1 to 5
+  regions               Json      // Array of strings: ["Global", "Country", etc.]
+  attachments           Json      // Array of {url, type, name}
+  livestreamUrl         String?
+  effectiveDate         DateTime  @default(now())
+  expiryDate            DateTime?
+  lockDurationMinutes   Int       @default(0)
+  aiSummary             String?   @db.Text
+  immutableHash         String    @unique // SHA256 of title + content + institutionId
+  status                String    @default("draft") // draft, published, archived
+  
+  createdBy             String    // User ID
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  revisions             AnnouncementRevision[]
+}
+
+model AnnouncementRevision {
+  id              String   @id @default(uuid())
+  announcementId  String
+  version         Int
+  editedBy        String
+  changes         Json     // Object containing changed fields
+  timestamp       DateTime @default(now())
+
+  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+}

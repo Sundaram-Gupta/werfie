@@ -131,6 +131,12 @@ export default function Settings() {
                     onClick={() => setIsPasswordModalOpen(true)}
                 />
                 <SettingsItem
+                    label="Institutional Account"
+                    description="Manage your institutional presence and verification"
+                    action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                    onClick={() => navigate('/settings/institutional')}
+                />
+                <SettingsItem
                     label={t('settings_page.deactivate_account')}
                     description={t('settings_page.deactivate_account_desc')}
                     isDestructive

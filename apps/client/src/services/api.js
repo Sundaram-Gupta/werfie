@@ -66,8 +66,8 @@ export const authService = {
     },
 
     getFeed: async () => {
-        // Use the timeline endpoint from content service
-        const { data } = await api.get('/api/timeline/home')
+        // Use the posts-prefixed path to ensure we hit the content service via gateway proxy
+        const { data } = await api.get('/api/posts/timeline/home')
         return data
     },
     changePassword: async (currentPassword, newPassword) => {
@@ -248,7 +248,7 @@ export const userService = {
 export const timelineService = {
     // Get home timeline
     getHomeTimeline: async (params = {}) => {
-        const { data } = await api.get('/api/timeline/home/', { params })
+        const { data } = await api.get('/api/posts/timeline/home', { params })
         return data
     },
 }
@@ -536,5 +536,49 @@ export const settingsService = {
     updateSettings: async (settings) => {
         const { data } = await api.put('/api/settings', settings)
         return data
+    }
+}
+
+// Institutional Services
+export const institutionalService = {
+    getProfile: async () => {
+        const { data } = await api.get('/api/institutional')
+        return data
+    },
+    updateProfile: async (profileData) => {
+        const { data } = await api.post('/api/institutional', profileData)
+        return data
+    },
+    verifyDomain: async () => {
+        const { data } = await api.post('/api/institutional/verify-domain')
+        return data
+    },
+    reviewProfile: async (id, reviewData) => {
+        const { data } = await api.patch(`/api/institutional/admin/review/${id}`, reviewData)
+        return data
+    }
+}
+
+// Announcement Services
+export const announcementService = {
+    createAnnouncement: async (data) => {
+        const { data: response } = await api.post('/api/announcements/create', data)
+        return response
+    },
+    updateAnnouncement: async (id, data) => {
+        const { data: response } = await api.put(`/api/announcements/update/${id}`, data)
+        return response
+    },
+    getFeed: async (params = {}) => {
+        const { data: response } = await api.get('/api/announcements/feed', { params })
+        return response
+    },
+    getAnnouncement: async (id) => {
+        const { data: response } = await api.get(`/api/announcements/${id}`)
+        return response
+    },
+    generateSummary: async (content) => {
+        const { data: response } = await api.post('/api/announcements/generate-summary', { content })
+        return response
     }
 }

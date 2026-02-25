@@ -1,7 +1,8 @@
 import { Link, useLocation } from "react-router-dom"
-import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet } from "lucide-react"
+import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet, ShieldAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuthModal } from "../auth/auth-modal-context"
+import { useAuth } from "@/context/AuthContext"
 import { UserProfileMenu } from "./user-profile-menu"
 import {
     DropdownMenu,
@@ -19,6 +20,7 @@ import { useTranslation } from "react-i18next"
 export function Sidebar() {
     const location = useLocation()
     const { openLogin } = useAuthModal()
+    const { user } = useAuth()
     const { t } = useTranslation()
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark")
 
@@ -40,6 +42,7 @@ export function Sidebar() {
         { icon: Brain, label: t('nav.werfie_ai'), path: "/werfie-ai", gradient: true },
         { icon: Users, label: t('nav.follow'), path: "/follow" },
         { icon: Mail, label: t('nav.chat'), path: "/chat" },
+        ...((user?.profile?.verified || user?.institutionalProfile?.isVerified) && (user?.institutionType || user?.institutionalProfile) ? [{ icon: Megaphone, label: "Official Announcements", path: "/announcements" }] : []),
         { icon: User, label: t('nav.profile'), path: "/profile" },
         { icon: MoreHorizontal, label: t('nav.more'), isMore: true },
     ]

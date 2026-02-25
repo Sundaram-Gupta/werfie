@@ -1,0 +1,61 @@
+
+> admin-backend@0.1.0 build
+> next build
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of D:\MERN\aspire\werfie\Werfie-Repo\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * D:\MERN\aspire\werfie\Werfie-Repo\adminBackend\package-lock.json
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.3s
+  Running TypeScript ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/23) ...
+  Generating static pages using 15 workers (5/23) 
+  Generating static pages using 15 workers (11/23) 
+  Generating static pages using 15 workers (17/23) 
+✓ Generating static pages using 15 workers (23/23) in 538.0ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/admin/ads
+├ ƒ /api/admin/business
+├ ƒ /api/admin/config/api-keys
+├ ƒ /api/admin/config/api-keys/[id]
+├ ƒ /api/admin/config/push
+├ ƒ /api/admin/config/push/templates
+├ ƒ /api/admin/dashboard/getting-started-status
+├ ƒ /api/admin/dashboard/recent-activity
+├ ƒ /api/admin/dashboard/stats
+├ ƒ /api/admin/health
+├ ƒ /api/admin/institutional
+├ ƒ /api/admin/institutional/[id]
+├ ƒ /api/admin/login
+├ ƒ /api/admin/monetization
+├ ƒ /api/admin/notifications/broadcast
+├ ƒ /api/admin/posts
+├ ƒ /api/admin/reports
+├ ƒ /api/admin/reports/[id]
+├ ƒ /api/admin/users
+├ ƒ /api/admin/users/[id]
+├ ƒ /api/admin/users/[id]/role
+├ ƒ /api/admin/users/[id]/status
+├ ƒ /api/docs
+├ ƒ /api/test-route
+└ ○ /docs
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -24,10 +24,13 @@ app.use(cors({
 const adsRoutes = require('./routes/adsRoutes');
 const listsRoutes = require('./routes/listsRoutes');
 const spacesRoutes = require('./routes/spacesRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
 const MediaService = require('./services/media.service');
 
 app.use('/api/ads', adsRoutes);
 app.use('/ads', adsRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/announcements', announcementRoutes);
 
 // Static serving for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -254,15 +257,16 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true,
+                user: { include: { profile: true } },
                 media: true,
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
-        res.json(posts);
+
+        res.json({ posts });
     } catch (error) {
         console.error('Timeline Error:', error);
-        res.status(500).json({ error: 'Failed to fetch timeline' });
+        res.status(500).json({ error: 'Failed to fetch timeline', details: error.message });
     }
 });
 
@@ -369,64 +373,39 @@ app.get('/communities', async (req, res) => {
 
 
 // Get All Posts (Feed compatible)
-// Get All Posts (Feed compatible)
 app.get('/', authenticateToken, async (req, res) => {
     console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId}`);
     try {
         const { userId, repliesOnly } = req.query;
-        // Safe access to userId
         const currentUserId = req.user?.userId || req.user?.id;
 
         if (!currentUserId) {
-            console.error('[ContentService] Feed Error: User ID missing from token payload', req.user);
-            return res.status(401).json({ error: 'Unauthorized: Invalid token payload' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        // Build where clause
+        // Fetch Posts
         const where = {};
-        if (userId) {
-            where.userId = userId;
-        }
-        if (repliesOnly === 'true') {
-            where.replyToId = { not: null };
-        }
+        if (userId) where.userId = userId;
+        if (repliesOnly === 'true') where.replyToId = { not: null };
 
-        console.log(`[ContentService] Fetching posts with where:`, where);
+        console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, query: req.query });
+        console.log(`[ContentService] Fetching announcements?`, (!userId && !repliesOnly));
 
         const posts = await prisma.post.findMany({
             where,
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true,
+                user: { include: { profile: true } },
                 media: true,
-
-                _count: { select: { replies: true, likes: true, retweets: true } },
-                likes: {
-                    where: { userId: currentUserId },
-                    select: { id: true }
-                },
-                retweets: {
-                    where: { userId: currentUserId },
-                    select: { id: true }
-                }
+                _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
-        console.log(`[ContentService] Fetched ${posts.length} posts.`);
 
-        // Sanitize users in posts (remove passwordHash)
-        const safePosts = posts.map(post => {
-            if (post.user) {
-                const { passwordHash, ...safeUser } = post.user;
-                post.user = safeUser;
-            }
-            return post;
-        });
-
-        res.json({ posts: safePosts });
+        res.json({ posts });
     } catch (error) {
         console.error('[ContentService] Feed Error:', error);
-        res.status(500).json({ error: 'Failed to fetch posts', details: error.message });
+        res.status(500).json({ error: 'Failed' });
     }
 });
 

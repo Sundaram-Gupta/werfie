@@ -91,9 +91,12 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
                     <AvatarImage src={getMediaUrl(user.profile?.avatar)} />
                     <AvatarFallback>{user.profile?.name?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col leading-5">
-                    <span className="font-bold hover:underline text-[15px]">{user.profile?.name || 'User'}</span>
-                    <span className="text-muted-foreground text-[15px]">@{user.profile?.handle || 'user'}</span>
+                <div className="flex flex-col leading-5 min-w-0">
+                    <div className="flex items-center gap-1">
+                        <span className="font-bold hover:underline text-[15px] truncate">{user.profile?.name || 'User'}</span>
+                        {user.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                    </div>
+                    <span className="text-muted-foreground text-[15px] truncate">@{user.profile?.handle || 'user'}</span>
                 </div>
             </div>
             <button

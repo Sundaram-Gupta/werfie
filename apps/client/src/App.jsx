@@ -15,6 +15,8 @@ import Ads from "@/pages/ads"
 import Spaces from "@/pages/spaces"
 import CreatorStudio from "@/pages/creator-studio"
 import Settings from "@/pages/settings"
+import InstitutionalSetup from "@/pages/institutional-setup"
+import Announcements from "@/pages/announcements"
 import WerfieAI from "@/pages/werfie-ai"
 import SearchPage from "@/pages/search"
 import { Analytics, MediaLibrary, ScheduledPosts, AudienceInsights, PostDetail } from "@/pages/creator-tools"
@@ -59,6 +61,8 @@ function App() {
                 <Route path="/spaces" element={<Spaces />} />
                 <Route path="/werfie-ai" element={<WerfieAI />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/institutional" element={<InstitutionalSetup />} />
+                <Route path="/announcements" element={<Announcements />} />
               </Route>
 
               {/* Protected Standalone Layouts (No Main Sidebar) */}

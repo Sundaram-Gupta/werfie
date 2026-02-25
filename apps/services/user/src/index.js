@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3002;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 const businessRoutes = require('./routes/businessRoutes');
+const institutionalRoutes = require('./routes/institutionalRoutes');
 
 app.use(cors({
     origin: true, // Reflects the request origin
@@ -18,6 +19,8 @@ app.use(express.json());
 
 app.use('/api/business', businessRoutes);
 app.use('/business', businessRoutes);
+app.use('/api/institutional', institutionalRoutes);
+app.use('/institutional', institutionalRoutes);
 
 // Rewrite /api/users to / to support Gateway proxy
 app.use((req, res, next) => {
