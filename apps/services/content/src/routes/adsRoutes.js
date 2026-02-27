@@ -10,7 +10,7 @@ console.log('Ads Routes Module Loaded');
 router.get('/account', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
-
+//g
         // Find business profile
         const business = await prisma.businessProfile.findUnique({
             where: { userId }
