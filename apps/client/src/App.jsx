@@ -17,10 +17,20 @@ import CreatorStudio from "@/pages/creator-studio"
 import Settings from "@/pages/settings"
 import InstitutionalSetup from "@/pages/institutional-setup"
 import Announcements from "@/pages/announcements"
+import AnnouncementDetail from "@/pages/announcement-detail"
+import ModerationPanel from "./pages/moderation-panel"
+import WorldLeadersPage from "@/pages/world-leaders"
+import LeaderProfilePage from "@/pages/leader-profile"
 import WerfieAI from "@/pages/werfie-ai"
 import SearchPage from "@/pages/search"
 import { Analytics, MediaLibrary, ScheduledPosts, AudienceInsights, PostDetail } from "@/pages/creator-tools"
 import Monetization from "@/pages/monetization/index"
+import EnterpriseDashboard from "@/pages/enterprise-dashboard"
+import CrisisCommand from "@/pages/crisis-command"
+import SoapboxView from "@/pages/soapbox-view"
+import Soapbox from "@/pages/soapbox"
+import DebateView from "@/pages/debate-view"
+import Debate from "@/pages/debate"
 
 import { AuthModalProvider } from "./components/auth/auth-modal-context"
 import { AuthModal } from "./components/auth/auth-modal"
@@ -63,6 +73,16 @@ function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/settings/institutional" element={<InstitutionalSetup />} />
                 <Route path="/announcements" element={<Announcements />} />
+                <Route path="/announcements/:id" element={<AnnouncementDetail />} />
+                <Route path="/moderation" element={<ModerationPanel />} />
+                <Route path="/world-leaders" element={<WorldLeadersPage />} />
+                <Route path="/leaders/:id" element={<LeaderProfilePage />} />
+                <Route path="/enterprise" element={<EnterpriseDashboard />} />
+                <Route path="/crisis-command" element={<CrisisCommand />} />
+                <Route path="/soapbox/:id" element={<SoapboxView />} />
+                <Route path="/soapbox" element={<Soapbox />} />
+                <Route path="/debate/:id" element={<DebateView />} />
+                <Route path="/debate" element={<Debate />} />
               </Route>
 
               {/* Protected Standalone Layouts (No Main Sidebar) */}

@@ -22,6 +22,7 @@ import SpacesPage from '@/pages/spaces';
 import MessagingPage from '@/pages/messaging';
 import MediaModerationPage from '@/pages/media';
 import LogsPage from '@/pages/logs';
+import WorldLeadersAdminPage from '@/pages/world-leaders';
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -63,6 +64,7 @@ function App() {
         <Route path="/messaging" element={<MessagingPage />} />
         <Route path="/media" element={<MediaModerationPage />} />
         <Route path="/logs" element={<LogsPage />} />
+        <Route path="/world-leaders" element={<WorldLeadersAdminPage />} />
       </Route>
 
       {/* Catch all */}

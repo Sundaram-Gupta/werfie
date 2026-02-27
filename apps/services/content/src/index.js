@@ -21,36 +21,57 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-const adsRoutes = require('./routes/adsRoutes');
-const listsRoutes = require('./routes/listsRoutes');
-const spacesRoutes = require('./routes/spacesRoutes');
-const announcementRoutes = require('./routes/announcementRoutes');
-const MediaService = require('./services/media.service');
-
-app.use('/api/ads', adsRoutes);
-app.use('/ads', adsRoutes);
-app.use('/api/announcements', announcementRoutes);
-app.use('/announcements', announcementRoutes);
-
-// Static serving for uploads
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-// Generic Rewrite Middleware
+// Generic Rewrite Middleware - MOVED TO TOP for consistent routing
 app.use((req, res, next) => {
+    // console.log(`[ContentService] Incoming: ${req.method} ${req.url}`);
     if (req.path.startsWith('/api/posts')) {
-        // Replace /api/posts with empty string
         let newUrl = req.url.replace('/api/posts', '');
-        // Ensure it starts with /
-        if (!newUrl.startsWith('/')) {
-            newUrl = '/' + newUrl;
-        }
+        if (!newUrl.startsWith('/')) newUrl = '/' + newUrl;
         req.url = newUrl;
     } else if (req.path.startsWith('/api/')) {
-        // Generic rewrite for other API routes (explore, trends, etc.)
         req.url = req.url.replace('/api', '');
     }
     next();
 });
+
+const adsRoutes = require('./routes/adsRoutes');
+const listsRoutes = require('./routes/listsRoutes');
+const spacesRoutes = require('./routes/spacesRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
+const worldLeaderFeedRoutes = require('./routes/worldLeaderFeedRoutes');
+const enterpriseRoutes = require('./routes/enterpriseRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+const crisisRoutes = require('./routes/crisisRoutes');
+const soapboxRoutes = require('./routes/soapboxRoutes');
+const debateRoutes = require('./routes/debateRoutes');
+const MediaService = require('./services/media.service');
+
+// All routes now assume the /api prefix has been stripped if they were called with it
+app.use('/ads', adsRoutes);
+app.use('/announcements', announcementRoutes);
+app.use('/feed', worldLeaderFeedRoutes);
+app.use('/enterprise', enterpriseRoutes);
+app.use('/comments', commentRoutes);
+app.use('/crisis', crisisRoutes);
+app.use('/soapbox', soapboxRoutes);
+app.use('/debate', debateRoutes);
+
+// Backup registration in case rewrite fails or is skipped
+app.use('/api/soapbox', soapboxRoutes);
+app.use('/api/debate', debateRoutes);
+
+// Health Checks
+app.get('/_health', (req, res) => res.json({ status: 'ok', service: 'content-service' }));
+app.get('/api/soapbox/_health', (req, res) => res.json({ status: 'ok', module: 'soapbox' }));
+app.get('/soapbox/_health', (req, res) => res.json({ status: 'ok', module: 'soapbox' }));
+
+app.use('/lists', listsRoutes);
+app.use('/spaces', spacesRoutes);
+
+// Static serving for uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Rewrite middleware was here, moved to top.
 
 
 app.get('/health', (req, res) => {
@@ -844,7 +865,6 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
     try {
         const result = await prisma.notification.updateMany({
             where: { userId, read: false },
-            data: { read: true }
         });
         res.json({ count: result.count });
     } catch (error) {
@@ -853,6 +873,11 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
     }
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-    console.log(`Content Service running on port ${PORT}`);
+const http = require('http');
+const server = http.createServer(app);
+const websocketService = require('./services/websocket.service');
+websocketService.init(server);
+
+server.listen(PORT, '127.0.0.1', () => {
+    console.log(`Content Service with WebSockets running on port ${PORT}`);
 });

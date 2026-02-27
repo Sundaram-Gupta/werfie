@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom"
-import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet, ShieldAlert } from "lucide-react"
+import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet, ShieldAlert, Globe, Activity, ShieldCheck, Gavel } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuthModal } from "../auth/auth-modal-context"
 import { useAuth } from "@/context/AuthContext"
@@ -43,6 +43,7 @@ export function Sidebar() {
         { icon: Users, label: t('nav.follow'), path: "/follow" },
         { icon: Mail, label: t('nav.chat'), path: "/chat" },
         ...((user?.profile?.verified || user?.institutionalProfile?.isVerified) && (user?.institutionType || user?.institutionalProfile) ? [{ icon: Megaphone, label: "Official Announcements", path: "/announcements" }] : []),
+        { icon: Globe, label: "World Leaders", path: "/world-leaders" },
         { icon: User, label: t('nav.profile'), path: "/profile" },
         { icon: MoreHorizontal, label: t('nav.more'), isMore: true },
     ]
@@ -111,6 +112,36 @@ export function Sidebar() {
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Settings className="w-[18px] h-[18px]" />
                                             {t('more_menu.settings_privacy')}
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link to="/enterprise">
+                                        <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                            <Activity className="w-[18px] h-[18px]" />
+                                            Enterprise Intelligence
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link to="/crisis-command">
+                                        <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                            <ShieldAlert className="w-[18px] h-[18px]" />
+                                            Crisis Command View
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link to="/debate">
+                                        <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                            <Gavel className="w-[18px] h-[18px]" />
+                                            Debate Framework
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link to="/soapbox">
+                                        <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                            <Mic className="w-[18px] h-[18px]" />
+                                            Soapbox Mode
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link to="/moderation">
+                                        <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                            <ShieldCheck className="w-[18px] h-[18px]" />
+                                            Comments Moderation
                                         </DropdownMenuItem>
                                     </Link>
                                     <DropdownMenuSeparator />

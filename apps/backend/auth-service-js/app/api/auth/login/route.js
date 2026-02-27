@@ -74,7 +74,7 @@ export async function POST(request) {
             }
         })
 
-        console.log('[Login] Login successful');
+        console.log('[Login] Login successful. Institutional ID:', user.institutionalProfile?.id || 'None');
         return NextResponse.json({
             accessToken,
             refreshToken,

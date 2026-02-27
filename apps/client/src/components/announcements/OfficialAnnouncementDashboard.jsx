@@ -315,7 +315,7 @@ export default function OfficialAnnouncementDashboard() {
                 <div className="pt-10 border-t border-border/30 flex items-start gap-3">
                     <Gavel className="w-5 h-5 text-muted-foreground shrink-0" />
                     <p className="text-[12px] text-muted-foreground leading-relaxed italic">
-                        This system generates a SHA256 immutable hash upon publication. Any subsequent modifications will be logged as a new version in the audit trail. High-severity alerts (>4) trigger immediate platform-wide critical notification broadcast.
+                        This system generates a SHA256 immutable hash upon publication. Any subsequent modifications will be logged as a new version in the audit trail. High-severity alerts (&gt;4) trigger immediate platform-wide critical notification broadcast.
                     </p>
                 </div>
             </div>

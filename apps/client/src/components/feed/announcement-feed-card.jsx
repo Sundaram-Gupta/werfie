@@ -1,9 +1,10 @@
-import { 
-    Megaphone, Globe, 
-    ArrowUpRight, Clock, History, 
-    CheckCircle2, ShieldCheck, AlertTriangle 
+import {
+    Megaphone, Globe,
+    ArrowUpRight, Clock, History,
+    CheckCircle2, ShieldCheck, AlertTriangle
 } from "lucide-react"
 import { format } from "date-fns"
+import { Link } from 'react-router-dom'
 import { cn } from "@/lib/utils"
 
 export function AnnouncementFeedCard({ announcement }) {
@@ -24,7 +25,7 @@ export function AnnouncementFeedCard({ announcement }) {
                     <div>
                         <div className="flex items-center gap-1.5">
                             <span className="font-black text-[13px] tracking-tight hover:underline cursor-pointer">
-                                Official Institution Post
+                                {announcement.isWorldLeaderPost ? 'World Leader Official Post' : 'Official Institution Post'}
                             </span>
                             <ShieldCheck className="w-3.5 h-3.5 text-blue-500 fill-current" />
                         </div>
@@ -75,17 +76,19 @@ export function AnnouncementFeedCard({ announcement }) {
                         <Globe className="w-3.5 h-3.5" />
                         {Array.isArray(announcement.regions) ? announcement.regions.join(', ') : 'Global'}
                     </div>
-                    {announcement.livestreamUrl && (
+                    {announcement.isLive && (
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-red-500">
                             <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                             LIVE
                         </div>
                     )}
                 </div>
-                <button className="flex items-center gap-1 text-[11px] font-black text-primary hover:gap-2 transition-all">
-                    VIEW DETAILS
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
+                <Link to={`/announcements/${announcement.id}`}>
+                    <button className="flex items-center gap-1 text-[11px] font-black text-primary hover:gap-2 transition-all">
+                        VIEW DETAILS
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                </Link>
             </div>
         </div>
     )

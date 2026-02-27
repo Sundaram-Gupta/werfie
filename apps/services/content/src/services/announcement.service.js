@@ -1,6 +1,14 @@
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 const crypto = require('crypto');
+const axios = require('axios');
+const websocketService = require('./websocket.service');
+const enterpriseService = require('./enterprise.service');
+const crisisService = require('./crisis.service');
+
+const prisma = new PrismaClient();
+
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3005';
 
 class AnnouncementService {
     /**
@@ -56,6 +64,25 @@ class AnnouncementService {
         const enrichedData = { ...data, institutionId };
         const hash = this.generateHash(enrichedData);
 
+        // Resolve leader priority score if World Leader Post
+        let priorityScore = data.leaderPriorityScore || 0;
+        let leader = null;
+        if (data.isWorldLeaderPost && data.leaderId) {
+            try {
+                // Fetch leader rank directly to enforce backend logic
+                const reqLeader = await axios.get(`${USER_SERVICE_URL}/api/users/leaders/${data.leaderId}`);
+                if (reqLeader.data) {
+                    leader = reqLeader.data;
+                    const rank = leader.priorityRank || 0;
+                    const severity = parseInt(data.severityLevel) || 1;
+                    priorityScore = (rank * 3) + (severity * 5); // Add recency weight in actual sort queue
+                    console.log(`[AnnouncementService] Assigned Dynamic Priority Score: ${priorityScore} (Rank ${rank}, Severity ${severity})`);
+                }
+            } catch (err) {
+                console.error('[AnnouncementService] Failed to dynamically calculate priority score. Using default/provided.', err.message);
+            }
+        }
+
         const announcement = await prisma.announcement.create({
             data: {
                 institutionId,
@@ -72,7 +99,17 @@ class AnnouncementService {
                 immutableHash: hash,
                 status: data.status || 'draft',
                 createdBy: userId,
-                aiSummary: data.status === 'published' ? await this.generateAISummary(data.content) : null
+                aiSummary: data.status === 'published' ? await this.generateAISummary(data.content) : null,
+
+                // World Leaders fields
+                isWorldLeaderPost: data.isWorldLeaderPost || false,
+                leaderId: data.leaderId || null,
+                leaderPriorityScore: priorityScore,
+                isLive: data.isLive || false,
+                transcriptUrl: data.transcriptUrl || null,
+                speechVideoUrl: data.speechVideoUrl || null,
+                importanceScore: data.importanceScore ? parseFloat(data.importanceScore) : null,
+                crisisId: data.crisisId || null
             }
         });
 
@@ -87,6 +124,60 @@ class AnnouncementService {
                     timestamp: new Date()
                 }
             });
+
+            // Trigger Enterprise Signal Generation (Async)
+            enterpriseService.generateSignalFromAnnouncement(announcement)
+                .catch(err => console.error('[Enterprise] Failed to gen signal:', err));
+
+            // Auto-link to Crisis Timeline if applicable
+            crisisService.autoLinkAnnouncement(announcement)
+                .catch(err => console.error('[Crisis] Failed to auto-link:', err));
+        }
+
+        // World Leaders specific side effects (Notifications, WebSockets, Translations)
+        if (announcement.isWorldLeaderPost && announcement.status === 'published') {
+
+            // 1. Broadcasts
+            websocketService.broadcastNewPost(announcement);
+            if (announcement.isLive) {
+                websocketService.broadcastLiveStatus(announcement);
+            }
+
+            // 2. Queue Multi-Lingual Translations (English, Spanish, French, Arabic, Hindi)
+            const languages = ['en', 'es', 'fr', 'ar', 'hi'];
+            const translations = languages.map(lang => ({
+                announcementId: announcement.id,
+                languageCode: lang,
+                title: announcement.title,
+                content: announcement.content,
+                status: 'pending' // Actual async worker would process these
+            }));
+            await prisma.announcementTranslation.createMany({ data: translations });
+
+            // 3. Trigger High Priority Push Notification
+            if (leader) {
+                const severityLevel = announcement.severityLevel;
+                if (severityLevel >= 4 || leader.autoPushEnabled || announcement.isLive) {
+                    try {
+                        await axios.post(`${NOTIFICATION_SERVICE_URL}/api/notifications/broadcast-external`, {
+                            target: { regions: announcement.regions, roles: ['USER'] }, // Push globally or region
+                            payload: {
+                                title: `Official Update: ${leader.leaderName}`,
+                                body: announcement.title,
+                                metadata: {
+                                    type: 'world_leader',
+                                    isLive: announcement.isLive,
+                                    severity: severityLevel,
+                                    country: leader.country
+                                }
+                            }
+                        });
+                        console.log(`[AnnouncementService] Initiated global Push Notification for ${leader.leaderName}`);
+                    } catch (pushErr) {
+                        console.error('[AnnouncementService] Failed to initiate Push Notification', pushErr.message);
+                    }
+                }
+            }
         }
 
         return announcement;
@@ -107,7 +198,7 @@ class AnnouncementService {
         const changes = {};
 
         // Track changes
-        const fieldsToTrack = ['title', 'content', 'category', 'severityLevel', 'regions', 'status'];
+        const fieldsToTrack = ['title', 'content', 'category', 'severityLevel', 'regions', 'status', 'isWorldLeaderPost', 'leaderPriorityScore', 'isLive', 'transcriptUrl', 'speechVideoUrl'];
         fieldsToTrack.forEach(field => {
             if (data[field] !== undefined && JSON.stringify(data[field]) !== JSON.stringify(current[field])) {
                 changes[field] = { from: current[field], to: data[field] };
@@ -134,6 +225,18 @@ class AnnouncementService {
                     timestamp: new Date()
                 }
             });
+        }
+
+        if (updated.isWorldLeaderPost && updated.status === 'published') {
+            if (updated.isLive && (!current.isLive || current.status !== 'published')) {
+                websocketService.broadcastLiveStatus(updated);
+            }
+
+            // Auto-link to Crisis Timeline if just published
+            if (current.status !== 'published') {
+                crisisService.autoLinkAnnouncement(updated)
+                    .catch(err => console.error('[Crisis] Failed to auto-link:', err));
+            }
         }
 
         return updated;

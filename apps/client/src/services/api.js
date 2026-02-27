@@ -31,11 +31,14 @@ export const authService = {
             password,
         })
 
+        console.log('[Frontend Login] Successfully logged in. Institutional ID:', data.institutionalProfile?.id || 'None');
+
         const user = {
             id: data.id,
             email: data.email,
             profile: data.profile,
-            preferredLanguage: data.preferredLanguage
+            preferredLanguage: data.preferredLanguage,
+            institutionalProfile: data.institutionalProfile
         }
 
         // Store tokens
