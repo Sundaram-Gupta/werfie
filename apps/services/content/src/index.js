@@ -21,33 +21,57 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-const adsRoutes = require('./routes/adsRoutes');
-const listsRoutes = require('./routes/listsRoutes');
-const spacesRoutes = require('./routes/spacesRoutes');
-const MediaService = require('./services/media.service');
-
-app.use('/api/ads', adsRoutes);
-app.use('/ads', adsRoutes);
-
-// Static serving for uploads
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-// Generic Rewrite Middleware
+// Generic Rewrite Middleware - MOVED TO TOP for consistent routing
 app.use((req, res, next) => {
+    // console.log(`[ContentService] Incoming: ${req.method} ${req.url}`);
     if (req.path.startsWith('/api/posts')) {
-        // Replace /api/posts with empty string
         let newUrl = req.url.replace('/api/posts', '');
-        // Ensure it starts with /
-        if (!newUrl.startsWith('/')) {
-            newUrl = '/' + newUrl;
-        }
+        if (!newUrl.startsWith('/')) newUrl = '/' + newUrl;
         req.url = newUrl;
     } else if (req.path.startsWith('/api/')) {
-        // Generic rewrite for other API routes (explore, trends, etc.)
         req.url = req.url.replace('/api', '');
     }
     next();
 });
+
+const adsRoutes = require('./routes/adsRoutes');
+const listsRoutes = require('./routes/listsRoutes');
+const spacesRoutes = require('./routes/spacesRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
+const worldLeaderFeedRoutes = require('./routes/worldLeaderFeedRoutes');
+const enterpriseRoutes = require('./routes/enterpriseRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+const crisisRoutes = require('./routes/crisisRoutes');
+const soapboxRoutes = require('./routes/soapboxRoutes');
+const debateRoutes = require('./routes/debateRoutes');
+const MediaService = require('./services/media.service');
+
+// All routes now assume the /api prefix has been stripped if they were called with it
+app.use('/ads', adsRoutes);
+app.use('/announcements', announcementRoutes);
+app.use('/feed', worldLeaderFeedRoutes);
+app.use('/enterprise', enterpriseRoutes);
+app.use('/comments', commentRoutes);
+app.use('/crisis', crisisRoutes);
+app.use('/soapbox', soapboxRoutes);
+app.use('/debate', debateRoutes);
+
+// Backup registration in case rewrite fails or is skipped
+app.use('/api/soapbox', soapboxRoutes);
+app.use('/api/debate', debateRoutes);
+
+// Health Checks
+app.get('/_health', (req, res) => res.json({ status: 'ok', service: 'content-service' }));
+app.get('/api/soapbox/_health', (req, res) => res.json({ status: 'ok', module: 'soapbox' }));
+app.get('/soapbox/_health', (req, res) => res.json({ status: 'ok', module: 'soapbox' }));
+
+app.use('/lists', listsRoutes);
+app.use('/spaces', spacesRoutes);
+
+// Static serving for uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Rewrite middleware was here, moved to top.
 
 
 app.get('/health', (req, res) => {
@@ -254,15 +278,16 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true,
+                user: { include: { profile: true } },
                 media: true,
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
-        res.json(posts);
+
+        res.json({ posts });
     } catch (error) {
         console.error('Timeline Error:', error);
-        res.status(500).json({ error: 'Failed to fetch timeline' });
+        res.status(500).json({ error: 'Failed to fetch timeline', details: error.message });
     }
 });
 
@@ -369,64 +394,39 @@ app.get('/communities', async (req, res) => {
 
 
 // Get All Posts (Feed compatible)
-// Get All Posts (Feed compatible)
 app.get('/', authenticateToken, async (req, res) => {
     console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId}`);
     try {
         const { userId, repliesOnly } = req.query;
-        // Safe access to userId
         const currentUserId = req.user?.userId || req.user?.id;
 
         if (!currentUserId) {
-            console.error('[ContentService] Feed Error: User ID missing from token payload', req.user);
-            return res.status(401).json({ error: 'Unauthorized: Invalid token payload' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        // Build where clause
+        // Fetch Posts
         const where = {};
-        if (userId) {
-            where.userId = userId;
-        }
-        if (repliesOnly === 'true') {
-            where.replyToId = { not: null };
-        }
+        if (userId) where.userId = userId;
+        if (repliesOnly === 'true') where.replyToId = { not: null };
 
-        console.log(`[ContentService] Fetching posts with where:`, where);
+        console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, query: req.query });
+        console.log(`[ContentService] Fetching announcements?`, (!userId && !repliesOnly));
 
         const posts = await prisma.post.findMany({
             where,
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true,
+                user: { include: { profile: true } },
                 media: true,
-
-                _count: { select: { replies: true, likes: true, retweets: true } },
-                likes: {
-                    where: { userId: currentUserId },
-                    select: { id: true }
-                },
-                retweets: {
-                    where: { userId: currentUserId },
-                    select: { id: true }
-                }
+                _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
-        console.log(`[ContentService] Fetched ${posts.length} posts.`);
 
-        // Sanitize users in posts (remove passwordHash)
-        const safePosts = posts.map(post => {
-            if (post.user) {
-                const { passwordHash, ...safeUser } = post.user;
-                post.user = safeUser;
-            }
-            return post;
-        });
-
-        res.json({ posts: safePosts });
+        res.json({ posts });
     } catch (error) {
         console.error('[ContentService] Feed Error:', error);
-        res.status(500).json({ error: 'Failed to fetch posts', details: error.message });
+        res.status(500).json({ error: 'Failed' });
     }
 });
 
@@ -865,7 +865,6 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
     try {
         const result = await prisma.notification.updateMany({
             where: { userId, read: false },
-            data: { read: true }
         });
         res.json({ count: result.count });
     } catch (error) {
@@ -874,6 +873,11 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
     }
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-    console.log(`Content Service running on port ${PORT}`);
+const http = require('http');
+const server = http.createServer(app);
+const websocketService = require('./services/websocket.service');
+websocketService.init(server);
+
+server.listen(PORT, '127.0.0.1', () => {
+    console.log(`Content Service with WebSockets running on port ${PORT}`);
 });

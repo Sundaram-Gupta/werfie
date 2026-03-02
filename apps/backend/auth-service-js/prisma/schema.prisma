@@ -18,6 +18,10 @@ model User {
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  role          String   @default("USER")
+  institutionType String?
+  status        String   @default("ACTIVE")
+  lastActiveAt  DateTime @default(now())
   preferredLanguage String @default("en")
   
   refreshTokens RefreshToken[]
@@ -49,6 +53,65 @@ model User {
   communityMemberships  CommunityMember[]
   moderatedCommunities  CommunityModerator[]
   hostedSpaces          Space[]
+
+  // Relations from Institutional
+  institutionalProfile InstitutionalProfile?
+}
+
+model InstitutionalProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  
+  // 1. Basic Institution Information
+  institutionName String
+  institutionType String   // e.g., "government", "ministry", "central_bank", etc.
+  country         String?
+  state           String?
+  website         String?
+  officialEmailDomain String?
+  description     String?
+  logoUrl         String?
+  bannerUrl       String?
+  
+  // 2. Authorized Representative Details
+  repFullName     String?
+  repJobTitle     String?
+  repDepartment   String?
+  repOfficialEmail String?
+  repPhone        String?
+  repIdUrl        String?
+  repLinkedInUrl  String?
+  repAuthLetterUrl String?
+  
+  // 3. Account Credentials & Access Control
+  twoFactorEnabled Boolean @default(false)
+  primaryRole      String  @default("publisher")
+  recoveryEmail    String?
+  recoveryPhone    String?
+
+  // 4. Verification & Trust Information
+  isVerified      Boolean  @default(false)
+  isDomainVerified Boolean @default(false)
+  supportingDocs  Json?
+  transparencyAccepted Boolean @default(false)
+  termsAccepted      Boolean @default(false)
+  
+  // 4. Public Profile Settings
+  publicDisplayName String?
+  publicBio         String?
+  headquarters      String?
+  categories        Json?
+  languages         Json?
+  
+  // 5. Admin Review Fields
+  status          String   @default("pending")
+  adminNotes      String?
+  badgeType       String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
@@ -76,6 +139,7 @@ model Profile {
   birthdate   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  verified    Boolean  @default(false)
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
@@ -88,6 +152,7 @@ model Post {
   id          String   @id @default(uuid())
   userId      String
   content     String
+  mediaUrls   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   

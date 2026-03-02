@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, ArrowLeft } from "lucide-react"
+import { Loader2, ArrowLeft, BadgeCheck } from "lucide-react"
 import { getMediaUrl } from "@/lib/utils"
 
 export default function SearchPage() {
@@ -118,9 +118,12 @@ export default function SearchPage() {
                                             <AvatarImage src={getMediaUrl(user.profile?.avatar)} />
                                             <AvatarFallback>{user.profile?.name?.[0]?.toUpperCase()}</AvatarFallback>
                                         </Avatar>
-                                        <div className="flex flex-col">
-                                            <span className="font-bold hover:underline">{user.profile?.name}</span>
-                                            <span className="text-muted-foreground">@{user.profile?.handle}</span>
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-1">
+                                                <span className="font-bold hover:underline truncate">{user.profile?.name}</span>
+                                                {user.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                                            </div>
+                                            <span className="text-muted-foreground truncate">@{user.profile?.handle}</span>
                                             {user.profile?.bio && <span className="text-muted-foreground text-sm line-clamp-1">{user.profile.bio}</span>}
                                         </div>
                                     </div>

@@ -43,6 +43,7 @@ const navGroups = [
         title: "COMMUNITY",
         items: [
             { icon: Users, label: 'Users', href: '/users' },
+            { icon: Globe, label: 'World Leaders', href: '/world-leaders' },
             { icon: MessageSquare, label: 'Posts', href: '/posts' },
             { icon: Users, label: 'Communities', href: '/communities' },
             { icon: Mic, label: 'Spaces', href: '/spaces' },

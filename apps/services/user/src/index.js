@@ -9,6 +9,8 @@ const PORT = process.env.PORT || 3002;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 const businessRoutes = require('./routes/businessRoutes');
+const institutionalRoutes = require('./routes/institutionalRoutes');
+const worldLeaderRoutes = require('./routes/worldLeaderRoutes');
 
 app.use(cors({
     origin: true, // Reflects the request origin
@@ -16,9 +18,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-app.use('/api/business', businessRoutes);
-app.use('/business', businessRoutes);
-
+// Moving routes below rewrite Middleware
 // Rewrite /api/users to / to support Gateway proxy
 app.use((req, res, next) => {
     if (req.url.startsWith('/api/users')) {
@@ -31,6 +31,13 @@ app.use((req, res, next) => {
     }
     next();
 });
+
+app.use('/api/business', businessRoutes);
+app.use('/business', businessRoutes);
+app.use('/api/institutional', institutionalRoutes);
+app.use('/institutional', institutionalRoutes);
+app.use('/api/leaders', worldLeaderRoutes);
+app.use('/leaders', worldLeaderRoutes);
 
 // Debug Middleware
 app.use((req, res, next) => {
@@ -52,12 +59,36 @@ app.get('/profile', authenticateToken, async (req, res) => {
     try {
         const user = await prisma.user.findUnique({
             where: { id: req.user.userId },
-            include: { profile: true }
+            include: {
+                profile: true,
+                institutionalProfile: true
+            }
         });
         if (!user) return res.status(404).json({ error: 'User not found' });
         res.json(user);
     } catch (error) {
         console.error('Profile Error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get User Profile by ID (Public/Internal)
+app.get('/profile/:id', async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.params.id },
+            include: {
+                profile: true,
+                institutionalProfile: true
+            }
+        });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Return safe user data
+        const { passwordHash, ...safeUser } = user;
+        res.json(safeUser);
+    } catch (error) {
+        console.error('Profile by ID Error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });

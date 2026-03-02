@@ -109,7 +109,6 @@ export default function Home() {
                     <textarea
                         value={postContent}
                         onChange={(e) => setPostContent(e.target.value)}
-                        onChange={(e) => setPostContent(e.target.value)}
                         onKeyPress={handleKeyPress}
                         placeholder={t('right_sidebar.whats_happening')}
                         className="w-full bg-transparent outline-none text-[20px] placeholder-muted-foreground mb-3 text-foreground resize-none min-h-[60px]"

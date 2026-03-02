@@ -6,7 +6,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MoreHorizontal, LogOut, UserPlus } from "lucide-react"
+import { MoreHorizontal, LogOut, UserPlus, BadgeCheck } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useNavigate } from "react-router-dom"
 import { getMediaUrl } from "@/lib/utils"
@@ -41,9 +41,12 @@ export function UserProfileMenu() {
                         <AvatarImage src={getMediaUrl(userAvatar)} />
                         <AvatarFallback>{userName[0]?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 text-left hidden xl:block">
-                        <span className="font-bold text-[15px] block">{userName}</span>
-                        <span className="text-muted-foreground text-[15px]">@{userHandle}</span>
+                    <div className="flex-1 text-left hidden xl:block min-w-0">
+                        <div className="flex items-center gap-1">
+                            <span className="font-bold text-[15px] truncate">{userName}</span>
+                            {user?.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                        </div>
+                        <span className="text-muted-foreground text-[15px] truncate block">@{userHandle}</span>
                     </div>
                     <MoreHorizontal className="w-5 h-5 hidden xl:block" />
                 </button>

@@ -1,12 +1,12 @@
 import { PostCard } from "./post-card"
+import { AnnouncementFeedCard } from "./announcement-feed-card"
 import { usePosts } from "@/hooks/usePosts"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useTranslation } from "react-i18next" // Added useTranslation import
+import { useTranslation } from "react-i18next"
 
 export function Feed({ tab = 'for-you' }) {
-    const { t } = useTranslation() // Added useTranslation hook
-    const { posts, loading, likePost, unlikePost, retweetPost, unretweetPost, deletePost } = usePosts({ tab })
-
+    const { t } = useTranslation()
+    const { posts, loading, error, likePost, unlikePost, retweetPost, unretweetPost, deletePost } = usePosts({ tab })
 
     if (loading) {
         return (
@@ -29,32 +29,46 @@ export function Feed({ tab = 'for-you' }) {
         )
     }
 
+    if (error) {
+        return (
+            <div className="p-8 text-center text-red-500 bg-red-500/5 m-4 rounded-xl border border-red-500/20">
+                <p className="font-bold">{t('common.error') || 'Error'}</p>
+                <p className="text-sm">{error}</p>
+            </div>
+        )
+    }
+
     if (!posts || !Array.isArray(posts)) {
-        return <div className="p-8 text-center text-muted-foreground">{t('feed.unable_to_load_posts')}</div> // Used t()
+        return <div className="p-8 text-center text-muted-foreground">{t('feed.unable_to_load_posts')}</div>
     }
 
     if (posts.length === 0) {
         return (
             <div className="p-8 text-center text-muted-foreground">
-                <p>{t('feed.no_posts_yet')}</p>
-                <p className="text-sm">{t('feed.be_first_to_post')}</p>
+                <p>{t('feed.no_posts_yet') || 'No posts yet.'}</p>
+                <p className="text-sm">{t('feed.be_first_to_post') || 'Be the first to post something!'}</p>
             </div>
         )
     }
 
     return (
         <div className="divide-y divide-border">
-            {posts.map((post) => (
-                <PostCard
-                    key={post.id}
-                    post={post}
-                    onLike={likePost}
-                    onUnlike={unlikePost}
-                    onRetweet={retweetPost}
-                    onUnretweet={unretweetPost}
-                    onDelete={deletePost}
-                />
-            ))}
+            {posts.map((item) => {
+                if (item.isOfficialAnnouncement) {
+                    return <AnnouncementFeedCard key={`ann-${item.id}`} announcement={item} />
+                }
+                return (
+                    <PostCard
+                        key={item.id}
+                        post={item}
+                        onLike={likePost}
+                        onUnlike={unlikePost}
+                        onRetweet={retweetPost}
+                        onUnretweet={unretweetPost}
+                        onDelete={deletePost}
+                    />
+                )
+            })}
         </div>
     )
 }

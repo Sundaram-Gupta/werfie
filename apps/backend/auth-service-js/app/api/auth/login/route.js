@@ -21,7 +21,10 @@ export async function POST(request) {
         console.log(`[Login] Looking up user: ${email}`);
         const user = await prisma.user.findUnique({
             where: { email },
-            include: { profile: true }
+            include: {
+                profile: true,
+                institutionalProfile: true
+            }
         })
 
         if (!user) {
@@ -71,13 +74,15 @@ export async function POST(request) {
             }
         })
 
-        console.log('[Login] Login successful');
+        console.log('[Login] Login successful. Institutional ID:', user.institutionalProfile?.id || 'None');
         return NextResponse.json({
             accessToken,
             refreshToken,
             id: user.id,
             email: user.email,
             profile: user.profile,
+            institutionType: user.institutionType,
+            institutionalProfile: user.institutionalProfile,
             preferredLanguage: user.preferredLanguage
         })
 

@@ -82,7 +82,35 @@ mainServer.all('/api/ads*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 
-// 3. User Service Proxy
+mainServer.all('/api/announcements*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/comments*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/ws/live*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/soapbox*', (req, res) => {
+    console.log(`[Gateway] Explicit Proxy -> Soapbox: ${req.url}`);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/crisis*', (req, res) => {
+    console.log(`[Gateway] Explicit Proxy -> Crisis: ${req.url}`);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/debate*', (req, res) => {
+    console.log(`[Gateway] Explicit Proxy -> Debate: ${req.url}`);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+
+// User Service Proxy
 mainServer.all('/api/users*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
 });
@@ -91,9 +119,14 @@ mainServer.all('/api/business*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
 });
 
+mainServer.all('/api/institutional*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+});
+
+
 // 4. Other Microservices Catch-all
 const microservices = [
-    { path: '/api/timeline', port: 3004 },
+    { path: '/api/timeline', port: 3003 },
     { path: '/api/notifications', port: 3003 },
     { path: '/api/search', port: 3006 },
     { path: '/api/analytics', port: 3009 },
@@ -131,6 +164,15 @@ httpServer.on('upgrade', (req, socket, head) => {
         if (pathname.startsWith('/api/messages/ws')) {
             console.log('[Gateway] Proxying WebSocket to Messaging Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3019' });
+        } else if (pathname.startsWith('/ws/live')) {
+            console.log('[Gateway] Proxying WebSocket to Content Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
+        } else if (pathname.startsWith('/ws/soapbox-live')) {
+            console.log('[Gateway] Proxying Soapbox WebSocket to Content Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
+        } else if (pathname.startsWith('/ws/debate-live')) {
+            console.log('[Gateway] Proxying Debate WebSocket to Content Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
         } else {
             console.warn(`[Gateway] No upgrade handler for ${pathname}`);
             socket.destroy();
