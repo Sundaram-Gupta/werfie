@@ -4,6 +4,24 @@ const prisma = new PrismaClient();
 const router = express.Router();
 
 const authenticateToken = require('../middleware/auth');
+const multer = require('multer');
+const sharp = require('sharp');
+const { uploadToR2, isR2Enabled } = require('../utils/r2-upload');
+const path = require('path');
+
+// Multer Config (Memory Storage for Sharp processing)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB Limit
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only JPEG, PNG, WEBP and PDF files are allowed'), false);
+        }
+    }
+});
 
 // GET /: Fetch institutional profile
 router.get('/', authenticateToken, async (req, res) => {
@@ -21,6 +39,38 @@ router.get('/', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error fetching institutional profile:', error);
         res.status(500).json({ error: 'Failed to fetch institutional profile' });
+    }
+});
+
+// POST /upload: Upload institutional document
+router.post('/upload', authenticateToken, upload.single('document'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const { type } = req.body; // docType e.g. 'certificate', 'registration', 'auth-letter'
+        let buffer = req.file.buffer;
+        let extension = path.extname(req.file.originalname).substring(1).toLowerCase();
+        let contentType = req.file.mimetype;
+
+        // Process images with Sharp
+        if (contentType.startsWith('image/')) {
+            buffer = await sharp(buffer)
+                .resize({ width: 1200, withoutEnlargement: true })
+                .webp({ quality: 80 })
+                .toBuffer();
+            extension = 'webp';
+            contentType = 'image/webp';
+        }
+
+        // Upload to R2
+        const { url } = await uploadToR2(buffer, 'institutional', extension, contentType);
+
+        res.json({ url });
+    } catch (error) {
+        console.error('Upload Error:', error);
+        res.status(500).json({ error: 'Upload failed', details: error.message });
     }
 });
 
@@ -74,6 +124,7 @@ router.post('/', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Failed to save institutional profile', details: error.message });
     }
 });
+
 
 // POST /verify-domain: Mock endpoint for domain verification
 router.post('/verify-domain', authenticateToken, async (req, res) => {

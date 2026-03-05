@@ -99,6 +99,24 @@ export default function InstitutionalSetup() {
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 6))
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
+    const handleFileUpload = async (file, type, targetField = null) => {
+        try {
+            const data = await institutionalService.uploadDocument(file, type)
+            if (targetField) {
+                setFormData(prev => ({ ...prev, [targetField]: data.url }))
+            } else if (type === 'supporting') {
+                setFormData(prev => ({
+                    ...prev,
+                    supportingDocs: [...(prev.supportingDocs || []), { name: file.name, url: data.url }]
+                }))
+            }
+            toast.success("Document uploaded successfully")
+        } catch (err) {
+            console.error("Upload error:", err)
+            toast.error("Failed to upload document")
+        }
+    }
+
     if (fetching) {
         return (
             <div className="flex items-center justify-center min-[400px]">
@@ -152,11 +170,11 @@ export default function InstitutionalSetup() {
             </div>
 
             <div className="p-6">
-                {currentStep === 1 && <OrganizationForm formData={formData} setFormData={setFormData} />}
-                {currentStep === 2 && <RepresentativeForm formData={formData} setFormData={setFormData} />}
+                {currentStep === 1 && <OrganizationForm formData={formData} setFormData={setFormData} onUpload={handleFileUpload} />}
+                {currentStep === 2 && <RepresentativeForm formData={formData} setFormData={setFormData} onUpload={handleFileUpload} />}
                 {currentStep === 3 && <SecurityForm formData={formData} setFormData={setFormData} />}
-                {currentStep === 4 && <TrustForm formData={formData} setFormData={setFormData} />}
-                {currentStep === 5 && <PublicProfileForm formData={formData} setFormData={setFormData} />}
+                {currentStep === 4 && <TrustForm formData={formData} setFormData={setFormData} onUpload={handleFileUpload} />}
+                {currentStep === 5 && <PublicProfileForm formData={formData} setFormData={setFormData} onUpload={handleFileUpload} />}
                 {currentStep === 6 && <ReviewStep formData={formData} />}
 
                 <div className="flex items-center justify-between pt-10">
@@ -180,7 +198,7 @@ export default function InstitutionalSetup() {
     )
 }
 
-function OrganizationForm({ formData, setFormData }) {
+function OrganizationForm({ formData, setFormData, onUpload }) {
     const institutionTypes = [
         "Government", "Ministry", "Central Bank", "Public Agency", 
         "International Organization", "Emergency Authority", "Other"
@@ -244,12 +262,31 @@ function OrganizationForm({ formData, setFormData }) {
                         onChange={e => setFormData({ ...formData, description: e.target.value })}
                     />
                 </div>
+                <div className="col-span-1">
+                    <label className="text-sm font-medium mb-1.5 block">Institution Logo</label>
+                    <div className="flex items-center gap-4">
+                        {formData.logoUrl && <img src={formData.logoUrl} className="w-12 h-12 rounded-lg object-cover border" alt="Logo" />}
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="relative overflow-hidden"
+                        >
+                            <Upload className="w-4 h-4 mr-2" />
+                            Upload Logo
+                            <input 
+                                type="file" 
+                                className="absolute inset-0 opacity-0 cursor-pointer" 
+                                onChange={e => onUpload(e.target.files[0], 'logo', 'logoUrl')}
+                            />
+                        </Button>
+                    </div>
+                </div>
             </div>
         </div>
     )
 }
 
-function RepresentativeForm({ formData, setFormData }) {
+function RepresentativeForm({ formData, setFormData, onUpload }) {
     return (
         <div className="space-y-6 max-w-2xl">
             <h2 className="text-xl font-bold flex items-center gap-2">
@@ -299,6 +336,67 @@ function RepresentativeForm({ formData, setFormData }) {
                         value={formData.repPhone}
                         onChange={e => setFormData({ ...formData, repPhone: e.target.value })}
                     />
+                </div>
+                <div className="col-span-2 space-y-4">
+                    <div className="p-4 border border-dashed rounded-xl space-y-3">
+                        <label className="text-sm font-bold flex items-center gap-2">
+                            <Upload className="w-4 h-4" />
+                            Representative Identity Document
+                        </label>
+                        <p className="text-xs text-muted-foreground">Passport or National ID for verification.</p>
+                        <div className="flex items-center gap-3">
+                            {formData.repIdUrl ? (
+                                <>
+                                    <div className="text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        File Uploaded
+                                    </div>
+                                    <Button variant="ghost" size="sm" onClick={() => setFormData({...formData, repIdUrl: ""})}>
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button size="sm" className="relative">
+                                    Browse File
+                                    <input 
+                                        type="file" 
+                                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                                        onChange={e => onUpload(e.target.files[0], 'rep_id', 'repIdUrl')}
+                                    />
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="p-4 border border-dashed rounded-xl space-y-3">
+                        <label className="text-sm font-bold flex items-center gap-2">
+                            <Upload className="w-4 h-4" />
+                            Official Authorization Letter
+                        </label>
+                        <p className="text-xs text-muted-foreground">Certified letter authorizing you to represent the institution.</p>
+                        <div className="flex items-center gap-3">
+                            {formData.repAuthLetterUrl ? (
+                                <>
+                                    <div className="text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        File Uploaded
+                                    </div>
+                                    <Button variant="ghost" size="sm" onClick={() => setFormData({...formData, repAuthLetterUrl: ""})}>
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button size="sm" className="relative">
+                                    Browse File
+                                    <input 
+                                        type="file" 
+                                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                                        onChange={e => onUpload(e.target.files[0], 'auth_letter', 'repAuthLetterUrl')}
+                                    />
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -365,7 +463,7 @@ function SecurityForm({ formData, setFormData }) {
     )
 }
 
-function TrustForm({ formData, setFormData }) {
+function TrustForm({ formData, setFormData, onUpload }) {
     const [domainLoading, setDomainLoading] = useState(false)
     const [verified, setVerified] = useState(formData.isDomainVerified)
 
@@ -412,17 +510,58 @@ function TrustForm({ formData, setFormData }) {
                 </div>
             </div>
 
-            {/* Document Upload Mock */}
+            {/* Document Upload Implementation */}
             <div className="space-y-4">
                 <p className="text-sm font-bold">Supporting Documents</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {["Govt Certificate", "Registration Proof", "Authorization Letter"].map(docType => (
-                        <div key={docType} className="flex flex-col gap-2 p-4 border border-dashed rounded-lg items-center justify-center hover:bg-muted/30 transition cursor-pointer">
-                            <Upload className="w-5 h-5 text-muted-foreground" />
-                            <span className="text-[11px] font-medium">{docType}</span>
-                        </div>
-                    ))}
+                    {["Govt Certificate", "Registration Proof", "Authorization Letter"].map(docType => {
+                        const existing = formData.supportingDocs?.find(d => d.name === docType || d.type === docType);
+                        return (
+                            <div key={docType} className={`flex flex-col gap-2 p-4 border border-dashed rounded-lg items-center justify-center transition ${
+                                existing ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/30 cursor-pointer'
+                            } relative`}>
+                                {existing ? (
+                                    <>
+                                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                                        <span className="text-[11px] font-bold text-primary">{docType}</span>
+                                        <button 
+                                            onClick={() => setFormData({
+                                                ...formData,
+                                                supportingDocs: formData.supportingDocs.filter(d => d !== existing)
+                                            })}
+                                            className="absolute top-2 right-2 p-1 hover:bg-destructive/10 rounded-full"
+                                        >
+                                            <Trash2 className="w-3 h-3 text-destructive" />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="w-5 h-5 text-muted-foreground" />
+                                        <span className="text-[11px] font-medium">{docType}</span>
+                                        <input 
+                                            type="file" 
+                                            className="absolute inset-0 opacity-0 cursor-pointer" 
+                                            onChange={e => onUpload(e.target.files[0], 'supporting')}
+                                        />
+                                    </>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
+                {formData.supportingDocs?.length > 0 && (
+                    <div className="mt-4 p-3 bg-muted/30 rounded-lg">
+                        <p className="text-xs font-bold mb-2 uppercase">Uploaded Files:</p>
+                        <div className="space-y-1">
+                            {formData.supportingDocs.map((doc, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-[11px]">
+                                    <span className="truncate max-w-[200px]">{doc.name}</span>
+                                    <a href={doc.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">View</a>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Transparency Toggles */}
@@ -444,7 +583,7 @@ function TrustForm({ formData, setFormData }) {
     )
 }
 
-function PublicProfileForm({ formData, setFormData }) {
+function PublicProfileForm({ formData, setFormData, onUpload }) {
     const categories = ["Economy", "Health", "Defense", "Climate", "Infrastructure", "Finance"]
 
     return (
@@ -469,6 +608,39 @@ function PublicProfileForm({ formData, setFormData }) {
                         value={formData.publicBio}
                         onChange={e => setFormData({ ...formData, publicBio: e.target.value })}
                     />
+                </div>
+                <div>
+                    <label className="text-sm font-medium mb-1.5 block">Profile Banner</label>
+                    <div className="relative h-32 w-full rounded-xl border border-dashed flex items-center justify-center overflow-hidden bg-muted/20">
+                        {formData.bannerUrl ? (
+                            <>
+                                <img src={formData.bannerUrl} className="w-full h-full object-cover" alt="Banner" />
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2">
+                                    <Button size="sm" variant="secondary" className="relative">
+                                        Change Banner
+                                        <input 
+                                            type="file" 
+                                            className="absolute inset-0 opacity-0 cursor-pointer" 
+                                            onChange={e => onUpload(e.target.files[0], 'banner', 'bannerUrl')}
+                                        />
+                                    </Button>
+                                    <Button size="sm" variant="destructive" onClick={() => setFormData({...formData, bannerUrl: ""})}>
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center gap-2">
+                                <Upload className="w-6 h-6 text-muted-foreground" />
+                                <span className="text-xs font-medium">Upload Banner Image</span>
+                                <input 
+                                    type="file" 
+                                    className="absolute inset-0 opacity-0 cursor-pointer" 
+                                    onChange={e => onUpload(e.target.files[0], 'banner', 'bannerUrl')}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div>
                     <p className="text-sm font-medium mb-2 block">Categories / Topics</p>

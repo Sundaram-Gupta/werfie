@@ -634,8 +634,22 @@ model InstitutionalProfile {
   repLinkedInUrl  String?
   repAuthLetterUrl String?
   
-  isVerified      Boolean  @default(false)
-  isDomainVerified Boolean @default(false)
+  // Missing fields from user-service
+  twoFactorEnabled     Boolean       @default(false)
+  primaryRole          String        @default("publisher")
+  recoveryEmail        String?
+  recoveryPhone        String?
+  isVerified           Boolean       @default(false)
+  isDomainVerified     Boolean       @default(false)
+  supportingDocs       Json?
+  transparencyAccepted Boolean       @default(false)
+  termsAccepted        Boolean       @default(false)
+  publicDisplayName    String?
+  publicBio            String?
+  headquarters         String?
+  categories           Json?
+  languages            Json?
+
   status          String   @default("pending") // pending, under_review, approved, rejected
   adminNotes      String?
   badgeType       String?
