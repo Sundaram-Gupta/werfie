@@ -40,6 +40,13 @@
         "add_option": "Add option",
         "add_poll_confirm": "Add poll",
         "schedule_post": "Schedule post",
+        "schedule_confirm": "Confirm",
+        "schedule_will_send": "Will send on",
+        "month": "Month",
+        "day": "Day",
+        "year": "Year",
+        "timezone": "Time zone",
+        "scheduled_posts": "Scheduled posts",
         "date": "Date",
         "time": "Time",
         "schedule_note": "Note: Scheduling requires backend support. Your post will be published immediately.",
@@ -123,9 +130,13 @@
     "follow": {
         "title": "Follow",
         "subtitle": "People you may know and accounts you follow",
+        "section_verified_followers": "Verified Followers",
         "section_following": "Following",
+        "section_followers": "Followers",
         "section_suggested": "Suggested for You",
         "empty_following": "You're not following anyone yet",
+        "empty_followers": "No followers yet",
+        "empty_verified_followers": "No verified followers yet",
         "empty_suggestions": "No suggestions available"
     },
     "chat": {
