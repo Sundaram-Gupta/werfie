@@ -37,8 +37,9 @@
  *       400:
  *         description: Name is required
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 import { logAdminAction } from '@/lib/audit';
 import crypto from 'crypto';
 
@@ -66,19 +67,18 @@ export async function GET(req: NextRequest) {
             prisma.apiKey.count({ where: { status: 'revoked' } })
         ]);
 
-        return NextResponse.json({
+        return apiSuccess({
             keys,
             stats: {
                 totalActive: activeCount,
                 totalRevoked: revokedCount,
-                // Mocking these for now as we don't have request logging yet
                 totalRequests24h: "1.2M",
                 successRate: "99.8%"
             }
-        });
+        }, 'API keys fetched successfully');
     } catch (error: any) {
         console.error('Fetch API Keys Error:', error);
-        return NextResponse.json({ error: 'Failed to fetch API keys' }, { status: 500 });
+        return apiError('Failed to fetch API keys', 500);
     }
 }
 
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
         const { name, environment, scopes, rateLimit, expiresAt } = body;
 
         if (!name) {
-            return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+            return apiError('Name is required', 400);
         }
 
         // Generate a new secure API key
@@ -119,15 +119,11 @@ export async function POST(req: NextRequest) {
             { name, environment }
         );
 
-        // Return the RAW key only once!
-        return NextResponse.json({
-            ...newKey,
-            keyHash: undefined, // Hide hash
-            rawKey: rawKey // RETURN RAW KEY ONLY ONCE
-        });
+        const { keyHash: _, ...keyData } = newKey;
+        return apiSuccess({ ...keyData, rawKey }, 'API key created successfully');
 
     } catch (error: any) {
         console.error('Create API Key Error:', error);
-        return NextResponse.json({ error: 'Failed to create API key' }, { status: 500 });
+        return apiError('Failed to create API key', 500);
     }
 }

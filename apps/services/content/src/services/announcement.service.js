@@ -247,30 +247,28 @@ class AnnouncementService {
      */
     static async getFeed(filters = {}) {
         const { category, severity, region, status = 'published' } = filters;
-        const where = { status };
-
-        if (category) where.category = category;
-        if (severity) where.severityLevel = { gte: parseInt(severity) };
-        if (region) {
-            where.regions = {
-                path: [],
-                array_contains: region
-            };
-        }
-
-        return await prisma.announcement.findMany({
-            where,
-            orderBy: [
-                { severityLevel: 'desc' },
-                { createdAt: 'desc' }
-            ],
-            include: {
-                revisions: {
-                    orderBy: { timestamp: 'desc' },
-                    take: 5
-                }
+        try {
+            const where = { status };
+            if (category) where.category = category;
+            if (severity) where.severityLevel = { gte: parseInt(severity) };
+            if (region) {
+                where.regions = { path: [], array_contains: region };
             }
-        });
+            return await prisma.announcement.findMany({
+                where,
+                orderBy: [{ severityLevel: 'desc' }, { createdAt: 'desc' }],
+                include: { revisions: { orderBy: { timestamp: 'desc' }, take: 5 } }
+            });
+        } catch (err) {
+            if (err.message && err.message.includes('crisisId')) {
+                const rows = await prisma.$queryRawUnsafe(
+                    `SELECT * FROM "Announcement" WHERE status = $1 ORDER BY "severityLevel" DESC, "createdAt" DESC`,
+                    status
+                );
+                return Array.isArray(rows) ? rows : [];
+            }
+            throw err;
+        }
     }
 }
 

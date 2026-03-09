@@ -1,5 +1,6 @@
 import { MessagingService } from '../../../../services/messaging.service.js'
 import { getUserFromRequest, withAuth } from '../../../../lib/auth.js'
+import { apiSuccess, apiError } from '../../../../lib/api-response.js'
 import { createConversationSchema } from '../../../../lib/validations.js'
 import { PrismaClient } from '@prisma/client'
 
@@ -9,33 +10,29 @@ if (process.env.NODE_ENV !== 'production') global.prisma = prisma
 export const GET = withAuth(async (request) => {
     try {
         console.log('GET /api/messages/conversations triggered')
-        const user = getUserFromRequest(request)
+        const user = await getUserFromRequest(request)
         const userId = user.userId
         console.log('Resolved userId from request:', userId)
 
         if (!userId) {
             console.error('No userId found in request')
-            return new Response(JSON.stringify({ error: 'User not authenticated' }), { status: 401 })
+            return apiError('User not authenticated', 401)
         }
 
         const conversations = await MessagingService.getConversations(userId)
         console.log(`Found ${conversations.length} conversations for user ${userId}`)
 
-        return new Response(JSON.stringify(conversations), { headers: { 'Content-Type': 'application/json' } })
+        return apiSuccess(conversations, 'Conversations fetched successfully')
     } catch (error) {
         console.error('GET /conversations Error Trace:', error)
-        return new Response(JSON.stringify({
-            error: 'Failed to fetch conversations',
-            details: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+        return apiError('Failed to fetch conversations', 500, { details: error.message })
     }
-})
+}, { gracefulGet: true })
 
 export const POST = withAuth(async (request) => {
     try {
         console.log('POST /api/messages/conversations triggered')
-        const user = getUserFromRequest(request)
+        const user = await getUserFromRequest(request)
         const userId = user.userId
         console.log('Resolved userId from request:', userId)
 
@@ -46,30 +43,26 @@ export const POST = withAuth(async (request) => {
         const result = createConversationSchema.safeParse(body)
         if (!result.success) {
             console.error('Validation failed:', result.error.format())
-            return new Response(JSON.stringify({ error: 'Validation failed', details: result.error.format() }), { status: 400 })
+            return apiError('Validation failed', 400, { details: result.error.format() })
         }
 
         const { recipientId } = result.data
 
         if (recipientId === userId) {
-            return new Response(JSON.stringify({ error: 'Cannot chat with yourself' }), { status: 400 })
+            return apiError('Cannot chat with yourself', 400)
         }
 
-        // Use Service to find or create
         let conversation = await MessagingService.findDirectConversation(userId, recipientId)
 
         if (!conversation) {
             conversation = await MessagingService.createDirectConversation(userId, recipientId)
         }
 
-        return new Response(JSON.stringify(conversation), { headers: { 'Content-Type': 'application/json' } })
+        return apiSuccess(conversation, 'Conversation created successfully')
 
     } catch (error) {
         console.error('POST /conversations Error:', error)
-        return new Response(JSON.stringify({
-            error: 'Failed to create conversation',
-            details: error.message
-        }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+        return apiError('Failed to create conversation', 500, { details: error.message })
     }
 })
 

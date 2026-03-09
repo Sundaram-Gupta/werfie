@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateAccessToken, generateRefreshToken } from '@/lib/jwt'
+import { apiSuccess, apiError } from '@/lib/api-response'
 import bcrypt from 'bcrypt'
 import { z } from 'zod'
 
@@ -15,6 +16,9 @@ const registerSchema = z.object({
 export async function POST(request) {
     try {
         const body = await request.json()
+        if (body.handle && typeof body.handle === 'string') {
+            body.handle = body.handle.replace(/^@+/, '')
+        }
         const { email, password, name, handle, preferredLanguage } = registerSchema.parse(body)
 
         // Check if email or handle already exists
@@ -24,17 +28,11 @@ export async function POST(request) {
         ])
 
         if (existingEmail) {
-            return NextResponse.json(
-                { error: 'Email already exists' },
-                { status: 400 }
-            )
+            return apiError('Email already exists', 400, null)
         }
 
         if (existingHandle) {
-            return NextResponse.json(
-                { error: 'Handle already taken' },
-                { status: 400 }
-            )
+            return apiError('Handle already taken', 400, null)
         }
 
         // Hash password
@@ -77,28 +75,22 @@ export async function POST(request) {
         // TODO: Publish user.registered event with name and handle
         console.log('Event: user.registered', { userId: user.id, email, name, handle })
 
-        return NextResponse.json({
+        return apiSuccess({
             accessToken,
             refreshToken,
             user: {
                 id: user.id,
                 email: user.email
             }
-        }, { status: 201 })
+        }, 'Registration successful', 201)
 
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: 'Validation error', details: error.issues },
-                { status: 400 }
-            )
+            return apiError('Validation error', 400, { details: error.issues })
         }
 
         console.error('Registration error:', error)
         if (error.stack) console.error(error.stack)
-        return NextResponse.json(
-            { error: 'Internal server error', message: error.message },
-            { status: 500 }
-        )
+        return apiError('Internal server error', 500, { details: error.message })
     }
 }

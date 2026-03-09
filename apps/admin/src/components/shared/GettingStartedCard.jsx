@@ -13,8 +13,8 @@ export function GettingStartedCard() {
         const fetchTasks = async () => {
             try {
                 const res = await api.get('/admin/dashboard/getting-started-status');
-                if (res.data.success) {
-                    setTasks(res.data.data);
+                if (Array.isArray(res.data)) {
+                    setTasks(res.data);
                 }
             } catch (error) {
                 console.error("Failed to fetch tasks", error);

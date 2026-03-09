@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 import { logAdminAction } from '@/lib/audit';
 import crypto from 'crypto';
 
@@ -32,11 +33,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
             await logAdminAction(adminId, 'ROTATE_API_KEY', 'ApiKey', id);
 
-            return NextResponse.json({
-                success: true,
-                message: 'Key rotated successfully',
-                rawKey // Return new key
-            });
+            return apiSuccess({ rawKey }, 'Key rotated successfully');
         }
 
         const updatedKey = await prisma.apiKey.update({
@@ -51,10 +48,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
         await logAdminAction(adminId, 'UPDATE_API_KEY', 'ApiKey', id, { status, name });
 
-        return NextResponse.json({ success: true, key: updatedKey });
+        return apiSuccess({ key: updatedKey }, 'API key updated successfully');
 
     } catch (error: any) {
-        return NextResponse.json({ error: 'Failed to update API key' }, { status: 500 });
+        return apiError('Failed to update API key', 500);
     }
 }
 
@@ -70,8 +67,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
         await logAdminAction(adminId, 'REVOKE_API_KEY', 'ApiKey', id);
 
-        return NextResponse.json({ success: true, message: 'Key revoked successfully' });
+        return apiSuccess(null, 'Key revoked successfully');
     } catch (error: any) {
-        return NextResponse.json({ error: 'Failed to revoke API key' }, { status: 500 });
+        return apiError('Failed to revoke API key', 500);
     }
 }

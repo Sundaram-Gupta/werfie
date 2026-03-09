@@ -1,5 +1,6 @@
 import { MessagingService } from '@/services/messaging.service'
 import { getUserFromRequest, withAuth } from '@/lib/auth'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 export const GET = withAuth(async (request, { params }) => {
     try {
@@ -8,18 +9,18 @@ export const GET = withAuth(async (request, { params }) => {
         const userId = user.userId
 
         if (!userId) {
-            return new Response(JSON.stringify({ error: 'User not authenticated' }), { status: 401 })
+            return apiError('User not authenticated', 401)
         }
 
         const conversation = await MessagingService.getConversation(conversationId, userId)
 
         if (!conversation) {
-            return new Response(JSON.stringify({ error: 'Conversation not found' }), { status: 404 })
+            return apiError('Conversation not found', 404)
         }
 
-        return new Response(JSON.stringify(conversation), { headers: { 'Content-Type': 'application/json' } })
+        return apiSuccess(conversation, 'Conversation fetched successfully')
     } catch (error) {
         console.error('GET conversation Error:', error)
-        return new Response(JSON.stringify({ error: 'Failed to fetch conversation' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+        return apiError('Failed to fetch conversation', 500)
     }
 })

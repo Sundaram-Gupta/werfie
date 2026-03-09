@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 type Params = {
     params: Promise<{ id: string }>
@@ -16,10 +17,7 @@ export async function PATCH(
         const adminId = req.headers.get('x-admin-id');
 
         if (!['ACTIVE', 'SUSPENDED'].includes(status)) {
-            return NextResponse.json(
-                { success: false, error: 'Invalid status. Use ACTIVE or SUSPENDED' },
-                { status: 400 }
-            );
+            return apiError('Invalid status. Use ACTIVE or SUSPENDED', 400);
         }
 
         const updatedUser = await prisma.user.update({
@@ -29,17 +27,13 @@ export async function PATCH(
 
         console.log(`[AUDIT] Admin ${adminId} updated status of ${id} to ${status}`);
 
-        return NextResponse.json({
-            success: true,
-            message: `User status updated to ${status}`,
-            user: { id: updatedUser.id, status: updatedUser.status }
-        });
+        return apiSuccess(
+            { user: { id: updatedUser.id, status: updatedUser.status } },
+            `User status updated to ${status}`
+        );
 
     } catch (error: any) {
         console.error('Update Status Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to update user status' },
-            { status: 500 }
-        );
+        return apiError('Failed to update user status', 500);
     }
 }

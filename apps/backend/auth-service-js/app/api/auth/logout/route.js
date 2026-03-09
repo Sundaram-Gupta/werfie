@@ -1,43 +1,35 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/jwt'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 export async function POST(request) {
     try {
         const authHeader = request.headers.get('authorization')
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return NextResponse.json(
-                { error: 'Missing or invalid authorization header' },
-                { status: 401 }
-            )
+            return apiError('Missing or invalid authorization header', 401, null)
         }
 
         const token = authHeader.substring(7)
         const payload = await verifyToken(token)
 
-        if (payload.type !== 'refresh') {
-            return NextResponse.json(
-                { error: 'Invalid token type' },
-                { status: 401 }
-            )
+        // Accept either access or refresh token; invalidate refresh tokens for this user
+        if (payload.type === 'refresh') {
+            await prisma.refreshToken.deleteMany({
+                where: { userId: payload.sub, token }
+            })
+        } else {
+            // Access token: delete all refresh tokens for this user
+            await prisma.refreshToken.deleteMany({
+                where: { userId: payload.sub }
+            })
         }
 
-        // Delete the refresh token
-        await prisma.refreshToken.deleteMany({
-            where: {
-                userId: payload.sub,
-                token: token
-            }
-        })
-
-        return NextResponse.json({ message: 'Logged out successfully' })
+        return apiSuccess(null, 'Logged out successfully')
 
     } catch (error) {
         console.error('Logout error:', error)
-        return NextResponse.json(
-            { error: 'Logout failed' },
-            { status: 500 }
-        )
+        const isAuthError = error?.message === 'Invalid token' || error?.message?.includes('authorization')
+        return apiError(isAuthError ? 'Unauthorized' : 'Logout failed', isAuthError ? 401 : 500, null)
     }
 }

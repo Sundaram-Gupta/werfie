@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { validateAdmin, unauthorizedResponse } from '@/lib/auth-guard';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function DELETE(request, { params }) {
     const adminUser = await validateAdmin(request);
@@ -12,10 +12,7 @@ export async function DELETE(request, { params }) {
 
     try {
         if (userId === adminUser.id) {
-            return NextResponse.json(
-                { error: 'Cannot delete yourself' },
-                { status: 400 }
-            );
+            return apiError('Cannot delete yourself', 400, null);
         }
 
         // Soft delete: Set status to DELETED
@@ -28,12 +25,9 @@ export async function DELETE(request, { params }) {
 
         console.log(`Admin update: User ${userId} soft deleted by ${adminUser.email}`);
 
-        return NextResponse.json(updatedUser);
+        return apiSuccess(updatedUser, 'User soft deleted successfully');
     } catch (error) {
         console.error('Error deleting user:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
+        return apiError('Internal server error', 500, null);
     }
 }

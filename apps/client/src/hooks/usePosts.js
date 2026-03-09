@@ -1,6 +1,6 @@
 import { postService, userService, authService, announcementService } from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export function usePosts(params = {}) {
     const { user: currentUser } = useAuth()
@@ -91,6 +91,14 @@ export function usePosts(params = {}) {
     useEffect(() => {
         fetchPosts()
     }, [JSON.stringify(params)])
+
+    const fetchRef = useRef(fetchPosts)
+    fetchRef.current = fetchPosts
+    useEffect(() => {
+        const onRefresh = () => fetchRef.current()
+        window.addEventListener('feed-refresh', onRefresh)
+        return () => window.removeEventListener('feed-refresh', onRefresh)
+    }, [])
 
     const createPost = async (content, mediaUrls = [], replyToId = null) => {
         try {

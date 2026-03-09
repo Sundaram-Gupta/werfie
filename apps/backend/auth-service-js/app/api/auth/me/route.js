@@ -1,26 +1,20 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/jwt'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 export async function GET(request) {
     try {
         const authHeader = request.headers.get('authorization')
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return NextResponse.json(
-                { error: 'Missing or invalid authorization header' },
-                { status: 401 }
-            )
+            return apiError('Missing or invalid authorization header', 401, null)
         }
 
         const token = authHeader.substring(7)
         const payload = await verifyToken(token)
 
         if (payload.type !== 'access') {
-            return NextResponse.json(
-                { error: 'Invalid token type' },
-                { status: 401 }
-            )
+            return apiError('Invalid token type', 401, null)
         }
 
         const user = await prisma.user.findUnique({
@@ -32,22 +26,16 @@ export async function GET(request) {
         })
 
         if (!user) {
-            return NextResponse.json(
-                { error: 'User not found' },
-                { status: 404 }
-            )
+            return apiError('User not found', 404, null)
         }
 
         // Exclude password
-        const { password, ...userWithoutPassword } = user
+        const { passwordHash, ...userWithoutPassword } = user
 
-        return NextResponse.json(userWithoutPassword)
+        return apiSuccess(userWithoutPassword, 'User retrieved successfully')
 
     } catch (error) {
         console.error('Get user error:', error)
-        return NextResponse.json(
-            { error: 'Unauthorized' },
-            { status: 401 }
-        )
+        return apiError('Unauthorized', 401, null)
     }
 }

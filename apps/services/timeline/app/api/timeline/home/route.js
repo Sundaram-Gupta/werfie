@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
 import { withAuth, getUserFromRequest } from '@/lib/auth'
 import { TimelineService } from '@/services/timeline.service'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 async function handler(request) {
     try {
@@ -12,13 +12,10 @@ async function handler(request) {
 
         const timeline = await TimelineService.getHomeTimeline(user.userId, limit, offset)
 
-        return NextResponse.json(timeline)
+        return apiSuccess(timeline, 'Timeline fetched successfully')
     } catch (error) {
         console.error('API Error:', error)
-        return NextResponse.json(
-            { error: 'Internal Server Error' },
-            { status: 500 }
-        )
+        return apiError('Internal Server Error', 500)
     }
 }
 

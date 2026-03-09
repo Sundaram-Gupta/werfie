@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
+import { apiSuccess } from '@/lib/api-response';
 
 export async function GET() {
-    // Mock data for Creator Studio
     const stats = {
         followers: {
             total: "12.4K",
@@ -21,5 +20,5 @@ export async function GET() {
         }
     };
 
-    return NextResponse.json(stats);
+    return apiSuccess(stats, 'Creator studio stats fetched successfully');
 }

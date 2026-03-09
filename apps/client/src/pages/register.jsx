@@ -54,7 +54,7 @@ export default function Register() {
             navigate('/')
         } catch (error) {
             console.error('Registration failed:', error)
-            const errorMsg = error.response?.data?.error || 'Registration failed. Please try again.'
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Registration failed. Please try again.'
             setServerError(errorMsg)
         } finally {
             setLoading(false)

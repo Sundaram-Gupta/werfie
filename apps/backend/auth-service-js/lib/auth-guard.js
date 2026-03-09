@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { verifyToken } from './jwt';
 import { prisma } from './prisma';
+import { apiError } from './api-response';
 
 export async function validateAdmin(request) {
     try {
@@ -37,8 +37,5 @@ export async function validateAdmin(request) {
 }
 
 export function unauthorizedResponse() {
-    return NextResponse.json(
-        { error: 'Unauthorized: Admin access required' },
-        { status: 403 }
-    );
+    return apiError('Unauthorized: Admin access required', 403, null);
 }

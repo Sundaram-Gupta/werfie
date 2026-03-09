@@ -66,8 +66,7 @@ export function ReplyModal({ post, children }) {
             await postService.createPost(replyText.trim(), [], post.id)
             setReplyText("")
             setOpen(false)
-            // Reload to show the new reply
-            window.location.reload()
+            window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
             console.error('Error posting reply:', error)
             alert('Failed to post reply. Please try again.')

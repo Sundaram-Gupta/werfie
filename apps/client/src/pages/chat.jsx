@@ -82,11 +82,12 @@ export default function Chat() {
         try {
             setLoading(true)
             const data = await messagingService.getConversations()
+            const list = Array.isArray(data) ? data : []
             
             // Enrich conversations with user profiles
             // Collect all OTHER user IDs
             const otherUserIds = new Set()
-            data.forEach(c => {
+            list.forEach(c => {
                 c.participants.forEach(p => {
                      if (p.userId !== currentUserId) otherUserIds.add(p.userId)
                 })
@@ -99,7 +100,7 @@ export default function Chat() {
                 userMap[normalized.id] = normalized
             })
 
-            const enriched = data.map(c => {
+            const enriched = list.map(c => {
                 const otherParticipant = c.participants.find(p => p.userId !== currentUserId)
                 const otherUser = userMap[otherParticipant?.userId] || { id: 'unknown', name: 'Unknown', handle: 'unknown' }
                 

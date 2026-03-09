@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 type Params = {
     params: Promise<{ id: string }>
@@ -18,10 +19,7 @@ export async function PATCH(
         // Validate Status Logic
         const validRoles = ['USER', 'BUSINESS', 'MODERATOR', 'ADMIN'];
         if (!validRoles.includes(role)) {
-            return NextResponse.json(
-                { success: false, error: `Invalid role. Allowed: ${validRoles.join(', ')}` },
-                { status: 400 }
-            );
+            return apiError(`Invalid role. Allowed: ${validRoles.join(', ')}`, 400);
         }
 
         const updatedUser = await prisma.user.update({
@@ -31,17 +29,13 @@ export async function PATCH(
 
         console.log(`[AUDIT] Admin ${adminId} updated role of ${id} to ${role}`);
 
-        return NextResponse.json({
-            success: true,
-            message: `User role updated to ${role}`,
-            user: { id: updatedUser.id, role: updatedUser.role }
-        });
+        return apiSuccess(
+            { user: { id: updatedUser.id, role: updatedUser.role } },
+            `User role updated to ${role}`
+        );
 
     } catch (error: any) {
         console.error('Update Role Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to update user role' },
-            { status: 500 }
-        );
+        return apiError('Failed to update user role', 500);
     }
 }

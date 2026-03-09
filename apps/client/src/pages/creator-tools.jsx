@@ -1,11 +1,15 @@
 
 import { useParams } from "react-router-dom"
+import { useEffect } from "react"
 import { BarChart, Video, Calendar, Users, ArrowLeft, Heart, Repeat2, MessageCircle, Share, Bookmark, Upload, X, Feather, BadgeCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { PostCard } from "@/components/feed/post-card"
+import { postService } from "@/services/api"
+import { usePosts } from "@/hooks/usePosts"
 
 function PageHeader({ title, description, icon: Icon }) {
     const navigate = useNavigate()
@@ -462,143 +466,79 @@ export function AudienceInsights() {
 
 export function PostDetail() {
     const { id } = useParams()
-    const [liked, setLiked] = useState(false)
-    const [reposted, setReposted] = useState(false)
-    const [bookmarked, setBookmarked] = useState(false)
+    const [post, setPost] = useState(null)
+    const [replies, setReplies] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(null)
+    const { likePost, unlikePost, retweetPost, unretweetPost, deletePost } = usePosts({ tab: 'for-you' })
 
-    // Mock post data
-    const post = {
-        author: {
-            name: "Sarah Chen",
-            username: "@sarahchen",
-            avatar: "SC",
-            verified: true
-        },
-        content: "Just shipped a major update to our design system! 🎨✨\n\nKey improvements:\n• New color tokens for better accessibility\n• Refined spacing scale\n• Updated component variants\n• Comprehensive documentation\n\nCheck it out and let me know what you think! #DesignSystems #UI",
-        timestamp: "2h ago",
-        stats: {
-            replies: 24,
-            reposts: 156,
-            likes: 892,
-            bookmarks: 67
+    useEffect(() => {
+        if (!id) return
+        const fetchData = async () => {
+            try {
+                setLoading(true)
+                const [postData, repliesData] = await Promise.all([
+                    postService.getPost(id),
+                    postService.getReplies(id)
+                ])
+                setPost(postData)
+                setReplies(Array.isArray(repliesData) ? repliesData : repliesData?.posts || [])
+            } catch (err) {
+                console.error('PostDetail fetch error:', err)
+                setError(err.response?.data?.message || err.message || 'Failed to load post')
+            } finally {
+                setLoading(false)
+            }
         }
-    }
+        fetchData()
+    }, [id])
 
-    const replies = [
-        { author: "Alex Rivera", username: "@alexr", avatar: "AR", text: "This looks amazing! The new color system is so much more intuitive.", time: "1h ago" },
-        { author: "Jamie Lee", username: "@jamielee", avatar: "JL", text: "Love the documentation updates. Makes it so much easier to onboard new designers!", time: "45m ago" }
-    ]
+    if (loading) {
+        return (
+            <div>
+                <PageHeader title="Post" />
+                <div className="p-8 text-center text-muted-foreground">Loading...</div>
+            </div>
+        )
+    }
+    if (error || !post) {
+        return (
+            <div>
+                <PageHeader title="Post" />
+                <div className="p-8 text-center text-muted-foreground">{error || 'Post not found'}</div>
+            </div>
+        )
+    }
 
     return (
         <div>
             <PageHeader title="Post" />
-
-            {/* Main Post */}
-            <div className="border-b border-border">
-                <div className="p-4">
-                    {/* Author Info */}
-                    <div className="flex items-start gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold flex-shrink-0">
-                            {post.author.avatar}
-                        </div>
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold hover:underline cursor-pointer">{post.author.name}</span>
-                                {post.author.verified && (
-                                    <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />
-                                )}
-                            </div>
-                            <div className="text-sm text-muted-foreground">{post.author.username}</div>
-                        </div>
+            <PostCard
+                post={post}
+                onLike={likePost}
+                onUnlike={unlikePost}
+                onRetweet={retweetPost}
+                onUnretweet={unretweetPost}
+                onDelete={deletePost}
+            />
+            {replies.length > 0 && (
+                <div className="border-t border-border">
+                    <div className="px-4 py-3 border-b border-border">
+                        <h3 className="font-bold text-[15px]">Replies</h3>
                     </div>
-
-                    {/* Post Content */}
-                    <div className="text-[15px] leading-normal whitespace-pre-wrap mb-4">
-                        {post.content}
-                    </div>
-
-                    {/* Timestamp */}
-                    <div className="text-sm text-muted-foreground mb-4 pb-4 border-b border-border">
-                        {post.timestamp} · Post #{id}
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex gap-6 py-4 border-b border-border text-sm">
-                        <div><span className="font-bold">{post.stats.reposts}</span> <span className="text-muted-foreground">Reposts</span></div>
-                        <div><span className="font-bold">{post.stats.likes}</span> <span className="text-muted-foreground">Likes</span></div>
-                        <div><span className="font-bold">{post.stats.bookmarks}</span> <span className="text-muted-foreground">Bookmarks</span></div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex justify-around py-2 border-b border-border">
-                        <Button variant="ghost" size="sm" className="flex items-center gap-2 hover:text-blue-500 transition-colors">
-                            <MessageCircle className="w-5 h-5" />
-                            <span className="text-sm">{post.stats.replies}</span>
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`flex items-center gap-2 transition-colors ${reposted ? 'text-green-500' : 'hover:text-green-500'}`}
-                            onClick={() => setReposted(!reposted)}
-                        >
-                            <Repeat2 className="w-5 h-5" />
-                            <span className="text-sm">{post.stats.reposts + (reposted ? 1 : 0)}</span>
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`flex items-center gap-2 transition-colors ${liked ? 'text-pink-500' : 'hover:text-pink-500'}`}
-                            onClick={() => setLiked(!liked)}
-                        >
-                            <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
-                            <span className="text-sm">{post.stats.likes + (liked ? 1 : 0)}</span>
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`flex items-center gap-2 transition-colors ${bookmarked ? 'text-blue-500' : 'hover:text-blue-500'}`}
-                            onClick={() => setBookmarked(!bookmarked)}
-                        >
-                            <Bookmark className={`w-5 h-5 ${bookmarked ? 'fill-current' : ''}`} />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="hover:text-blue-500 transition-colors">
-                            <Share className="w-5 h-5" />
-                        </Button>
-                    </div>
+                    {replies.map((reply) => (
+                        <PostCard
+                            key={reply.id}
+                            post={reply}
+                            onLike={likePost}
+                            onUnlike={unlikePost}
+                            onRetweet={retweetPost}
+                            onUnretweet={unretweetPost}
+                            onDelete={deletePost}
+                        />
+                    ))}
                 </div>
-            </div>
-
-            {/* Replies */}
-            <div>
-                <div className="p-4 border-b border-border">
-                    <h3 className="font-bold text-lg">Replies</h3>
-                </div>
-                {replies.map((reply, i) => (
-                    <div key={i} className="p-4 border-b border-border hover:bg-white/[0.02] transition-colors">
-                        <div className="flex gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                                {reply.avatar}
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-bold text-sm hover:underline cursor-pointer">{reply.author}</span>
-                                    <span className="text-muted-foreground text-sm">{reply.username}</span>
-                                    <span className="text-muted-foreground text-sm">· {reply.time}</span>
-                                </div>
-                                <p className="text-[15px]">{reply.text}</p>
-                                <div className="flex gap-12 mt-2 text-muted-foreground">
-                                    <button className="hover:text-blue-500 transition-colors flex items-center gap-1">
-                                        <MessageCircle className="w-4 h-4" />
-                                    </button>
-                                    <button className="hover:text-pink-500 transition-colors flex items-center gap-1">
-                                        <Heart className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            )}
         </div>
     )
 }

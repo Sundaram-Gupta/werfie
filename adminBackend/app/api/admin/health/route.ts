@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { apiSuccess } from '@/lib/api-response';
 export async function GET() {
-    return NextResponse.json({ status: 'admin-ok' });
+    return apiSuccess({ status: 'admin-ok', service: 'admin-backend' }, 'Admin service healthy');
 }

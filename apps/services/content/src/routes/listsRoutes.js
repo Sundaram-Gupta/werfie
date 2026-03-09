@@ -31,8 +31,8 @@ router.get('/pinned', authenticateToken, async (req, res) => {
     }
 });
 
-// GET /discover: Fetch discoverable lists
-router.get('/discover', authenticateToken, async (req, res) => {
+// GET /discover: Fetch discoverable lists (public - no auth required)
+router.get('/discover', async (req, res) => {
     try {
         const discover = await prisma.list.findMany({
             where: { isPrivate: false },
@@ -44,8 +44,8 @@ router.get('/discover', authenticateToken, async (req, res) => {
         const formatted = discover.map(list => ({
             id: list.id,
             name: list.name,
-            owner: list.owner ? `@${list.owner.email.split('@')[0]}` : "@user",
-            members: "5.2K members"
+            owner: list.owner?.email ? `@${list.owner.email.split('@')[0]}` : '@user',
+            members: '5.2K members'
         }));
 
         res.json(formatted);
@@ -70,6 +70,23 @@ router.get('/yours', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error fetching your lists:', error);
         res.status(500).json({ error: 'Failed to fetch your lists' });
+    }
+});
+
+// GET /:id: Fetch a single list by id
+router.get('/:id', async (req, res) => {
+    try {
+        const list = await prisma.list.findUnique({
+            where: { id: req.params.id },
+            include: { owner: true }
+        });
+        if (!list) {
+            return res.status(404).json({ status: false, message: 'List not found', data: null });
+        }
+        res.status(200).json({ status: true, message: 'List fetched successfully', data: list });
+    } catch (error) {
+        console.error('Error fetching list:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to fetch list', data: null });
     }
 });
 
@@ -124,7 +141,31 @@ router.post('/:id/members', authenticateToken, async (req, res) => {
     }
 });
 
-// DELETE /:id/members/:userId: Remove a user from a list
+// DELETE /:id/members: Remove current user from list (leave list)
+router.delete('/:id/members', authenticateToken, async (req, res) => {
+    try {
+        const listId = req.params.id;
+        const userId = req.user.userId || req.user.id;
+        const list = await prisma.list.findUnique({ where: { id: listId } });
+        if (!list) {
+            return res.status(404).json({ status: false, message: 'List not found', data: null });
+        }
+        await prisma.listMember.delete({
+            where: {
+                listId_userId: { listId, userId }
+            }
+        });
+        res.status(200).json({ status: true, message: 'Left list successfully', data: null });
+    } catch (error) {
+        if (error.code === 'P2025') {
+            return res.status(404).json({ status: false, message: 'Not a member of this list', data: null });
+        }
+        console.error('Error leaving list:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to leave list', data: null });
+    }
+});
+
+// DELETE /:id/members/:userId: Remove a user from a list (owner only)
 router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
     try {
         const { id: listId, userId } = req.params;
@@ -135,7 +176,7 @@ router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
         });
 
         if (!list || list.ownerId !== req.user.id) {
-            return res.status(403).json({ error: 'Not authorized' });
+            return res.status(403).json({ status: false, message: 'Not authorized', data: null });
         }
 
         await prisma.listMember.delete({
@@ -147,10 +188,13 @@ router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
             }
         });
 
-        res.json({ success: true });
+        res.status(200).json({ status: true, message: 'Member removed successfully', data: null });
     } catch (error) {
+        if (error.code === 'P2025') {
+            return res.status(404).json({ status: false, message: 'Member not found in list', data: null });
+        }
         console.error('Error removing member from list:', error);
-        res.status(500).json({ error: 'Failed to remove member' });
+        res.status(500).json({ status: false, message: error.message || 'Failed to remove member', data: null });
     }
 });
 

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAdminAction } from '@/lib/audit';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(req: NextRequest) {
     try {
@@ -8,9 +9,9 @@ export async function GET(req: NextRequest) {
             orderBy: { createdAt: 'desc' },
             take: 20
         });
-        return NextResponse.json(broadcasts);
+        return apiSuccess(broadcasts, 'Broadcasts fetched successfully');
     } catch (error) {
-        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+        return apiError('Failed to fetch broadcasts', 500);
     }
 }
 
@@ -38,8 +39,8 @@ export async function POST(req: NextRequest) {
         // 3. TODO: Integrate with real Push Service (FCM/Socket.io)
         // For now, this mimics the control flow.
 
-        return NextResponse.json({ success: true, broadcast });
+        return apiSuccess({ broadcast }, 'Broadcast sent successfully');
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return apiError(error.message, 500);
     }
 }

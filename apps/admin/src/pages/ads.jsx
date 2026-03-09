@@ -63,9 +63,13 @@ export default function AdsPage() {
                     api.get('/admin/business'),
                     api.get('/admin/monetization')
                 ]);
-                
+
+                const campaignsData = Array.isArray(campaignsRes.data) ? campaignsRes.data : [];
+                const accountsData = Array.isArray(accountsRes.data) ? accountsRes.data : [];
+                const creatorsData = Array.isArray(creatorsRes.data) ? creatorsRes.data : [];
+
                 // Map API data to UI format
-                setCampaigns(campaignsRes.data.map(c => ({
+                setCampaigns(campaignsData.map(c => ({
                     id: c.id,
                     name: c.name,
                     client: c.adAccount?.business?.companyName || 'Unknown',
@@ -75,7 +79,7 @@ export default function AdsPage() {
                     clicks: c.clicks
                 })));
 
-                setAdAccounts(accountsRes.data.map(a => ({
+                setAdAccounts(accountsData.map(a => ({
                     id: a.id,
                     business: a.companyName,
                     type: a.industry,
@@ -83,7 +87,7 @@ export default function AdsPage() {
                     appliedDate: new Date(a.createdAt).toISOString().split('T')[0]
                 })));
 
-                setCreators(creatorsRes.data.map(cr => ({
+                setCreators(creatorsData.map(cr => ({
                     id: cr.id,
                     name: cr.user?.profile?.name || 'Unknown',
                     handle: cr.user?.profile?.handle ? `@${cr.user.profile.handle}` : 'Unknown',

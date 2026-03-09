@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 export async function GET(request) {
     try {
@@ -15,9 +15,9 @@ export async function GET(request) {
             take: limit,
         })
 
-        return NextResponse.json(trends)
+        return apiSuccess(trends, 'Trends fetched successfully')
     } catch (error) {
         console.error('Error fetching trends:', error)
-        return NextResponse.json({ error: 'Failed to fetch trends' }, { status: 500 })
+        return apiError('Failed to fetch trends', 500, null)
     }
 }

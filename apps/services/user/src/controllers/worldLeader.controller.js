@@ -21,7 +21,7 @@ exports.createLeader = async (req, res) => {
         });
 
         if (!institution) {
-            return res.status(404).json({ error: 'Institution not found.' });
+            return res.status(404).json({ status: false, message: 'Institution not found.', data: null });
         }
 
         const newLeader = await prisma.worldLeader.create({
@@ -38,13 +38,10 @@ exports.createLeader = async (req, res) => {
             }
         });
 
-        return res.status(201).json({
-            message: 'World leader created successfully',
-            leader: newLeader
-        });
+        return res.status(201).json({ status: true, message: 'World leader created successfully', data: newLeader });
     } catch (error) {
         console.error('Error creating world leader:', error);
-        res.status(500).json({ error: 'Failed to create world leader' });
+        res.status(500).json({ status: false, message: error.message || 'Failed to create world leader', data: null });
     }
 };
 
@@ -58,13 +55,10 @@ exports.updateLeader = async (req, res) => {
             data: updateData
         });
 
-        res.status(200).json({
-            message: 'World leader updated successfully',
-            leader
-        });
+        res.status(200).json({ status: true, message: 'World leader updated successfully', data: leader });
     } catch (error) {
         console.error('Error updating world leader:', error);
-        res.status(500).json({ error: 'Failed to update world leader' });
+        res.status(500).json({ status: false, message: error.message || 'Failed to update world leader', data: null });
     }
 };
 
@@ -79,13 +73,14 @@ exports.getLeader = async (req, res) => {
         });
 
         if (!leader) {
-            return res.status(404).json({ error: 'World leader not found.' });
+            return res.status(404).json({ status: false, message: 'World leader not found.', data: null });
         }
 
-        res.status(200).json(leader);
+        res.status(200).json({ status: true, message: 'Leader fetched successfully', data: leader });
     } catch (error) {
         console.error('Error fetching world leader:', error);
-        res.status(500).json({ error: 'Failed to fetch world leader' });
+        const message = error.message || 'Failed to fetch world leader';
+        res.status(500).json({ status: false, message, data: null });
     }
 };
 
@@ -105,10 +100,11 @@ exports.listLeaders = async (req, res) => {
             }
         });
 
-        res.status(200).json(leaders);
+        res.status(200).json({ status: true, message: 'Leaders fetched successfully', data: leaders });
     } catch (error) {
         console.error('Error listing world leaders:', error);
-        res.status(500).json({ error: 'Failed to list world leaders' });
+        const message = error.message || 'Failed to list world leaders';
+        res.status(500).json({ status: false, message, data: null });
     }
 };
 

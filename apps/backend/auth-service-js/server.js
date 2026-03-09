@@ -3,7 +3,10 @@ const next = require('next');
 const http = require('http');
 const httpProxy = require('http-proxy');
 const { parse } = require('url');
+const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
@@ -53,9 +56,23 @@ mainServer.use((req, res, next) => {
     next();
 });
 
+// Swagger API Docs
+const swaggerPath = path.join(__dirname, '..', '..', '..', 'swagger.yaml');
+if (fs.existsSync(swaggerPath)) {
+    mainServer.get('/api-docs/spec', (req, res) => {
+        res.setHeader('Content-Type', 'application/x-yaml');
+        res.send(fs.readFileSync(swaggerPath, 'utf8'));
+    });
+    mainServer.use('/api-docs', swaggerUi.serve, swaggerUi.setup(null, {
+        swaggerOptions: { url: '/api-docs/spec' }
+    }));
+    console.log('[Gateway] Swagger UI at http://localhost:' + port + '/api-docs');
+} else {
+    console.warn('[Gateway] swagger.yaml not found at', swaggerPath);
+}
+
 // 1. Messaging Service Proxy (WS + REST)
 mainServer.all('/api/messages*', (req, res) => {
-    console.log(`[Gateway] Proxying REST to Messaging Service: ${req.url}`);
     proxy.web(req, res, { target: 'http://127.0.0.1:3019' });
 });
 
@@ -109,6 +126,17 @@ mainServer.all('/api/debate*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 
+mainServer.all('/api/feed*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/enterprise*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/media*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
 
 // User Service Proxy
 mainServer.all('/api/users*', (req, res) => {
@@ -123,6 +151,17 @@ mainServer.all('/api/institutional*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
 });
 
+mainServer.all('/api/leaders*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+});
+
+// Admin Backend Proxy (admin-backend runs on 3012)
+mainServer.all('/api/admin*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3012' });
+});
+mainServer.all('/api/docs*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3012' });
+});
 
 // 4. Other Microservices Catch-all
 const microservices = [

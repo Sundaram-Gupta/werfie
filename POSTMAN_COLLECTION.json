@@ -53,12 +53,13 @@
                             "listen": "test",
                             "script": {
                                 "exec": [
-                                    "if (pm.response.code === 200) {",
-                                    "    const jsonData = pm.response.json();",
-                                    "    pm.collectionVariables.set('accessToken', jsonData.accessToken);",
-                                    "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
-                                    "    pm.collectionVariables.set('userId', jsonData.user.id);",
-                                    "    pm.environment.set('accessToken', jsonData.accessToken);",
+                                    "if (pm.response.code === 201) {",
+                                    "    const j = pm.response.json();",
+                                    "    if (j.accessToken) {",
+                                    "        pm.collectionVariables.set('accessToken', j.accessToken);",
+                                    "        if (j.refreshToken) pm.collectionVariables.set('refreshToken', j.refreshToken);",
+                                    "        pm.collectionVariables.set('userId', (j.user && j.user.id) || j.id || '');",
+                                    "    }",
                                     "}"
                                 ]
                             }
@@ -99,11 +100,13 @@
                             "script": {
                                 "exec": [
                                     "if (pm.response.code === 200) {",
-                                    "    const jsonData = pm.response.json();",
-                                    "    pm.collectionVariables.set('accessToken', jsonData.accessToken);",
-                                    "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
-                                    "    pm.collectionVariables.set('userId', jsonData.user.id);",
-                                    "    pm.environment.set('accessToken', jsonData.accessToken);",
+                                    "    const j = pm.response.json();",
+                                    "    if (j.accessToken) {",
+                                    "        pm.collectionVariables.set('accessToken', j.accessToken);",
+                                    "        if (j.refreshToken) pm.collectionVariables.set('refreshToken', j.refreshToken);",
+                                    "        pm.collectionVariables.set('userId', j.id || (j.user && j.user.id) || '');",
+                                    "        if (typeof pm.environment !== 'undefined') pm.environment.set('accessToken', j.accessToken);",
+                                    "    }",
                                     "}"
                                 ]
                             }

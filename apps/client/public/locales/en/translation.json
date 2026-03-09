@@ -25,7 +25,26 @@
         "be_first_to_post": "Be the first to post something!",
         "everyone_can_reply": "Everyone can reply",
         "uploading": "Uploading...",
-        "posting": "Posting..."
+        "posting": "Posting...",
+        "replying_to": "Replying to",
+        "add_media": "Add photos or videos",
+        "add_poll": "Create poll",
+        "add_emoji": "Add emoji",
+        "schedule": "Schedule post",
+        "add_location": "Add location",
+        "location_placeholder": "e.g. New York, NY",
+        "poll_question": "Question",
+        "poll_question_placeholder": "What's your poll about?",
+        "poll_options": "Options",
+        "option": "Option",
+        "add_option": "Add option",
+        "add_poll_confirm": "Add poll",
+        "schedule_post": "Schedule post",
+        "date": "Date",
+        "time": "Time",
+        "schedule_note": "Note: Scheduling requires backend support. Your post will be published immediately.",
+        "poll_votes": "votes",
+        "poll_left": "left"
     },
     "time": {
         "s": "s",
@@ -136,7 +155,9 @@
     },
     "common": {
         "following": "Following",
-        "loading": "Loading..."
+        "loading": "Loading...",
+        "cancel": "Cancel",
+        "add": "Add"
     },
     "settings_page": {
         "username": "Username",

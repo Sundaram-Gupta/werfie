@@ -56,11 +56,11 @@ export default function Dashboard() {
                     api.get('/admin/dashboard/recent-activity')
                 ]);
 
-                if (statsRes.data.success) {
-                    setStats(statsRes.data.data.stats);
+                if (statsRes.data?.stats) {
+                    setStats(statsRes.data.stats);
                 }
-                if (activityRes.data.success) {
-                    setActivities(activityRes.data.data);
+                if (Array.isArray(activityRes.data)) {
+                    setActivities(activityRes.data);
                 }
                 setError(null);
             } catch (error) {

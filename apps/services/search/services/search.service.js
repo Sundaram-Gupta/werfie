@@ -22,10 +22,11 @@ export class SearchService {
     }
 
     static async searchPosts(query, limit = 20) {
-        const client = getElasticClient()
-        const result = await client.search({
-            index: 'posts',
-            body: {
+        try {
+            const client = getElasticClient()
+            if (!client) return []
+            const result = await client.search({
+                index: 'posts',
                 query: {
                     multi_match: {
                         query,
@@ -35,10 +36,13 @@ export class SearchService {
                 },
                 size: limit,
                 sort: [{ _score: 'desc' }, { createdAt: 'desc' }]
-            }
-        })
-
-        return result.hits.hits.map(hit => hit._source)
+            })
+            const hits = result.hits?.hits ?? []
+            return hits.map(hit => hit._source ?? hit)
+        } catch (err) {
+            console.warn('Elasticsearch search failed, returning empty:', err?.message)
+            return []
+        }
     }
 
     static async getTrendingHashtags() {

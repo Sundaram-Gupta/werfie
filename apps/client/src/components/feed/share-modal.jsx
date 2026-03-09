@@ -32,11 +32,12 @@ export function ShareModal({ isOpen, onClose, postUrl }) {
         try {
             setLoading(true)
             const data = await messagingService.getConversations()
+            const list = Array.isArray(data) ? data : []
             
             // Enrich with user data (simplified from Chat.jsx)
             const currentUserId = authUser.id
             const otherUserIds = new Set()
-            data.forEach(c => {
+            list.forEach(c => {
                 c.participants.forEach(p => {
                     if (p.userId !== currentUserId) otherUserIds.add(p.userId)
                 })
@@ -48,7 +49,7 @@ export function ShareModal({ isOpen, onClose, postUrl }) {
                 userMap[u.id] = u
             })
 
-            const enriched = data.map(c => {
+            const enriched = list.map(c => {
                 const otherParticipant = c.participants.find(p => p.userId !== currentUserId)
                 const otherUser = userMap[otherParticipant?.userId]
                 return {

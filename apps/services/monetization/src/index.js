@@ -11,14 +11,19 @@ const authenticateToken = require('./middleware/auth');
 
 app.use(cors());
 app.use(express.json());
+app.use(require('./middleware/api-response'));
 
-// Path rewrite for Gateway
+// Path rewrite for Gateway (must run first so /health matches after rewrite)
 app.use((req, res, next) => {
     if (req.url.startsWith('/api/monetization')) {
         req.url = req.url.replace('/api/monetization', '');
         if (!req.url.startsWith('/')) req.url = '/' + req.url;
     }
     next();
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', service: 'monetization-service' });
 });
 
 // GET /profile: Get user's monetization status
@@ -29,7 +34,7 @@ app.get('/profile', authenticateToken, async (req, res) => {
             where: { userId },
             include: { tiers: true }
         });
-        if (!profile) return res.status(404).json({ error: 'Monetization not enabled' });
+        if (!profile) return res.status(200).json({ status: true, message: 'Monetization not enabled', data: null });
         res.json(profile);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch monetization profile' });

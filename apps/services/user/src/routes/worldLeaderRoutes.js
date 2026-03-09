@@ -6,7 +6,9 @@ const worldLeaderController = require('../controllers/worldLeader.controller');
 // Assuming authentication middleware is applied at app.js level or similar.
 
 router.post('/create', worldLeaderController.createLeader);
+router.post('/', worldLeaderController.createLeader);
 router.put('/update/:id', worldLeaderController.updateLeader);
+router.put('/:id', worldLeaderController.updateLeader);
 router.get('/', worldLeaderController.listLeaders);
 router.get('/:id', worldLeaderController.getLeader);
 router.delete('/:id', worldLeaderController.deleteLeader);

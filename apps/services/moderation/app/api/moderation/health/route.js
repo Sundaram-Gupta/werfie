@@ -1,7 +1,9 @@
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    return new Response(JSON.stringify({ status: 'healthy', service: 'moderation-service' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-    })
+    return Response.json({
+        status: true,
+        message: 'Moderation service healthy',
+        data: { status: 'healthy', service: 'moderation-service' }
+    });
 }

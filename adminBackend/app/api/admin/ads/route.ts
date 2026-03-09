@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(req: NextRequest) {
     try {
@@ -20,10 +21,10 @@ export async function GET(req: NextRequest) {
             },
             orderBy: { createdAt: 'desc' }
         });
-        return NextResponse.json(campaigns);
+        return apiSuccess(campaigns, 'Campaigns fetched successfully');
     } catch (error) {
         console.error('Error fetching admin campaigns:', error);
-        return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
+        return apiError('Failed to fetch campaigns', 500);
     }
 }
 
@@ -34,8 +35,8 @@ export async function PATCH(req: NextRequest) {
             where: { id },
             data: { status }
         });
-        return NextResponse.json(campaign);
+        return apiSuccess(campaign, 'Campaign updated successfully');
     } catch (error) {
-        return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 });
+        return apiError('Failed to update campaign', 500);
     }
 }

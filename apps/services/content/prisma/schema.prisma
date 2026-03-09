@@ -31,6 +31,7 @@ model User {
   posts         Post[]
   likes         Like[]
   retweets      Retweet[]
+  bookmarks     Bookmark[]
   followers     Follow[]     @relation("UserFollowers")
   following     Follow[]     @relation("UserFollowing")
   notifications Notification[] @relation("NotificationRecipient")
@@ -235,6 +236,7 @@ model Post {
 
   likes       Like[]
   retweets    Retweet[]
+  bookmarks   Bookmark[]
   notifications Notification[]
   communityPosts CommunityPost[]
   
@@ -283,6 +285,20 @@ model Retweet {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([postId, userId])
   @@index([postId])
   @@index([userId])

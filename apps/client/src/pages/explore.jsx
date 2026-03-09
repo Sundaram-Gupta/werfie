@@ -34,7 +34,7 @@ export default function Explore() {
             setLoading(true)
             try {
                 const items = await searchService.getExploreItems(activeTab)
-                setExploreItems(items)
+                setExploreItems(Array.isArray(items) ? items : [])
             } catch (e) {
                 console.error(e)
             } finally {

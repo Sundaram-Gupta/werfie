@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { validateAdmin, unauthorizedResponse } from '@/lib/auth-guard';
+import { apiSuccess, apiError } from '@/lib/api-response';
 import { z } from 'zod';
 
 const roleSchema = z.object({
@@ -21,10 +21,7 @@ export async function PATCH(request, { params }) {
 
         // Prevent admin from changing their own role (optional safety)
         if (userId === adminUser.id) {
-            return NextResponse.json(
-                { error: 'Cannot update your own role' },
-                { status: 400 }
-            );
+            return apiError('Cannot update your own role', 400, null);
         }
 
         const updatedUser = await prisma.user.update({
@@ -35,18 +32,12 @@ export async function PATCH(request, { params }) {
 
         console.log(`Admin update: User ${userId} role changed to ${role} by ${adminUser.email}`);
 
-        return NextResponse.json(updatedUser);
+        return apiSuccess(updatedUser, 'User role updated successfully');
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: 'Validation error', details: error.issues },
-                { status: 400 }
-            );
+            return apiError('Validation error', 400, { details: error.issues });
         }
         console.error('Error updating user role:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
+        return apiError('Internal server error', 500, null);
     }
 }

@@ -1,0 +1,1926 @@
+openapi: 3.0.3
+info:
+  title: Werfie API
+  description: |
+    Complete API documentation for Werfie (X-Clone) platform.
+    - **Client Gateway**: http://localhost:3001
+    - **Admin Backend**: http://localhost:3012
+    - **Messaging Service**: http://localhost:3019 (direct or via gateway)
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3001
+    description: Client Gateway (Auth, Users, Posts, etc.)
+  - url: http://localhost:3019
+    description: Messaging Service (direct)
+  - url: http://localhost:3012
+    description: Admin Backend
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+
+  security:
+    - bearerAuth: []
+
+paths:
+  # ============ AUTH ============
+  # Use POST /api/auth/login first with the example body, then copy accessToken and click "Authorize" (lock icon) to paste it. Then /me, /change-password work. For /logout use refresh token in Authorize; for /refresh send refreshToken in body.
+  /api/auth/login:
+    post:
+      summary: Login
+      description: Returns accessToken and refreshToken. Use accessToken in Authorize for /me and /change-password.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+            example:
+              email: user1@xclone.com
+              password: password123
+      responses:
+        '200': { description: Login successful, returns token and user }
+        '400': { description: Validation error }
+        '401': { description: Invalid credentials }
+
+  /api/auth/register:
+    post:
+      summary: Register
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, handle]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                name: { type: string }
+                handle: { type: string }
+            example:
+              email: newuser@example.com
+              password: password123
+              name: New User
+              handle: newuser
+      responses:
+        '201': { description: User created }
+        '400': { description: Validation error or email/handle taken }
+        '500': { description: Internal server error }
+
+  /api/auth/me:
+    get:
+      summary: Get current user
+      description: Requires Bearer token. Click Authorize and paste the accessToken from login.
+      tags: [Auth]
+      security: [bearerAuth: []]
+      responses:
+        '200': { description: Current user }
+        '401': { description: Missing or invalid token }
+
+  /api/auth/logout:
+    post:
+      summary: Logout
+      description: Requires Bearer access token (same as /me). Invalidates all refresh tokens for the user.
+      tags: [Auth]
+      security: [bearerAuth: []]
+      responses:
+        '200': { description: Logged out }
+        '401': { description: Missing or invalid token }
+
+  /api/auth/refresh:
+    post:
+      summary: Refresh token
+      description: Send refreshToken from login response in body. Returns new accessToken. No Bearer needed.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+            example:
+              refreshToken: "<paste refreshToken from login response>"
+      responses:
+        '200': { description: New access token }
+        '400': { description: Refresh token required }
+        '401': { description: Invalid or expired refresh token }
+
+  /api/auth/change-password:
+    post:
+      summary: Change password
+      description: Requires Bearer access token. Click Authorize and paste accessToken from login.
+      tags: [Auth]
+      security: [bearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+            example:
+              currentPassword: password123
+              newPassword: newpassword456
+      responses:
+        '200': { description: Password changed }
+        '400': { description: Incorrect current password }
+        '401': { description: Unauthorized }
+        '404': { description: User not found }
+
+  # ============ USERS ============
+  /api/users/profile:
+    get:
+      summary: Get my profile
+      tags: [Users]
+      responses:
+        '200': { description: User profile }
+
+  /api/users/{id}:
+    get:
+      summary: Get user by ID
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: User }
+        '404': { description: User not found }
+    put:
+      summary: Update profile
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                bio: { type: string }
+                avatarUrl: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/users/{id}/follow:
+    post:
+      summary: Follow user
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Following }
+    delete:
+      summary: Unfollow user
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Unfollowed }
+
+  /api/users/{id}/followers:
+    get:
+      summary: Get followers
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200': { description: List of followers }
+
+  /api/users/{id}/following:
+    get:
+      summary: Get following
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200': { description: List of following }
+
+  /api/users/search:
+    get:
+      summary: Search users
+      tags: [Users]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: Search results }
+
+  /api/users/suggestions:
+    get:
+      summary: Who to follow
+      tags: [Users]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: Suggested users }
+
+  # ============ POSTS ============
+  /api/posts:
+    get:
+      summary: Get feed
+      tags: [Posts]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200': { description: List of posts }
+    post:
+      summary: Create post
+      tags: [Posts]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+                media: { type: array, items: { type: string, format: binary } }
+      responses:
+        '201': { description: Post created }
+
+  /api/posts/{id}:
+    get:
+      summary: Get single post
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Post }
+    delete:
+      summary: Delete post
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+
+  /api/posts/{id}/like:
+    post:
+      summary: Like post
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Liked }
+    delete:
+      summary: Unlike post
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Unliked }
+
+  /api/posts/{id}/retweet:
+    post:
+      summary: Retweet
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Retweeted }
+    delete:
+      summary: Remove retweet
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Removed }
+
+  /api/posts/{id}/replies:
+    get:
+      summary: Get replies
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: List of replies }
+
+  /api/posts/{id}/bookmark:
+    post:
+      summary: Bookmark post
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Bookmarked }
+    delete:
+      summary: Remove bookmark
+      tags: [Posts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Removed }
+
+  /api/posts/following:
+    get:
+      summary: Get following feed
+      tags: [Posts]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Feed }
+
+  /api/posts/timeline/home:
+    get:
+      summary: Home timeline
+      tags: [Posts]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Home timeline }
+
+  /api/posts/search:
+    get:
+      summary: Search posts
+      tags: [Posts]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Search results }
+
+  /api/posts/bookmarks:
+    get:
+      summary: Get bookmarks
+      tags: [Posts]
+      responses:
+        '200': { description: Bookmarked posts }
+
+  # ============ TIMELINE & EXPLORE ============
+  /api/timeline/home:
+    get:
+      summary: Home timeline
+      tags: [Timeline]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Home timeline }
+
+  /api/trends:
+    get:
+      summary: Get trends
+      tags: [Explore]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: Trending topics }
+
+  /api/explore:
+    get:
+      summary: Explore content
+      tags: [Explore]
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Explore feed }
+
+  /api/communities:
+    get:
+      summary: Get communities
+      tags: [Explore]
+      responses:
+        '200': { description: Communities }
+
+  # ============ NOTIFICATIONS ============
+  /api/notifications:
+    get:
+      summary: Get notifications
+      tags: [Notifications]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Notifications }
+
+  /api/notifications/{id}/read:
+    put:
+      summary: Mark notification as read
+      tags: [Notifications]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/notifications/read-all:
+    put:
+      summary: Mark all as read
+      tags: [Notifications]
+      responses:
+        '200': { description: Updated }
+
+  # ============ SPACES ============
+  /api/spaces:
+    get:
+      summary: List spaces
+      tags: [Spaces]
+      responses:
+        '200': { description: Active spaces }
+    post:
+      summary: Create space
+      tags: [Spaces]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                scheduledAt: { type: string, format: date-time }
+      responses:
+        '201': { description: Space created }
+
+  /api/spaces/{id}/start:
+    post:
+      summary: Start space
+      tags: [Spaces]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Space started }
+
+  /api/spaces/{id}/end:
+    post:
+      summary: End space
+      tags: [Spaces]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Space ended }
+
+  # ============ LISTS ============
+  /api/lists/pinned:
+    get:
+      summary: Get pinned lists
+      tags: [Lists]
+      responses:
+        '200': { description: Pinned lists }
+
+  /api/lists/discover:
+    get:
+      summary: Discover lists
+      tags: [Lists]
+      responses:
+        '200': { description: Lists }
+
+  /api/lists/yours:
+    get:
+      summary: Your lists
+      tags: [Lists]
+      responses:
+        '200': { description: User lists }
+
+  /api/lists:
+    post:
+      summary: Create list
+      tags: [Lists]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                isPrivate: { type: boolean }
+      responses:
+        '201': { description: List created }
+
+  /api/lists/{id}/members:
+    post:
+      summary: Add member to list
+      tags: [Lists]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: { type: string }
+      responses:
+        '200': { description: Added }
+    delete:
+      summary: Remove member from list
+      tags: [Lists]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Removed }
+
+  /api/lists/membership/{userId}:
+    get:
+      summary: Get list membership for user
+      tags: [Lists]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Membership }
+
+  # ============ ADS ============
+  /api/ads/account:
+    get:
+      summary: Get ads account
+      tags: [Ads]
+      responses:
+        '200': { description: Ads account }
+    put:
+      summary: Update billing
+      tags: [Ads]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                billingEmail: { type: string }
+                paymentMethodId: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/ads/campaigns:
+    get:
+      summary: List campaigns
+      tags: [Ads]
+      responses:
+        '200': { description: Campaigns }
+    post:
+      summary: Create campaign
+      tags: [Ads]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                budget: { type: number }
+                startDate: { type: string }
+                endDate: { type: string }
+      responses:
+        '201': { description: Campaign created }
+
+  /api/ads/ads:
+    post:
+      summary: Create ad
+      tags: [Ads]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                campaignId: { type: string }
+                creativeId: { type: string }
+      responses:
+        '201': { description: Ad created }
+
+  /api/ads/creatives:
+    get:
+      summary: List creatives
+      tags: [Ads]
+      responses:
+        '200': { description: Creatives }
+
+  /api/ads/performance:
+    get:
+      summary: Get performance metrics
+      tags: [Ads]
+      responses:
+        '200': { description: Performance }
+
+  # ============ BUSINESS ============
+  /api/business:
+    get:
+      summary: Get business profile
+      tags: [Business]
+      responses:
+        '200': { description: Business profile }
+    post:
+      summary: Create/register business
+      tags: [Business]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                category: { type: string }
+                description: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /api/business/stats:
+    get:
+      summary: Business stats
+      tags: [Business]
+      responses:
+        '200': { description: Stats }
+
+  /api/business/boost:
+    post:
+      summary: Boost post
+      tags: [Business]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                postId: { type: string }
+      responses:
+        '200': { description: Boosted }
+
+  /api/business/team:
+    get:
+      summary: Get team
+      tags: [Business]
+      responses:
+        '200': { description: Team members }
+    post:
+      summary: Add team member
+      tags: [Business]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                memberId: { type: string }
+                role: { type: string }
+      responses:
+        '200': { description: Added }
+
+  /api/business/team/{memberId}:
+    patch:
+      summary: Update team member
+      tags: [Business]
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string }
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Remove team member
+      tags: [Business]
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Removed }
+
+  /api/business/verify-domain:
+    post:
+      summary: Verify domain
+      tags: [Business]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                domain: { type: string }
+      responses:
+        '200': { description: Verification status }
+
+  # ============ INSTITUTIONAL ============
+  /api/institutional:
+    get:
+      summary: Get institutional profiles
+      tags: [Institutional]
+      responses:
+        '200': { description: Profiles }
+    post:
+      summary: Create institutional profile
+      tags: [Institutional]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                type: { type: string }
+                verifiedDomain: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /api/institutional/verify-domain:
+    post:
+      summary: Verify institutional domain
+      tags: [Institutional]
+      responses:
+        '200': { description: Verified }
+
+  /api/institutional/admin/review/{id}:
+    patch:
+      summary: Admin review institutional
+      tags: [Institutional]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  # ============ WORLD LEADERS ============
+  /api/leaders:
+    get:
+      summary: List world leaders
+      tags: [World Leaders]
+      responses:
+        '200': { description: Leaders }
+    post:
+      summary: Create world leader
+      tags: [World Leaders]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                country: { type: string }
+                role: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /api/leaders/{id}:
+    get:
+      summary: Get leader
+      tags: [World Leaders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Leader }
+    put:
+      summary: Update leader
+      tags: [World Leaders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Delete leader
+      tags: [World Leaders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+
+  # ============ ANNOUNCEMENTS ============
+  /api/announcements/create:
+    post:
+      summary: Create announcement
+      tags: [Announcements]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                leaderId: { type: string }
+                content: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /api/announcements/update/{id}:
+    put:
+      summary: Update announcement
+      tags: [Announcements]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/announcements/feed:
+    get:
+      summary: Announcement feed
+      tags: [Announcements]
+      responses:
+        '200': { description: Feed }
+
+  /api/announcements/{id}:
+    get:
+      summary: Get announcement
+      tags: [Announcements]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Announcement }
+
+  /api/announcements/generate-summary:
+    post:
+      summary: Generate summary
+      tags: [Announcements]
+      responses:
+        '200': { description: Summary }
+
+  # ============ COMMENTS ============
+  /api/comments/create:
+    post:
+      summary: Create comment
+      tags: [Comments]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                announcementId: { type: string }
+                content: { type: string }
+                parentCommentId: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /api/comments/{announcementId}:
+    get:
+      summary: Get comments for announcement
+      tags: [Comments]
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Comments }
+
+  /api/comments/report:
+    post:
+      summary: Report comment
+      tags: [Comments]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                commentId: { type: string }
+                reason: { type: string }
+      responses:
+        '200': { description: Reported }
+
+  /api/comments/moderation/queue:
+    get:
+      summary: Get moderation queue
+      tags: [Comments]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Queue }
+
+  /api/comments/moderation/approve/{queueId}:
+    post:
+      summary: Approve comment
+      tags: [Comments]
+      parameters:
+        - name: queueId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Approved }
+
+  /api/comments/moderation/reject/{queueId}:
+    post:
+      summary: Reject comment
+      tags: [Comments]
+      parameters:
+        - name: queueId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Rejected }
+
+  /api/comments/moderation/fact-flag/{commentId}:
+    post:
+      summary: Fact-flag comment
+      tags: [Comments]
+      parameters:
+        - name: commentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Flagged }
+
+  # ============ CRISIS ============
+  /api/crisis/create:
+    post:
+      summary: Create crisis event
+      tags: [Crisis]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+
+  /api/crisis/update/{id}:
+    put:
+      summary: Update crisis
+      tags: [Crisis]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/crisis/list:
+    get:
+      summary: List crises
+      tags: [Crisis]
+      responses:
+        '200': { description: Crises }
+
+  /api/crisis/{id}:
+    get:
+      summary: Get crisis
+      tags: [Crisis]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Crisis }
+    delete:
+      summary: Delete crisis
+      tags: [Crisis]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+
+  # ============ SOAPBOX ============
+  /api/soapbox/list:
+    get:
+      summary: List soapbox sessions
+      tags: [Soapbox]
+      responses:
+        '200': { description: Sessions }
+
+  /api/soapbox/{id}:
+    get:
+      summary: Get soapbox
+      tags: [Soapbox]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Session }
+
+  /api/soapbox/create:
+    post:
+      summary: Create soapbox
+      tags: [Soapbox]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+
+  /api/soapbox/{id}/start:
+    post:
+      summary: Start soapbox
+      tags: [Soapbox]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Started }
+
+  /api/soapbox/{id}/end:
+    post:
+      summary: End soapbox
+      tags: [Soapbox]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Ended }
+
+  /api/soapbox/{id}/statement:
+    post:
+      summary: Add statement
+      tags: [Soapbox]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Added }
+
+  /api/soapbox/{id}/rebuttal:
+    post:
+      summary: Add rebuttal
+      tags: [Soapbox]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Added }
+
+  /api/soapbox/{id}/transcript:
+    get:
+      summary: Get transcript
+      tags: [Soapbox]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Transcript }
+
+  # ============ DEBATE ============
+  /api/debate/create:
+    post:
+      summary: Create debate
+      tags: [Debate]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+
+  /api/debate/list:
+    get:
+      summary: List debates
+      tags: [Debate]
+      responses:
+        '200': { description: Debates }
+
+  /api/debate/{id}:
+    get:
+      summary: Get debate
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Debate }
+    put:
+      summary: Update debate
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/debate/{id}/start-round:
+    post:
+      summary: Start debate round
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Started }
+
+  /api/debate/round/{id}/end:
+    post:
+      summary: End debate round
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Ended }
+
+  /api/debate/{id}/rounds:
+    get:
+      summary: Get debate rounds
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Rounds }
+
+  /api/debate/round/{id}/argument:
+    post:
+      summary: Add argument
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Added }
+
+  /api/debate/{id}/vote:
+    post:
+      summary: Vote in debate
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Voted }
+
+  /api/debate/{id}/results:
+    get:
+      summary: Get debate results
+      tags: [Debate]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Results }
+
+  /api/debate/fact-check:
+    post:
+      summary: Fact-check
+      tags: [Debate]
+      responses:
+        '200': { description: Result }
+
+  # ============ MESSAGING ============
+  /api/messages/conversations:
+    get:
+      summary: List conversations
+      tags: [Messaging]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Conversations }
+    post:
+      summary: Create conversation
+      tags: [Messaging]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recipientId: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /api/messages/conversations/{id}:
+    get:
+      summary: Get conversation
+      tags: [Messaging]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Conversation }
+
+  /api/messages/conversations/{id}/messages:
+    get:
+      summary: Get messages
+      tags: [Messaging]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: before
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Messages }
+
+  /api/messages/send:
+    post:
+      summary: Send message
+      tags: [Messaging]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recipientId: { type: string }
+                content: { type: string }
+                conversationId: { type: string }
+      responses:
+        '201': { description: Sent }
+
+  /api/messages/upload:
+    post:
+      summary: Upload attachment
+      tags: [Messaging]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+      responses:
+        '200': { description: Uploaded }
+
+  # ============ MONETIZATION ============
+  /api/monetization/profile:
+    get:
+      summary: Creator monetization profile
+      tags: [Monetization]
+      responses:
+        '200': { description: Profile }
+
+  /api/monetization/apply:
+    post:
+      summary: Apply for monetization
+      tags: [Monetization]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Applied }
+
+  /api/monetization/tiers:
+    post:
+      summary: Create subscription tiers
+      tags: [Monetization]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Created }
+
+  /api/monetization/stats:
+    get:
+      summary: Monetization stats
+      tags: [Monetization]
+      responses:
+        '200': { description: Stats }
+
+  /api/monetization/subscribe:
+    post:
+      summary: Subscribe to creator
+      tags: [Monetization]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                creatorId: { type: string }
+                tierId: { type: string }
+      responses:
+        '200': { description: Subscribed }
+
+  /api/monetization/transactions:
+    get:
+      summary: List transactions
+      tags: [Monetization]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Transactions }
+
+  /api/monetization/payout-method:
+    put:
+      summary: Update payout method
+      tags: [Monetization]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+
+  # ============ MODERATION ============
+  /api/moderation/report:
+    post:
+      summary: Report content
+      tags: [Moderation]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contentType, contentId, reason]
+              properties:
+                contentType: { type: string }
+                contentId: { type: string }
+                reason: { type: string }
+      responses:
+        '200': { description: Reported }
+
+  # ============ SETTINGS ============
+  /api/settings:
+    get:
+      summary: Get user settings
+      tags: [Settings]
+      responses:
+        '200': { description: Settings }
+    put:
+      summary: Update settings
+      tags: [Settings]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+
+  # ============ SEARCH ============
+  /api/search/posts:
+    get:
+      summary: Search posts
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Results }
+
+  /api/search/users:
+    get:
+      summary: Search users
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Results }
+
+  # ============ MEDIA ============
+  /api/media/upload:
+    post:
+      summary: Upload media
+      tags: [Media]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: Upload URL }
+
+  # ============ FEED (World Leaders) ============
+  /api/feed/world-leaders:
+    get:
+      summary: World leaders feed
+      tags: [Feed]
+      responses:
+        '200': { description: Feed }
+
+  /api/feed/leaders/{id}/posts:
+    get:
+      summary: Posts by leader
+      tags: [Feed]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Posts }
+
+  # ============ ENTERPRISE ============
+  /api/enterprise/metrics/overview:
+    get:
+      summary: Enterprise metrics overview
+      tags: [Enterprise]
+      responses:
+        '200': { description: Overview }
+
+  /api/enterprise/signals:
+    get:
+      summary: Enterprise signals
+      tags: [Enterprise]
+      responses:
+        '200': { description: Signals }
+
+  /api/enterprise/alerts/create:
+    post:
+      summary: Create alert
+      tags: [Enterprise]
+      responses:
+        '201': { description: Created }
+
+  /api/enterprise/alerts/list:
+    get:
+      summary: List alerts
+      tags: [Enterprise]
+      responses:
+        '200': { description: Alerts }
+
+  /api/enterprise/export/csv:
+    get:
+      summary: Export CSV
+      tags: [Enterprise]
+      responses:
+        '200': { description: CSV }
+
+  /api/enterprise/export/json:
+    get:
+      summary: Export JSON
+      tags: [Enterprise]
+      responses:
+        '200': { description: JSON }
+
+  # ============ ADMIN API (port 3012) ============
+  /api/admin/login:
+    post:
+      summary: Admin login
+      tags: [Admin]
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: Admin session }
+
+  /api/admin/health:
+    get:
+      summary: Admin health check
+      tags: [Admin]
+      security: []
+      responses:
+        '200': { description: Health }
+
+  /api/admin/dashboard/stats:
+    get:
+      summary: Dashboard stats
+      tags: [Admin]
+      responses:
+        '200': { description: Stats }
+
+  /api/admin/dashboard/recent-activity:
+    get:
+      summary: Recent activity
+      tags: [Admin]
+      responses:
+        '200': { description: Activity }
+
+  /api/admin/dashboard/getting-started-status:
+    get:
+      summary: Getting started status
+      tags: [Admin]
+      responses:
+        '200': { description: Status }
+
+  /api/admin/users:
+    get:
+      summary: List users
+      tags: [Admin]
+      responses:
+        '200': { description: Users }
+
+  /api/admin/users/{id}:
+    get:
+      summary: Get user
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: User }
+    put:
+      summary: Update user
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/users/{id}/status:
+    patch:
+      summary: Update user status
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/users/{id}/role:
+    patch:
+      summary: Update user role
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/users/{id}/verification:
+    patch:
+      summary: Update verification
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/posts:
+    get:
+      summary: List posts (admin)
+      tags: [Admin]
+      responses:
+        '200': { description: Posts }
+
+  /api/admin/reports:
+    get:
+      summary: List reports
+      tags: [Admin]
+      responses:
+        '200': { description: Reports }
+
+  /api/admin/reports/{id}:
+    get:
+      summary: Get report
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Report }
+    patch:
+      summary: Update report
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/institutional:
+    get:
+      summary: List institutional profiles
+      tags: [Admin]
+      responses:
+        '200': { description: Profiles }
+
+  /api/admin/institutional/{id}:
+    get:
+      summary: Get institutional
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Profile }
+    patch:
+      summary: Review institutional
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/business:
+    get:
+      summary: List businesses
+      tags: [Admin]
+      responses:
+        '200': { description: Businesses }
+
+  /api/admin/ads:
+    get:
+      summary: Ads overview
+      tags: [Admin]
+      responses:
+        '200': { description: Ads }
+
+  /api/admin/monetization:
+    get:
+      summary: Monetization overview
+      tags: [Admin]
+      responses:
+        '200': { description: Monetization }
+
+  /api/admin/notifications/broadcast:
+    post:
+      summary: Broadcast notification
+      tags: [Admin]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Broadcast }
+
+  /api/admin/config/api-keys:
+    get:
+      summary: List API keys
+      tags: [Admin]
+      responses:
+        '200': { description: API keys }
+    post:
+      summary: Create API key
+      tags: [Admin]
+      responses:
+        '201': { description: Created }
+
+  /api/admin/config/api-keys/{id}:
+    delete:
+      summary: Delete API key
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+
+  /api/admin/config/push:
+    get:
+      summary: Push config
+      tags: [Admin]
+      responses:
+        '200': { description: Config }
+    put:
+      summary: Update push config
+      tags: [Admin]
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/config/push/templates:
+    get:
+      summary: Push templates
+      tags: [Admin]
+      responses:
+        '200': { description: Templates }
+    post:
+      summary: Create template
+      tags: [Admin]
+      responses:
+        '201': { description: Created }
+
+  /api/docs:
+    get:
+      summary: API docs
+      tags: [Admin]
+      security: []
+      responses:
+        '200': { description: Docs page }

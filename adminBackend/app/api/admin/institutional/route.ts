@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(request: Request) {
     try {
@@ -20,12 +20,9 @@ export async function GET(request: Request) {
             }
         });
 
-        return NextResponse.json(profiles);
+        return apiSuccess(profiles, 'Institutional profiles fetched successfully');
     } catch (error: any) {
         console.error('[Institutional List] Error:', error);
-        return NextResponse.json(
-            { error: 'Internal server error', details: error.message },
-            { status: 500 }
-        );
+        return apiError('Internal server error', 500, { details: error.message });
     }
 }

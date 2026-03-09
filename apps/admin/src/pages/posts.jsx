@@ -17,7 +17,7 @@ export default function PostsPage() {
             setLoading(true);
             try {
                 const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all');
-                setPosts(data);
+                setPosts(Array.isArray(data) ? data : []);
             } catch (error) {
                 console.error(error);
             } finally {

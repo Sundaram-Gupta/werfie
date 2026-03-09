@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 // Use generic params type that satisfies Next.js expectations
 type Params = {
@@ -23,26 +24,15 @@ export async function GET(
         });
 
         if (!user) {
-            return NextResponse.json(
-                { success: false, error: 'User not found' },
-                { status: 404 }
-            );
+            return apiError('User not found', 404);
         }
 
-        // Remove sensitive data (passwordHash)
         const { passwordHash, ...safeUser } = user;
-
-        return NextResponse.json({
-            success: true,
-            user: safeUser
-        });
+        return apiSuccess({ user: safeUser }, 'User fetched successfully');
 
     } catch (error: any) {
         console.error('Get User Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to fetch user' },
-            { status: 500 }
-        );
+        return apiError('Failed to fetch user', 500);
     }
 }
 
@@ -68,17 +58,13 @@ export async function DELETE(
         // Log action (basic console log, can be expanded to DB logging)
         console.log(`[AUDIT] Admin ${adminId} soft-deleted user ${id}`);
 
-        return NextResponse.json({
-            success: true,
-            message: 'User soft-deleted successfully',
-            user: { id: updatedUser.id, status: updatedUser.status }
-        });
+        return apiSuccess(
+            { user: { id: updatedUser.id, status: updatedUser.status } },
+            'User soft-deleted successfully'
+        );
 
     } catch (error: any) {
         console.error('Delete User Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to delete user' },
-            { status: 500 }
-        );
+        return apiError('Failed to delete user', 500);
     }
 }

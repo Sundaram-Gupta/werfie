@@ -26,16 +26,18 @@ export default function WorldLeadersPage() {
                 if (severityFilter) queryParams.append('severity', severityFilter);
                 
                 const feedRes = await axios.get(`${CONTENT_SERVICE_URL}/feed/world-leaders?${queryParams.toString()}`);
-                setFeed(feedRes.data);
+                const feedPayload = feedRes.data?.data ?? feedRes.data;
+                setFeed(Array.isArray(feedPayload) ? feedPayload : []);
 
                 // Fetch Featured Leaders (top 10 by priority)
                 // Assuming User Service exposes a list endpoint
                 const USER_SERVICE_URL = import.meta.env.VITE_USER_SERVICE_URL || 'http://localhost:3001';
                 const leadersRes = await axios.get(`${USER_SERVICE_URL}/api/users/leaders?limit=10`);
-                if (leadersRes.data && Array.isArray(leadersRes.data.leaders)) {
-                    setFeaturedLeaders(leadersRes.data.leaders);
-                } else if (Array.isArray(leadersRes.data)) {
-                    setFeaturedLeaders(leadersRes.data);
+                const payload = leadersRes.data?.data ?? leadersRes.data;
+                if (Array.isArray(payload)) {
+                    setFeaturedLeaders(payload);
+                } else if (payload && Array.isArray(payload.leaders)) {
+                    setFeaturedLeaders(payload.leaders);
                 }
             } catch (error) {
                 console.error("Failed to fetch world leaders data:", error);

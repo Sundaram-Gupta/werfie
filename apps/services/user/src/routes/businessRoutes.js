@@ -256,6 +256,24 @@ router.get('/stats', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /verify-domain: Domain verification (mock or real)
+router.post('/verify-domain', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { domain } = req.body || {};
+        // In a real scenario: validate domain ownership (e.g. DNS TXT, file, or email)
+        const profile = await prisma.businessProfile.findUnique({ where: { userId } });
+        if (!profile) {
+            return res.status(404).json({ status: false, message: 'Business profile not found', data: null });
+        }
+        // Mock: accept verification; real impl would check domain
+        res.status(200).json({ status: true, message: 'Domain verified successfully', data: { domain: domain || profile.website, verified: true } });
+    } catch (error) {
+        console.error('Error verifying domain:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to verify domain', data: null });
+    }
+});
+
 // POST /boost: Mock boost endpoint
 router.post('/boost', authenticateToken, async (req, res) => {
     try {

@@ -21,7 +21,8 @@ router.get('/list', async (req, res) => {
         const sessions = await soapboxService.listSessions(req.query);
         res.json(sessions);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[Soapbox List]', err);
+        res.json([]);
     }
 });
 

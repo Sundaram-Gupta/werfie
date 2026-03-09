@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(req: NextRequest) {
     try {
@@ -25,13 +26,10 @@ export async function GET(req: NextRequest) {
             reason: report.reason
         }));
 
-        return NextResponse.json(mappedReports);
+        return apiSuccess(mappedReports, 'Reports fetched successfully');
 
     } catch (error: any) {
         console.error('Fetch Reports Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to fetch reports' },
-            { status: 500 }
-        );
+        return apiError('Failed to fetch reports', 500);
     }
 }

@@ -25,7 +25,7 @@ export default function VerificationPage() {
         setLoading(true);
         try {
             const data = await getInstitutionalProfiles();
-            setInstitutionalRequests(data);
+            setInstitutionalRequests(Array.isArray(data) ? data : []);
         } catch (error) {
             toast.error('Failed to fetch institutional requests');
         } finally {

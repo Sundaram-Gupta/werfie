@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { validateAdmin, unauthorizedResponse } from '@/lib/auth-guard';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(request) {
     const adminUser = await validateAdmin(request);
@@ -42,12 +42,9 @@ export async function GET(request) {
             avatar: user.profile?.avatar
         }));
 
-        return NextResponse.json(formattedUsers);
+        return apiSuccess(formattedUsers, 'Users fetched successfully');
     } catch (error) {
         console.error('Error fetching users:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
+        return apiError('Internal server error', 500, null);
     }
 }

@@ -20,6 +20,7 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+app.use(require('./middleware/api-response'));
 
 // Generic Rewrite Middleware - MOVED TO TOP for consistent routing
 app.use((req, res, next) => {
@@ -84,10 +85,12 @@ app.use('/spaces', spacesRoutes);
 // Auth Middleware
 const authenticateToken = require('./middleware/auth');
 
-// Multer Config
+// Multer Config - ensure temp dir exists
+const tempDir = path.join(__dirname, '../temp');
+if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, '../temp'));
+        cb(null, tempDir);
     },
     filename: (req, file, cb) => {
         cb(null, `${Date.now()}-${file.originalname}`);
@@ -102,9 +105,23 @@ const upload = multer({
     fileFilter: (req, file, cb) => {
         const allowedTypes = [
             'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
-            'video/mp4', 'video/quicktime', 'video/webm'
+            'video/mp4', 'video/quicktime', 'video/webm',
+            'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/webm'
         ];
-        if (allowedTypes.includes(file.mimetype)) {
+        if (allowedTypes.includes(file.mimetype) || file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Unsupported file type'), false);
+        }
+    }
+});
+
+// Multer for media upload - same config, used in route
+const mediaUpload = multer({
+    storage,
+    limits: { fileSize: 100 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
             cb(null, true);
         } else {
             cb(new Error('Unsupported file type'), false);
@@ -117,8 +134,51 @@ app.get('/health', (req, res) => {
     res.json({ status: 'healthy', service: 'content-service' });
 });
 
-// Search Posts
-app.get('/posts/search', async (req, res) => {
+// Standalone Media Upload (POST /media/upload - gateway sends /api/media/upload, rewritten  to /media/upload)
+app.post('/media/upload', authenticateToken, (req, res, next) => {
+    mediaUpload.single('file')(req, res, (err) => {
+        if (err) return res.status(400).json({ status: false, message: err.message || 'Upload error', data: null });
+        next();
+    });
+}, async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ status: false, message: 'No file uploaded', data: null });
+    }
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
+    try {
+        let result;
+        if (req.file.mimetype.startsWith('image/')) {
+            result = await MediaService.processImage(req.file);
+        } else if (req.file.mimetype.startsWith('video/')) {
+            result = await MediaService.processVideo(req.file);
+        } else if (req.file.mimetype.startsWith('audio/')) {
+            result = await MediaService.processAudio(req.file);
+        } else {
+            await MediaService.cleanup(req.file.path);
+            return res.status(400).json({ status: false, message: 'Unsupported file type', data: null });
+        }
+        await MediaService.cleanup(req.file.path);
+        return res.json({
+            status: true,
+            message: 'Media uploaded successfully',
+            data: {
+                url: result.mediaUrl,
+                thumbnailUrl: result.thumbnailUrl,
+                duration: result.duration,
+                size: result.size,
+                mimeType: result.mediaType === 'image' ? 'image/webp' : req.file.mimetype
+            }
+        });
+    } catch (err) {
+        if (req.file?.path) await MediaService.cleanup(req.file.path).catch(() => {});
+        console.error('[Media Upload]', err);
+        return res.status(500).json({ status: false, message: err.message || 'Upload failed', data: null });
+    }
+});
+
+// Search Posts (route at /search - gateway rewrite strips /api/posts from /api/posts/search)
+app.get('/search', async (req, res) => {
     const { q, limit = 20, offset = 0 } = req.query;
 
     if (!q || q.trim().length === 0) {
@@ -219,14 +279,21 @@ app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
 
         await Promise.all(mediaPromises);
 
-        // 3. Fetch full post with media
+        // 3. Fetch full post with media (and replyTo when it's a reply)
+        const includeObj = {
+            user: { select: { id: true, profile: { select: { handle: true, name: true, avatar: true } } } },
+            media: true
+        };
+        if (replyToId) {
+            includeObj.replyTo = { include: { user: { include: { profile: { select: { handle: true } } } } } };
+        }
         const finalPost = await prisma.post.findUnique({
             where: { id: post.id },
-            include: {
-                user: { select: { id: true, profile: { select: { handle: true, name: true, avatar: true } } } },
-                media: true
-            }
+            include: includeObj
         });
+        if (finalPost && replyToId && finalPost.replyTo) {
+            finalPost.replyToHandle = finalPost.replyTo.user?.profile?.handle || finalPost.replyTo.user?.handle || null;
+        }
 
         // Notify if Reply
         if (replyToId) {
@@ -243,19 +310,19 @@ app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
             }
         }
 
-        // Emit Kafka Event
-        try {
+        // Emit Kafka Event (fire-and-forget - don't block response)
+        setImmediate(() => {
             const kafkaProducer = require('./kafka');
-            await kafkaProducer.send('POST_CREATED', {
+            kafkaProducer.send('POST_CREATED', {
                 id: finalPost.id,
                 userId: finalPost.userId,
                 content: finalPost.content,
-                mediaCount: finalPost.media.length,
+                mediaCount: finalPost.media?.length || 0,
                 createdAt: finalPost.createdAt
+            }).catch(kafkaError => {
+                console.error('Failed to emit POST_CREATED event:', kafkaError);
             });
-        } catch (kafkaError) {
-            console.error('Failed to emit POST_CREATED event:', kafkaError);
-        }
+        });
 
         res.json(finalPost);
     } catch (error) {
@@ -270,16 +337,16 @@ app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
     }
 });
 
-// Get Timeline (Basic)
+// Get Timeline (Basic) - includes both top-level posts and replies
 app.get('/timeline/home', authenticateToken, async (req, res) => {
     try {
         const posts = await prisma.post.findMany({
-            where: { replyToId: null },
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
                 user: { include: { profile: true } },
                 media: true,
+                replyTo: { include: { user: { include: { profile: true } } } },
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
@@ -419,6 +486,7 @@ app.get('/', authenticateToken, async (req, res) => {
             include: {
                 user: { include: { profile: true } },
                 media: true,
+                replyTo: { include: { user: { include: { profile: true } } } },
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
@@ -451,9 +519,9 @@ app.get('/following', authenticateToken, async (req, res) => {
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true,
+                user: { include: { profile: true } },
                 media: true,
-
+                replyTo: { include: { user: { include: { profile: true } } } },
                 _count: { select: { replies: true, likes: true, retweets: true } },
                 likes: {
                     where: { userId: currentUserId },
@@ -632,8 +700,9 @@ app.get('/:id/replies', async (req, res) => {
             where: { replyToId: req.params.id },
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true,
+                user: { include: { profile: true } },
                 media: true,
+                replyTo: { include: { user: { include: { profile: true } } } },
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
@@ -735,11 +804,20 @@ app.get('/bookmarks', authenticateToken, async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
 
-        const posts = bookmarks.map(b => b.post);
+        const posts = bookmarks
+            .map(b => b.post)
+            .filter(Boolean)
+            .map(post => {
+                if (post.user) {
+                    const { passwordHash, ...safeUser } = post.user;
+                    return { ...post, user: safeUser };
+                }
+                return post;
+            });
         res.json({ posts });
     } catch (error) {
         console.error('Get Bookmarks Error:', error);
-        res.status(500).json({ error: 'Failed to get bookmarks' });
+        res.json({ posts: [] });
     }
 });
 
@@ -846,7 +924,9 @@ app.get('/:id', async (req, res) => {
         const post = await prisma.post.findUnique({
             where: { id: req.params.id },
             include: {
-                user: true,
+                user: { include: { profile: true } },
+                media: true,
+                replyTo: { include: { user: { include: { profile: true } } } },
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
@@ -860,8 +940,8 @@ app.get('/:id', async (req, res) => {
 
 // Mark All Notifications as Read
 app.put('/notifications/read-all', authenticateToken, async (req, res) => {
-    const userId = req.user.userId;
-
+    const userId = req.user?.userId || req.user?.sub;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     try {
         const result = await prisma.notification.updateMany({
             where: { userId, read: false },
@@ -869,7 +949,7 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
         res.json({ count: result.count });
     } catch (error) {
         console.error('Mark All as Read Error:', error);
-        res.status(500).json({ error: 'Failed to mark all as read' });
+        res.json({ count: 0 });
     }
 });
 

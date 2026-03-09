@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(req: NextRequest) {
     try {
@@ -66,33 +67,29 @@ export async function GET(req: NextRequest) {
             ? mappedPosts.filter(p => p.reportCount > 0)
             : mappedPosts;
 
-        return NextResponse.json(filteredPosts);
+        return apiSuccess(filteredPosts, 'Posts fetched successfully');
 
     } catch (error: any) {
         console.error('Fetch Posts Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to fetch posts: ' + error.message },
-            { status: 500 }
-        );
+        return apiError('Failed to fetch posts: ' + error.message, 500);
     }
 }
 
 export async function DELETE(req: NextRequest) {
-    // Basic delete implementation
     try {
         const url = new URL(req.url);
         const postId = url.searchParams.get('id');
 
         if (!postId) {
-            return NextResponse.json({ success: false, error: 'Post ID is required' }, { status: 400 });
+            return apiError('Post ID is required', 400);
         }
 
         await prisma.post.delete({
             where: { id: postId }
         });
 
-        return NextResponse.json({ success: true });
+        return apiSuccess(null, 'Post deleted successfully');
     } catch (error) {
-        return NextResponse.json({ success: false, error: 'Failed to delete post' }, { status: 500 });
+        return apiError('Failed to delete post', 500);
     }
 }

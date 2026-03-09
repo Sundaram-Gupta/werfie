@@ -17,7 +17,7 @@ router.get('/account', authenticateToken, async (req, res) => {
         });
 
         if (!business) {
-            return res.status(404).json({ error: 'Business profile not found. Please create one first.' });
+            return res.status(200).json({ status: true, message: 'No business profile yet', data: null });
         }
 
         let adAccount = await prisma.adAccount.findFirst({
@@ -34,10 +34,43 @@ router.get('/account', authenticateToken, async (req, res) => {
             });
         }
 
-        res.json(adAccount);
+        res.status(200).json({ status: true, message: 'Ad account fetched successfully', data: adAccount });
     } catch (error) {
         console.error('Error fetching ad account:', error);
-        res.status(500).json({ error: 'Failed to fetch ad account' });
+        res.status(500).json({ status: false, message: error.message || 'Failed to fetch ad account', data: null });
+    }
+});
+
+// PUT /account: Update ad account
+router.put('/account', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const business = await prisma.businessProfile.findUnique({ where: { userId } });
+        if (!business) {
+            return res.status(404).json({ status: false, message: 'Business profile not found', data: null });
+        }
+        let adAccount = await prisma.adAccount.findFirst({ where: { businessId: business.id } });
+        if (!adAccount) {
+            adAccount = await prisma.adAccount.create({
+                data: { businessId: business.id, status: 'active' }
+            });
+        }
+        const { status: accountStatus, currency, paymentMethod, paymentDetails } = req.body || {};
+        const updateData = {};
+        if (accountStatus !== undefined) updateData.status = accountStatus;
+        if (currency !== undefined) updateData.currency = currency;
+        if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
+        if (paymentDetails !== undefined) updateData.paymentDetails = typeof paymentDetails === 'string' ? paymentDetails : JSON.stringify(paymentDetails);
+        if (Object.keys(updateData).length > 0) {
+            adAccount = await prisma.adAccount.update({
+                where: { id: adAccount.id },
+                data: updateData
+            });
+        }
+        res.status(200).json({ status: true, message: 'Ad account updated successfully', data: adAccount });
+    } catch (error) {
+        console.error('Error updating ad account:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to update ad account', data: null });
     }
 });
 

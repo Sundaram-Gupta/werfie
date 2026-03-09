@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAdminAction } from '@/lib/audit';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function PATCH(
     req: NextRequest,
@@ -26,9 +27,9 @@ export async function PATCH(
             { status }
         );
 
-        return NextResponse.json({ success: true, report: updatedReport });
+        return apiSuccess({ report: updatedReport }, 'Report updated successfully');
     } catch (error) {
         console.error('Update Report Error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to update report' }, { status: 500 });
+        return apiError('Failed to update report', 500);
     }
 }

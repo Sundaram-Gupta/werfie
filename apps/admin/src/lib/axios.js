@@ -7,6 +7,8 @@ const api = axios.create({
     },
 });
 
+console.log(`[Axios] API Base URL: ${api.defaults.baseURL}`);
+
 // Add a request interceptor
 api.interceptors.request.use(
     (config) => {
@@ -21,9 +23,18 @@ api.interceptors.request.use(
     }
 );
 
+// Normalize API responses: { status, message, data } -> extract data
+function normalizeResponse(response) {
+    const d = response?.data;
+    if (d && typeof d === 'object' && 'status' in d && 'data' in d) {
+        response.data = d.data;
+    }
+    return response;
+}
+
 // Add a response interceptor
 api.interceptors.response.use(
-    (response) => response,
+    (response) => normalizeResponse(response),
     (error) => {
         if (error.response && error.response.status === 401) {
             // Handle unauthorized access (e.g., redirect to login)

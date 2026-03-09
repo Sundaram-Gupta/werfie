@@ -49,6 +49,52 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /:id/start: Start a space
+router.post('/:id/start', authenticateToken, async (req, res) => {
+    try {
+        const space = await prisma.space.findUnique({ where: { id: req.params.id } });
+        if (!space) {
+            return res.status(404).json({ status: false, message: 'Space not found', data: null });
+        }
+        const userId = req.user.userId || req.user.id;
+        if (space.hostId !== userId) {
+            return res.status(403).json({ status: false, message: 'Only the host can start this space', data: null });
+        }
+        const updated = await prisma.space.update({
+            where: { id: req.params.id },
+            data: { status: 'live', isLive: true, startedAt: new Date() },
+            include: { host: { select: { id: true, profile: true } } }
+        });
+        res.status(200).json({ status: true, message: 'Space started successfully', data: updated });
+    } catch (error) {
+        console.error('Error starting space:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to start space', data: null });
+    }
+});
+
+// POST /:id/end: End a space
+router.post('/:id/end', authenticateToken, async (req, res) => {
+    try {
+        const space = await prisma.space.findUnique({ where: { id: req.params.id } });
+        if (!space) {
+            return res.status(404).json({ status: false, message: 'Space not found', data: null });
+        }
+        const userId = req.user.userId || req.user.id;
+        if (space.hostId !== userId) {
+            return res.status(403).json({ status: false, message: 'Only the host can end this space', data: null });
+        }
+        const updated = await prisma.space.update({
+            where: { id: req.params.id },
+            data: { status: 'ended', isLive: false, endedAt: new Date() },
+            include: { host: { select: { id: true, profile: true } } }
+        });
+        res.status(200).json({ status: true, message: 'Space ended successfully', data: updated });
+    } catch (error) {
+        console.error('Error ending space:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to end space', data: null });
+    }
+});
+
 // Get all spaces (active & upcoming)
 router.get('/', async (req, res) => {
     try {

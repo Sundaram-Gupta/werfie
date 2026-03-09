@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function PATCH(
     request: Request,
@@ -10,7 +10,7 @@ export async function PATCH(
         const { status, adminNotes, badgeType } = await request.json();
 
         if (!['approved', 'rejected', 'under_review', 'pending'].includes(status)) {
-            return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+            return apiError('Invalid status', 400);
         }
 
         const profile = await prisma.institutionalProfile.update({
@@ -42,12 +42,9 @@ export async function PATCH(
             });
         }
 
-        return NextResponse.json(profile);
+        return apiSuccess(profile, 'Institutional profile updated successfully');
     } catch (error: any) {
         console.error('[Institutional Review] Error:', error);
-        return NextResponse.json(
-            { error: 'Internal server error', details: error.message },
-            { status: 500 }
-        );
+        return apiError('Internal server error', 500, { details: error.message });
     }
 }

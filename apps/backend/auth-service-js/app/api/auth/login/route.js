@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateAccessToken, generateRefreshToken } from '@/lib/jwt'
+import { apiSuccess, apiError } from '@/lib/api-response'
 import bcrypt from 'bcrypt'
 import { z } from 'zod'
 
@@ -29,10 +29,7 @@ export async function POST(request) {
 
         if (!user) {
             console.log('[Login] User not found');
-            return NextResponse.json(
-                { error: 'Invalid credentials' },
-                { status: 401 }
-            )
+            return apiError('Invalid credentials', 401, null)
         }
 
         console.log('[Login] User found, verifying password');
@@ -40,10 +37,7 @@ export async function POST(request) {
         // Safety check for password hash
         if (!user.passwordHash) {
             console.error('[Login] User has no password hash set!');
-            return NextResponse.json(
-                { error: 'Account setup incomplete (no password set)' },
-                { status: 400 }
-            )
+            return apiError('Account setup incomplete (no password set)', 400, null)
         }
 
         // Verify password
@@ -51,10 +45,7 @@ export async function POST(request) {
         console.log(`[Login] Password valid: ${isValid}`);
 
         if (!isValid) {
-            return NextResponse.json(
-                { error: 'Invalid credentials' },
-                { status: 401 }
-            )
+            return apiError('Invalid credentials', 401, null)
         }
 
         // Generate tokens
@@ -75,7 +66,7 @@ export async function POST(request) {
         })
 
         console.log('[Login] Login successful. Institutional ID:', user.institutionalProfile?.id || 'None');
-        return NextResponse.json({
+        return apiSuccess({
             accessToken,
             refreshToken,
             id: user.id,
@@ -84,21 +75,15 @@ export async function POST(request) {
             institutionType: user.institutionType,
             institutionalProfile: user.institutionalProfile,
             preferredLanguage: user.preferredLanguage
-        })
+        }, 'Login successful')
 
     } catch (error) {
         if (error instanceof z.ZodError) {
             console.warn('[Login] Validation error:', error.issues);
-            return NextResponse.json(
-                { error: 'Validation error', details: error.issues },
-                { status: 400 }
-            )
+            return apiError('Validation error', 400, { details: error.issues })
         }
 
         console.error('[Login] Internal Error:', error)
-        return NextResponse.json(
-            { error: 'Internal server error', details: error.message }, // Exposed details for debugging
-            { status: 500 }
-        )
+        return apiError('Internal server error', 500, { details: error.message })
     }
 }

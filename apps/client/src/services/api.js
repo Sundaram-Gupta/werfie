@@ -8,20 +8,22 @@ export const authService = {
     // Register new user
     register: async (email, password, name, handle) => {
         const preferredLanguage = i18n.language || 'en'
+        const rawHandle = (handle || '').replace(/^@+/, '')
         const { data } = await api.post('/api/auth/register', {
             email,
             password,
             name,
-            handle,
+            handle: rawHandle,
             preferredLanguage,
         })
 
-        // Store tokens
-        localStorage.setItem('accessToken', data.accessToken)
-        localStorage.setItem('refreshToken', data.refreshToken)
-        localStorage.setItem('user', JSON.stringify(data.user))
+        // Normalizer extracts payload; fallback for non-standard responses
+        const payload = data?.data ?? data
+        localStorage.setItem('accessToken', payload.accessToken)
+        localStorage.setItem('refreshToken', payload.refreshToken)
+        localStorage.setItem('user', JSON.stringify(payload.user))
 
-        return data
+        return payload
     },
 
     // Login
@@ -31,22 +33,23 @@ export const authService = {
             password,
         })
 
-        console.log('[Frontend Login] Successfully logged in. Institutional ID:', data.institutionalProfile?.id || 'None');
+        const payload = data?.data ?? data
+        console.log('[Frontend Login] Successfully logged in. Institutional ID:', payload.institutionalProfile?.id || 'None');
 
         const user = {
-            id: data.id,
-            email: data.email,
-            profile: data.profile,
-            preferredLanguage: data.preferredLanguage,
-            institutionalProfile: data.institutionalProfile
+            id: payload.id,
+            email: payload.email,
+            profile: payload.profile,
+            preferredLanguage: payload.preferredLanguage,
+            institutionalProfile: payload.institutionalProfile
         }
 
         // Store tokens
-        localStorage.setItem('accessToken', data.accessToken)
-        localStorage.setItem('refreshToken', data.refreshToken)
+        localStorage.setItem('accessToken', payload.accessToken)
+        localStorage.setItem('refreshToken', payload.refreshToken)
         localStorage.setItem('user', JSON.stringify(user))
 
-        return { ...data, user }
+        return { ...payload, user }
     },
 
     // Logout
@@ -118,6 +121,18 @@ messagingApi.interceptors.request.use((config) => {
     return config
 })
 
+// Normalize messaging API { status, message, data } responses
+messagingApi.interceptors.response.use(
+    (response) => {
+        const d = response?.data
+        if (d && typeof d === 'object' && 'status' in d && 'data' in d) {
+            response.data = d.data
+        }
+        return response
+    },
+    (error) => Promise.reject(error)
+)
+
 // Post Services
 export const postService = {
     // Get all posts
@@ -132,21 +147,20 @@ export const postService = {
         return data
     },
 
-    // Create post (with optional media)
-    createPost: async (content, files = []) => {
+    // Create post (with optional media and optional replyToId for replies)
+    createPost: async (content, files = [], replyToId = null) => {
         const formData = new FormData();
         formData.append('content', content);
+        if (replyToId) {
+            formData.append('replyToId', replyToId);
+        }
 
         // Append media files
-        files.forEach((file) => {
+        (files || []).forEach((file) => {
             formData.append('media', file);
         });
 
-        const { data } = await api.post('/api/posts', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
-        });
+        const { data } = await api.post('/api/posts', formData);
         return data;
     },
 
@@ -293,7 +307,7 @@ export const searchService = {
     // Get Trends
     getTrends: async () => {
         const { data } = await api.get('/api/trends', { params: { limit: 20 } })
-        return data
+        return Array.isArray(data) ? data : []
     },
 
     // Get Explore Items

@@ -1,11 +1,9 @@
+import { apiSuccess } from '@/lib/api-response';
+
 export async function GET() {
-    return new Response(JSON.stringify({
+    return apiSuccess({
         status: 'healthy',
         service: 'timeline-service',
         timestamp: new Date().toISOString()
-    }), {
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    });
+    }, 'Timeline service healthy');
 }

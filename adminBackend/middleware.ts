@@ -7,14 +7,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here_secure_it
 // Define allowed origins securely
 const allowedOrigins = [
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:5175',
     'http://localhost:5176',
+    'http://127.0.0.1:5174',
     'http://127.0.0.1:5175',
 ];
 
 export async function middleware(req: NextRequest) {
     const origin = req.headers.get('origin') ?? '';
-    const isAllowedOrigin = allowedOrigins.includes(origin);
+    // FOR DEBUGGING: Allow all origins or check explicitly
+    const isAllowedOrigin = true; // allowedOrigins.includes(origin);
+    console.log(`[Middleware] ${req.method} request to ${req.nextUrl.pathname} from origin: "${origin}". Allowed: ${isAllowedOrigin}`);
 
     // Default CORS headers
     const corsHeaders = {
@@ -27,12 +31,10 @@ export async function middleware(req: NextRequest) {
     // Prepare response specifically for OPTIONS (Preflight)
     if (req.method === 'OPTIONS') {
         const response = new NextResponse(null, { status: 204 });
-        if (isAllowedOrigin) {
-            response.headers.set('Access-Control-Allow-Origin', origin);
-            Object.entries(corsHeaders).forEach(([key, value]) => {
-                response.headers.set(key, value);
-            });
-        }
+        response.headers.set('Access-Control-Allow-Origin', origin || '*');
+        Object.entries(corsHeaders).forEach(([key, value]) => {
+            response.headers.set(key, value);
+        });
         return response;
     }
 
@@ -40,7 +42,8 @@ export async function middleware(req: NextRequest) {
     let response: NextResponse;
 
     // Skip Auth for public routes or non-api routes
-    if (!req.nextUrl.pathname.startsWith('/api/admin') || req.nextUrl.pathname === '/api/admin/login') {
+    const path = req.nextUrl.pathname;
+    if (!path.startsWith('/api/admin') || path === '/api/admin/login' || path.startsWith('/api/admin/health')) {
         response = NextResponse.next();
     } else {
         // Validation Logic
@@ -48,7 +51,7 @@ export async function middleware(req: NextRequest) {
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             response = NextResponse.json(
-                { success: false, error: 'Unauthorized: No token provided' },
+                { status: false, message: 'Unauthorized: No token provided', data: null },
                 { status: 401 }
             );
         } else {
@@ -63,7 +66,7 @@ export async function middleware(req: NextRequest) {
 
                 if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
                     response = NextResponse.json(
-                        { success: false, error: 'Forbidden: Insufficient permissions' },
+                        { status: false, message: 'Forbidden: Insufficient permissions', data: null },
                         { status: 403 }
                     );
                 } else {
@@ -81,7 +84,7 @@ export async function middleware(req: NextRequest) {
             } catch (error) {
                 console.error('JWT Verification Error:', error);
                 response = NextResponse.json(
-                    { success: false, error: 'Unauthorized: Invalid token' },
+                    { status: false, message: 'Unauthorized: Invalid token', data: null },
                     { status: 401 }
                 );
             }

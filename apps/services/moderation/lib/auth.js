@@ -18,7 +18,7 @@ export function withAuth(handler) {
         const authHeader = request.headers.get('authorization')
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            return Response.json({ status: false, message: 'Unauthorized', data: null }, {
                 status: 401,
                 headers: { 'Content-Type': 'application/json' }
             })
@@ -30,13 +30,10 @@ export function withAuth(handler) {
             const user = verifyJWT(token)
             console.log('Verified User Payload:', user)
 
-            // We don't modify the request object to avoid breaking the body stream
-            // The handler will re-verify or we can pass the user object if we change handler signature
-            // For now, let's just make sure the token is valid.
             return handler(request, context)
         } catch (error) {
             console.error('JWT Verification Error:', error.message)
-            return new Response(JSON.stringify({ error: 'Invalid token' }), {
+            return Response.json({ status: false, message: 'Invalid token', data: null }, {
                 status: 401,
                 headers: { 'Content-Type': 'application/json' }
             })

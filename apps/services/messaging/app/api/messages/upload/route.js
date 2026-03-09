@@ -1,21 +1,11 @@
-import { NextResponse } from 'next/server';
 import { getUserFromRequest, withAuth } from '../../../../lib/auth';
 import { processImage, processVideo, processAudio } from '../../../../lib/media-processor';
 import { uploadToR2 } from '../../../../lib/r2';
+import { apiSuccess, apiError } from '../../../../lib/api-response';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
-
-// Helper for JSON response
-function jsonResponse(data, status = 200) {
-    return new Response(JSON.stringify(data), {
-        status,
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    });
-}
 
 export const POST = withAuth(async (req) => {
     // 1. Setup Request Context
@@ -27,7 +17,7 @@ export const POST = withAuth(async (req) => {
         const user = getUserFromRequest(req);
         if (!user.userId) {
             console.error("❌ [Upload] Unauthorized: No userId found");
-            return jsonResponse({ error: 'Unauthorized' }, 401);
+            return apiError('Unauthorized', 401);
         }
         console.log(`👤 [Upload] User: ${user.userId}`);
 
@@ -37,14 +27,14 @@ export const POST = withAuth(async (req) => {
             formData = await req.formData();
         } catch (e) {
             console.error("❌ [Upload] Failed to parse FormData:", e);
-            return jsonResponse({ error: 'Invalid form data' }, 400);
+            return apiError('Invalid form data', 400);
         }
 
         const file = formData.get('file');
 
         if (!file) {
             console.error("❌ [Upload] No file provided in 'file' field");
-            return jsonResponse({ error: 'No file uploaded' }, 400);
+            return apiError('No file uploaded', 400);
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -142,27 +132,26 @@ export const POST = withAuth(async (req) => {
                 };
             } else {
                 console.error(`❌ [Upload] Unsupported file type: ${type}`);
-                return jsonResponse({ error: 'Unsupported file type' }, 400);
+                return apiError('Unsupported file type', 400);
             }
         } catch (procError) {
             console.error("❌ [Upload] Processing/Upload Failed:", procError);
             // Ensure stack trace is visible in logs
             console.error(procError.stack);
-            return jsonResponse({ error: `Processing error: ${procError.message}` }, 500);
+            return apiError(`Processing error: ${procError.message}`, 500);
         }
 
-        // Success Response
-        return jsonResponse({
+        return apiSuccess({
             url: mediaData.url,
             thumbnailUrl: mediaData.thumbnailUrl,
             duration: mediaData.duration,
             size: mediaData.size,
             mimeType: mediaData.mimeType
-        }, 200);
+        }, 'Media uploaded successfully');
 
     } catch (error) {
         console.error('❌ [Upload] Critical Error:', error);
-        return jsonResponse({ error: error.message || 'Upload failed' }, 500);
+        return apiError(error.message || 'Upload failed', 500);
     } finally {
         // 5. Cleanup Always Runs
         console.log(`🧹 [Upload] Cleaning up ${cleanupTasks.length} temp files/tasks...`);

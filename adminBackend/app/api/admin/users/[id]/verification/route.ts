@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 type Params = {
     params: Promise<{ id: string }>
@@ -30,20 +31,13 @@ export async function PATCH(
 
         console.log(`[AUDIT] Admin ${adminId} updated verification status of ${id} to ${isVerified}`);
 
-        return NextResponse.json({
-            success: true,
-            message: `User verification status updated to ${isVerified}`,
-            user: {
-                id: updatedUser.id,
-                verified: updatedUser.profile?.verified
-            }
-        });
+        return apiSuccess(
+            { user: { id: updatedUser.id, verified: updatedUser.profile?.verified } },
+            `User verification status updated to ${isVerified}`
+        );
 
     } catch (error: any) {
         console.error('Update Verification Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to update user verification status' },
-            { status: 500 }
-        );
+        return apiError('Failed to update user verification status', 500);
     }
 }

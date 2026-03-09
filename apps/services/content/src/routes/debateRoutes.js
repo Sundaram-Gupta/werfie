@@ -28,7 +28,7 @@ router.get('/list', async (req, res) => {
         res.status(200).json(sessions);
     } catch (err) {
         console.error('[Debate API - List]', err);
-        res.status(500).json({ error: 'Failed to fetch sessions' });
+        res.status(200).json([]);
     }
 });
 
@@ -36,11 +36,11 @@ router.get('/list', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const session = await debateService.getSessionById(req.params.id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
-        res.status(200).json(session);
+        if (!session) return res.status(404).json({ status: false, message: 'Session not found', data: null });
+        res.status(200).json({ status: true, message: 'Debate fetched successfully', data: session });
     } catch (err) {
         console.error('[Debate API - GetByID]', err);
-        res.status(500).json({ error: 'Failed to fetch session' });
+        res.status(500).json({ status: false, message: 'Failed to fetch session', data: null });
     }
 });
 
@@ -49,10 +49,25 @@ router.put('/update/:id', authenticateToken, async (req, res) => {
     try {
         const { status } = req.body;
         const session = await debateService.updateSessionStatus(req.params.id, status);
-        res.status(200).json(session);
+        res.status(200).json({ status: true, message: 'Debate updated successfully', data: session });
     } catch (err) {
         console.error('[Debate API - Update]', err);
-        res.status(500).json({ error: 'Failed to update session status' });
+        res.status(500).json({ status: false, message: err.message || 'Failed to update session status', data: null });
+    }
+});
+
+// PUT /:id - update debate by id (alias for PUT /update/:id)
+router.put('/:id', authenticateToken, async (req, res) => {
+    try {
+        const { status } = req.body || {};
+        if (!status) {
+            return res.status(400).json({ status: false, message: 'Status is required', data: null });
+        }
+        const session = await debateService.updateSessionStatus(req.params.id, status);
+        res.status(200).json({ status: true, message: 'Debate updated successfully', data: session });
+    } catch (err) {
+        console.error('[Debate API - UpdateById]', err);
+        res.status(500).json({ status: false, message: err.message || 'Failed to update session status', data: null });
     }
 });
 

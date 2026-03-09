@@ -1,27 +1,26 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateAccessToken, verifyToken } from '@/lib/jwt'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 export async function POST(request) {
     try {
-        const body = await request.json()
-        const { refreshToken } = body
+        let body = {}
+        try {
+            body = await request.json()
+        } catch {
+            return apiError('Refresh token required', 400, null)
+        }
+        const { refreshToken } = body || {}
 
         if (!refreshToken) {
-            return NextResponse.json(
-                { error: 'Refresh token required' },
-                { status: 400 }
-            )
+            return apiError('Refresh token required', 400, null)
         }
 
         // Verify the refresh token
         const payload = await verifyToken(refreshToken)
 
         if (payload.type !== 'refresh') {
-            return NextResponse.json(
-                { error: 'Invalid token type' },
-                { status: 401 }
-            )
+            return apiError('Invalid token type', 401, null)
         }
 
         // Check if refresh token exists in database
@@ -30,10 +29,7 @@ export async function POST(request) {
         })
 
         if (!storedToken) {
-            return NextResponse.json(
-                { error: 'Invalid refresh token' },
-                { status: 401 }
-            )
+            return apiError('Invalid refresh token', 401, null)
         }
 
         // Check if token is expired
@@ -41,22 +37,16 @@ export async function POST(request) {
             await prisma.refreshToken.delete({
                 where: { id: storedToken.id }
             })
-            return NextResponse.json(
-                { error: 'Refresh token expired' },
-                { status: 401 }
-            )
+            return apiError('Refresh token expired', 401, null)
         }
 
         // Generate new access token
         const accessToken = await generateAccessToken(payload.sub, payload.email)
 
-        return NextResponse.json({ accessToken })
+        return apiSuccess({ accessToken }, 'Token refreshed successfully')
 
     } catch (error) {
         console.error('Refresh token error:', error)
-        return NextResponse.json(
-            { error: 'Invalid refresh token' },
-            { status: 401 }
-        )
+        return apiError('Invalid refresh token', 401, null)
     }
 }

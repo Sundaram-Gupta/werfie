@@ -1,7 +1,5 @@
+import { apiSuccess } from '@/lib/api-response';
 
 export async function GET() {
-    return new Response(JSON.stringify({ status: 'healthy', service: 'analytics-service' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-    })
+    return apiSuccess({ status: 'healthy', service: 'analytics-service' }, 'Analytics service healthy');
 }

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom"
 import MainLayout from "@/components/layout/main-layout"
 import AuthLayout from "@/components/layout/auth-layout"
 import Home from "@/pages/home"
@@ -51,6 +51,7 @@ function App() {
               {/* Protected Routes - Require Login */}
               <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
                 <Route path="/" element={<Home />} />
+                <Route path="/posts" element={<Navigate to="/" replace />} />
                 <Route path="/explore" element={<Explore />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/follow" element={<Follow />} />

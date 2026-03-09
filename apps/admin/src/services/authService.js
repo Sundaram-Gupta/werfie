@@ -2,19 +2,22 @@ import api from '@/lib/axios';
 
 export const login = async (email, password, role) => {
     try {
+        console.log(`[AuthService] Attempting login for ${email} to ${api.defaults.baseURL}/admin/login`);
         const response = await api.post('/admin/login', { email, password });
+        console.log('[AuthService] Response:', response.data);
 
-        if (response.data.success) {
-            const { user, token } = response.data;
+        const payload = response.data;
+        if (payload?.user && payload?.token) {
+            const { user, token } = payload;
             localStorage.setItem('adminToken', token);
             localStorage.setItem('adminUser', JSON.stringify(user));
             return user;
         } else {
-            throw new Error('Login failed');
+            throw new Error(response.data?.message || 'Login failed');
         }
     } catch (error) {
         console.error('Login error:', error);
-        throw new Error(error.response?.data?.error || 'Invalid credentials');
+        throw new Error(error.response?.data?.message || error.response?.data?.error || 'Invalid credentials');
     }
 };
 

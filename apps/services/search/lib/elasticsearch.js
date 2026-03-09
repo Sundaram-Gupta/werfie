@@ -1,19 +1,21 @@
 import { Client } from '@elastic/elasticsearch'
 
-let esClient
+let esClient = null
+let esFailed = false
 
 export function getElasticClient() {
-    if (!esClient) {
+    if (esFailed) return null
+    if (esClient) return esClient
+    try {
         esClient = new Client({
-            node: process.env.ELASTICSEARCH_URL || 'http://elasticsearch:9200',
-            maxRetries: 5,
-            requestTimeout: 60000
+            node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+            maxRetries: 0,
+            requestTimeout: 3000
         })
-
-        // Check connection
-        esClient.ping()
-            .then(() => console.log('✅ Connected to Elasticsearch'))
-            .catch(err => console.error('❌ Elasticsearch connection error:', err))
+    } catch (e) {
+        console.warn('Elasticsearch init failed:', e?.message)
+        esFailed = true
+        return null
     }
     return esClient
 }

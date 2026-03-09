@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
 import { getApiDocs } from '@/lib/swagger';
+import { apiSuccess } from '@/lib/api-response';
 
 export async function GET() {
     const spec = getApiDocs();
-    return NextResponse.json(spec);
+    return apiSuccess(spec, 'API docs fetched successfully');
 }

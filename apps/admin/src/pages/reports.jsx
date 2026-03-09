@@ -26,7 +26,7 @@ export default function ReportsPage() {
         const fetchReports = async () => {
             try {
                 const data = await contentService.getReports();
-                setReports(data);
+                setReports(Array.isArray(data) ? data : []);
             } catch (error) {
                 console.error(error);
             } finally {

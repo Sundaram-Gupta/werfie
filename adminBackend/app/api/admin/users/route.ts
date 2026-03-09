@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(req: NextRequest) {
     try {
@@ -61,8 +62,7 @@ export async function GET(req: NextRequest) {
 
         const totalPages = Math.ceil(totalUsers / limit);
 
-        return NextResponse.json({
-            success: true,
+        return apiSuccess({
             users,
             pagination: {
                 totalUsers,
@@ -70,13 +70,10 @@ export async function GET(req: NextRequest) {
                 totalPages,
                 limit
             }
-        });
+        }, 'Users fetched successfully');
 
     } catch (error: any) {
         console.error('Fetch Users Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to fetch users' },
-            { status: 500 }
-        );
+        return apiError('Failed to fetch users', 500);
     }
 }

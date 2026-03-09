@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { apiSuccess } from '@/lib/api-response';
 
 export async function GET() {
-    return NextResponse.json({
+    return apiSuccess({
         status: 'healthy',
         service: 'auth-service',
         timestamp: new Date().toISOString()
-    });
+    }, 'Service healthy');
 }

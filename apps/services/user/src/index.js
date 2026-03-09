@@ -17,6 +17,7 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+app.use(require('./middleware/api-response'));
 
 // Moving routes below rewrite Middleware
 // Rewrite /api/users to / to support Gateway proxy

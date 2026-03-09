@@ -5,6 +5,9 @@ import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
 
 import { getMediaUrl } from "@/lib/utils"
+import { PollDisplay, parsePollContent } from "./poll-display"
+
+const CONTENT_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003'
 import { useTranslation } from "react-i18next"
 
 export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDelete }) {
@@ -84,10 +87,28 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDel
                     <MoreOptionsDropdown user={user} contentId={post.id} onDelete={onDelete} />
                 </div>
 
-                {/* Post content text */}
-                <div className="text-[15px] leading-5 whitespace-pre-wrap break-words text-foreground mt-0.5">
-                    {post.content}
-                </div>
+                {/* Reply indicator */}
+                {post.replyToId && (
+                    <p className="text-[13px] text-muted-foreground mt-0.5 mb-0.5">
+                        {t('feed.replying_to') || 'Replying to'}{' '}
+                        <span className="text-primary">
+                            @{post.replyToHandle || post.replyTo?.user?.profile?.handle || post.replyTo?.user?.handle || 'unknown'}
+                        </span>
+                    </p>
+                )}
+
+                {/* Post content: poll or plain text */}
+                {(() => {
+                    const text = post.content ?? post.text ?? post.body ?? ''
+                    const parsed = parsePollContent(String(text))
+                    return parsed ? (
+                        <PollDisplay content={String(text)} createdAt={post.createdAt || post.timestamp} />
+                    ) : (
+                        <div className="text-[15px] leading-5 whitespace-pre-wrap break-words text-foreground mt-0.5">
+                            {text}
+                        </div>
+                    )
+                })()}
 
                 {/* Media Attachments */}
                 {post.media && post.media.length > 0 && (
@@ -98,10 +119,10 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDel
                             // Handle both R2 URLs (absolute) and local URLs (relative)
                             const mediaUrl = media.mediaUrl?.startsWith('http') 
                                 ? media.mediaUrl 
-                                : `http://localhost:3003${media.mediaUrl}`;
+                                : `${CONTENT_SERVICE_URL}${media.mediaUrl}`;
                             const thumbnailUrl = media.thumbnailUrl?.startsWith('http')
                                 ? media.thumbnailUrl
-                                : `http://localhost:3003${media.thumbnailUrl}`;
+                                : media.thumbnailUrl ? `${CONTENT_SERVICE_URL}${media.thumbnailUrl}` : null;
 
                             return (
                                 <div key={media.id || index} className="relative bg-black">

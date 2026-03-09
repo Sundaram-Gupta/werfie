@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET(req: NextRequest) {
     try {
@@ -11,9 +12,9 @@ export async function GET(req: NextRequest) {
             },
             orderBy: { createdAt: 'desc' }
         });
-        return NextResponse.json(profiles);
+        return apiSuccess(profiles, 'Monetization profiles fetched successfully');
     } catch (error) {
-        return NextResponse.json({ error: 'Failed to fetch profiles' }, { status: 500 });
+        return apiError('Failed to fetch profiles', 500);
     }
 }
 
@@ -24,8 +25,8 @@ export async function PATCH(req: NextRequest) {
             where: { id },
             data: { status }
         });
-        return NextResponse.json(profile);
+        return apiSuccess(profile, 'Profile updated successfully');
     } catch (error) {
-        return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
+        return apiError('Failed to update profile', 500);
     }
 }

@@ -1,15 +1,14 @@
-// Basic Next.js API Routes (Simplified)
-import { NextResponse } from 'next/server'
-import { SearchService } from '@/services/search.service'
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
-    const { searchParams } = new URL(request.url)
-    const q = searchParams.get('q')
-
-    if (!q) {
-        return NextResponse.json([])
+    try {
+        const { searchParams } = new URL(request.url)
+        const q = searchParams.get('q')
+        if (!q) return Response.json({ status: true, message: 'No query', data: [] })
+        const { SearchService } = await import('@/services/search.service')
+        const results = await SearchService.searchPosts(q)
+        return Response.json({ status: true, message: 'OK', data: results ?? [] })
+    } catch {
+        return Response.json({ status: true, message: 'Search unavailable', data: [] })
     }
-
-    const results = await SearchService.searchPosts(q)
-    return NextResponse.json(results)
 }

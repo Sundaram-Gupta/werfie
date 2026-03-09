@@ -12,12 +12,15 @@ const api = axios.create({
     },
 })
 
-// Request interceptor - Add auth token to requests
+// Request interceptor - Add auth token; for FormData, let browser set Content-Type with boundary
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('accessToken')
         if (token && !config.headers.Authorization) {
             config.headers.Authorization = `Bearer ${token}`
+        }
+        if (config.data instanceof FormData) {
+            delete config.headers['Content-Type']
         }
         return config
     },
@@ -26,9 +29,18 @@ api.interceptors.request.use(
     }
 )
 
-// Response interceptor - Handle token refresh
+// Normalize APIs that return { status, message, data } - extract the actual payload
+function normalizeResponse(response) {
+    const d = response?.data
+    if (d && typeof d === 'object' && 'status' in d && 'data' in d) {
+        response.data = d.data
+    }
+    return response
+}
+
+// Response interceptor - Normalize format + handle token refresh
 api.interceptors.response.use(
-    (response) => response,
+    (response) => normalizeResponse(response),
     async (error) => {
         const originalRequest = error.config
 
@@ -42,9 +54,9 @@ api.interceptors.response.use(
                     const { data } = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
                         refreshToken,
                     })
-
-                    localStorage.setItem('accessToken', data.accessToken)
-                    originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
+                    const payload = data?.data ?? data
+                    localStorage.setItem('accessToken', payload.accessToken)
+                    originalRequest.headers.Authorization = `Bearer ${payload.accessToken}`
 
                     return api(originalRequest)
                 }

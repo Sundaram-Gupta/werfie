@@ -16,13 +16,13 @@ const authenticateToken = (req, res, next) => {
             return next();
         }
         console.log('Auth Middleware: No token provided');
-        return res.status(401).json({ error: 'Unauthorized' });
+        return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
     }
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) {
             console.error('Auth Middleware: Token verification failed:', err.message);
-            return res.status(401).json({ error: 'Unauthorized', details: err.message });
+            return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
         }
         console.log('Auth Middleware: Success, user:', user.sub);
         req.user = user;

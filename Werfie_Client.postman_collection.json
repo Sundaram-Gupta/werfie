@@ -28,17 +28,14 @@
                             "listen": "test",
                             "script": {
                                 "exec": [
-                                    "var jsonData = pm.response.json();",
-                                    "if (jsonData.token) {",
-                                    "    pm.environment.set(\"authToken\", jsonData.token);",
-                                    "    if (jsonData.user) {",
-                                    "        pm.environment.set(\"userId\", jsonData.user.id);",
-                                    "    }",
-                                    "    console.log(\"Client Token stored\");",
+                                    "var j = pm.response.json();",
+                                    "if (j.accessToken) {",
+                                    "    pm.environment.set(\"authToken\", j.accessToken);",
+                                    "    pm.environment.set(\"userId\", j.id || (j.user && j.user.id) || \"\");",
+                                    "    if (j.refreshToken) pm.environment.set(\"refreshToken\", j.refreshToken);",
+                                    "    console.log(\"Tokens stored\");",
                                     "}",
-                                    "pm.test(\"Status code is 200\", function () {",
-                                    "    pm.response.to.have.status(200);",
-                                    "});"
+                                    "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
                                 ],
                                 "type": "text/javascript"
                             }
@@ -102,16 +99,7 @@
                 {
                     "name": "Register",
                     "request": {
-                        "auth": {
-                            "type": "bearer",
-                            "bearer": [
-                                {
-                                    "key": "token",
-                                    "value": "{{authToken}}",
-                                    "type": "string"
-                                }
-                            ]
-                        },
+                        "auth": { "type": "noauth" },
                         "method": "POST",
                         "header": [
                             {

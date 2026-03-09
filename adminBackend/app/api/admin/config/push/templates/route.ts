@@ -1,15 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAdminAction } from '@/lib/audit';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET() {
     try {
         const templates = await prisma.pushTemplate.findMany({
             orderBy: { name: 'asc' }
         });
-        return NextResponse.json(templates);
+        return apiSuccess(templates, 'Push templates fetched successfully');
     } catch (error) {
-        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+        return apiError('Failed to fetch push templates', 500);
     }
 }
 
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest) {
 
         await logAdminAction(adminId, 'CREATE_PUSH_TEMPLATE', 'PushTemplate', template.id, { name });
 
-        return NextResponse.json(template);
+        return apiSuccess(template, 'Push template created successfully');
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return apiError(error.message, 500);
     }
 }

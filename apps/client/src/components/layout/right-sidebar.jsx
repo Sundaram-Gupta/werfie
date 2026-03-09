@@ -28,11 +28,12 @@ function TrendsList({ navigate }) {
     }, [])
 
     if (loading) return <div className="p-4 text-center text-muted-foreground">{t('right_sidebar.loading_trends')}</div>
-    if (trends.length === 0) return <div className="p-4 text-center text-muted-foreground">{t('right_sidebar.no_trends')}</div>
+    const list = Array.isArray(trends) ? trends : []
+    if (list.length === 0) return <div className="p-4 text-center text-muted-foreground">{t('right_sidebar.no_trends')}</div>
 
     return (
         <div>
-            {trends.slice(0, 5).map((trend, i) => (
+            {list.slice(0, 5).map((trend, i) => (
                 <div
                     key={trend.id || i}
                     onClick={() => navigate(`/search?q=${encodeURIComponent(trend.name)}`)}
@@ -125,8 +126,8 @@ export function RightSidebar() {
     const fetchSuggestions = async () => {
         try {
             const data = await userService.getSuggestions(10)
-            // Filter out the current user from suggestions
-            const filteredData = data.filter(user => user.id !== currentUser?.id)
+            const list = Array.isArray(data) ? data : []
+            const filteredData = list.filter(user => user.id !== currentUser?.id)
             setSuggestions(filteredData)
         } catch (error) {
             console.error("Failed to load suggestions", error)

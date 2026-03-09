@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiSuccess, apiError } from '@/lib/api-response';
 
 export async function GET() {
     try {
@@ -58,9 +58,7 @@ export async function GET() {
             ? ((reportsCount - reportsLastMonth) / reportsLastMonth * 100).toFixed(1)
             : "0";
 
-        return NextResponse.json({
-            success: true,
-            data: {
+        return apiSuccess({
                 stats: {
                     totalUsers: {
                         value: formatNumber(totalUsers),
@@ -83,14 +81,10 @@ export async function GET() {
                         trendValue: (parseFloat(reportsGrowthPercent) >= 0 ? '+' : '') + reportsGrowthPercent + '%'
                     }
                 }
-            }
-        });
+            }, 'Stats fetched successfully');
     } catch (error: any) {
         console.error('Dashboard Stats API Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Internal Server Error' },
-            { status: 500 }
-        );
+        return apiError('Internal Server Error', 500);
     }
 }
 
