@@ -19,24 +19,30 @@ app.use(cors({
 app.use(express.json());
 app.use(require('./middleware/api-response'));
 
-// Moving routes below rewrite Middleware
-// Rewrite /api/users to / to support Gateway proxy
+// Debug Middleware - MOVED TO TOP
+app.use((req, res, next) => {
+    console.log(`[User Service] ${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
+});
+
+// Rewrite Middleware
 app.use((req, res, next) => {
     if (req.url.startsWith('/api/users')) {
         let newUrl = req.url.replace('/api/users', '');
-        if (!newUrl.startsWith('/')) {
-            newUrl = '/' + newUrl;
-        }
-        console.log(`[User Service] Path Rewrite: ${req.url} -> ${newUrl}`);
+        if (!newUrl.startsWith('/')) newUrl = '/' + newUrl;
+        console.log(`[User Service] Rewrite /api/users: ${req.url} -> ${newUrl}`);
         req.url = newUrl;
     }
     next();
 });
 
-app.use('/api/business', businessRoutes);
-app.use('/business', businessRoutes);
+// 1. Institutional Routes (Prioritized)
 app.use('/api/institutional', institutionalRoutes);
 app.use('/institutional', institutionalRoutes);
+
+// 2. Other Routes
+app.use('/api/business', businessRoutes);
+app.use('/business', businessRoutes);
 app.use('/api/leaders', worldLeaderRoutes);
 app.use('/leaders', worldLeaderRoutes);
 
@@ -53,6 +59,14 @@ const authenticateToken = require('./middleware/auth');
 // Health Check
 app.get('/health', (req, res) => {
     res.json({ status: 'healthy', service: 'user-service' });
+});
+
+app.get('/test-route', (req, res) => {
+    res.json({ message: 'User service is reachable', url: req.url });
+});
+
+app.get('/api/institutional/health-check', (req, res) => {
+    res.json({ message: 'Institutional API is reachable via index.js', url: req.url });
 });
 
 // Get User Profile (Self)
@@ -399,6 +413,16 @@ app.put('/:id', authenticateToken, async (req, res) => {
         console.error('Update Profile Error:', error);
         res.status(500).json({ error: 'Failed to update profile' });
     }
+});
+
+app.use((req, res) => {
+    console.log(`[User Service] 404 Catch-all: ${req.method} ${req.url}`);
+    res.status(404).json({
+        error: 'Not Found in User Service',
+        method: req.method,
+        url: req.url,
+        stack: 'User Service Catch-all'
+    });
 });
 
 app.listen(PORT, () => {
