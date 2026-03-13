@@ -1,8 +1,13 @@
 import axios from 'axios'
 
-// API Base URL - Backend server
-// API Base URL - Backend server
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// Use explicit origin when unset - ensures API works when accessing via IP (e.g. 192.168.1.37:5173)
+// Vite proxy forwards /api to gateway; window.location.origin matches page URL
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+  if (typeof window !== 'undefined') return window.location.origin
+  return ''
+}
+export const API_BASE_URL = getApiBase()
 
 // Create axios instance
 const api = axios.create({

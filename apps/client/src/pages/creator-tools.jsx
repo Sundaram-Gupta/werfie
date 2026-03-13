@@ -1,15 +1,21 @@
 
-import { useParams } from "react-router-dom"
+import { useParams, Link } from "react-router-dom"
 import { useEffect } from "react"
-import { BarChart, Video, Calendar, Users, ArrowLeft, Heart, Repeat2, MessageCircle, Share, Bookmark, Upload, X, Feather, BadgeCheck } from "lucide-react"
+import { BarChart, Video, Calendar, Users, ArrowLeft, Heart, Repeat2, MessageCircle, Share, Bookmark, Upload, X, Feather, BadgeCheck, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { PostCard } from "@/components/feed/post-card"
-import { postService } from "@/services/api"
+import { postService, mediaService, analyticsService } from "@/services/api"
+import { useAuth } from "@/context/AuthContext"
+import { io } from "socket.io-client"
+
+// Use '' for same-origin when unset (works via IP - Vite proxies /api)
+const API_URL = import.meta.env.VITE_API_URL || ''
 import { usePosts } from "@/hooks/usePosts"
+import { toast } from "sonner"
 
 function PageHeader({ title, description, icon: Icon }) {
     const navigate = useNavigate()
@@ -29,7 +35,112 @@ function PageHeader({ title, description, icon: Icon }) {
     )
 }
 
+function formatCount(n) {
+    const num = Number(n)
+    if (isNaN(num)) return '0'
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+    return String(num)
+}
+
+function formatGrowth(growth) {
+    const n = Number(growth)
+    if (isNaN(n) || n === 0) return '+0%'
+    const sign = n > 0 ? '+' : ''
+    return `${sign}${n}%`
+}
+
 export function Analytics() {
+    const { user } = useAuth()
+    const [loading, setLoading] = useState(true)
+    const [stats, setStats] = useState({
+        impressions: 0,
+        engagements: 0,
+        profileVisits: 0,
+        impressionsGrowth: 0,
+        engagementsGrowth: 0,
+        profileVisitsGrowth: 0
+    })
+    const [topPosts, setTopPosts] = useState([])
+    const [activityData, setActivityData] = useState([])
+
+    useEffect(() => {
+        const fetchAnalytics = async () => {
+            if (!user?.id) {
+                setLoading(false)
+                setStats({ impressions: 0, engagements: 0, profileVisits: 0, impressionsGrowth: 0, engagementsGrowth: 0, profileVisitsGrowth: 0 })
+                setTopPosts([])
+                setActivityData(Array(14).fill(0).map((_, i) => {
+                    const d = new Date()
+                    d.setDate(d.getDate() - (13 - i))
+                    return { date: d.toISOString().slice(0, 10), count: 0, pct: 0 }
+                }))
+                return
+            }
+            setLoading(true)
+            try {
+                const [creatorStats, postsData] = await Promise.all([
+                    analyticsService.getCreatorStats().catch(() => null),
+                    postService.getPosts({ userId: user.id, limit: 50 }).catch(() => ({}))
+                ])
+
+                if (creatorStats) {
+                    const v = creatorStats.views?.total ?? 0
+                    const f = creatorStats.followers?.total ?? 0
+                    setStats({
+                        impressions: v,
+                        engagements: v,
+                        profileVisits: f,
+                        impressionsGrowth: creatorStats.views?.growth ?? 0,
+                        engagementsGrowth: creatorStats.views?.growth ?? 0,
+                        profileVisitsGrowth: creatorStats.followers?.growth ?? 0
+                    })
+                }
+
+                const posts = postsData?.posts ?? postsData ?? []
+                const withEngagement = posts.filter((p) => !p.replyToId).map((p) => {
+                    const c = p._count || {}
+                    const eng = (c.likes ?? 0) + (c.retweets ?? 0) + (c.replies ?? 0)
+                    return { ...p, _engagement: eng }
+                })
+                const sorted = withEngagement.sort((a, b) => (b._engagement ?? 0) - (a._engagement ?? 0))
+                setTopPosts(sorted.slice(0, 5))
+
+                const now = new Date()
+                const dayBuckets = Array(14).fill(0).map((_, i) => {
+                    const d = new Date(now)
+                    d.setDate(d.getDate() - (13 - i))
+                    return { date: d.toISOString().slice(0, 10), count: 0 }
+                })
+                posts.forEach((p) => {
+                    const d = p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : null
+                    if (d) {
+                        const b = dayBuckets.find((x) => x.date === d)
+                        if (b) b.count += 1
+                    }
+                })
+                const maxCount = Math.max(1, ...dayBuckets.map((x) => x.count))
+                setActivityData(dayBuckets.map((x) => ({ ...x, pct: maxCount > 0 ? (x.count / maxCount) * 100 : 0 })))
+            } catch (err) {
+                console.error('Analytics fetch error:', err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchAnalytics()
+    }, [user?.id])
+
+    if (loading) {
+        return (
+            <div>
+                <PageHeader title="Analytics" description="Overview of your performance" icon={BarChart} />
+                <div className="p-8 flex justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div>
             <PageHeader title="Analytics" description="Overview of your performance" icon={BarChart} />
@@ -38,48 +149,73 @@ export function Analytics() {
                 <div className="grid grid-cols-3 gap-4">
                     <div className="bg-black border border-border rounded-xl p-4">
                         <div className="text-sm text-muted-foreground mb-1">Impressions</div>
-                        <div className="text-2xl font-bold">2.4M</div>
-                        <div className="text-xs text-green-500 mt-1">↑ 12.5%</div>
+                        <div className="text-2xl font-bold">{formatCount(stats.impressions)}</div>
+                        <div className={`text-xs mt-1 ${stats.impressionsGrowth >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {stats.impressionsGrowth >= 0 ? '↑' : '↓'} {formatGrowth(Math.abs(stats.impressionsGrowth))}
+                        </div>
                     </div>
                     <div className="bg-black border border-border rounded-xl p-4">
                         <div className="text-sm text-muted-foreground mb-1">Engagements</div>
-                        <div className="text-2xl font-bold">145K</div>
-                        <div className="text-xs text-green-500 mt-1">↑ 8.2%</div>
+                        <div className="text-2xl font-bold">{formatCount(stats.engagements)}</div>
+                        <div className={`text-xs mt-1 ${stats.engagementsGrowth >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {stats.engagementsGrowth >= 0 ? '↑' : '↓'} {formatGrowth(Math.abs(stats.engagementsGrowth))}
+                        </div>
                     </div>
                     <div className="bg-black border border-border rounded-xl p-4">
                         <div className="text-sm text-muted-foreground mb-1">Profile Visits</div>
-                        <div className="text-2xl font-bold">12K</div>
-                        <div className="text-xs text-red-500 mt-1">↓ 2.1%</div>
+                        <div className="text-2xl font-bold">{formatCount(stats.profileVisits)}</div>
+                        <div className={`text-xs mt-1 ${stats.profileVisitsGrowth >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {stats.profileVisitsGrowth >= 0 ? '↑' : '↓'} {formatGrowth(Math.abs(stats.profileVisitsGrowth))}
+                        </div>
                     </div>
                 </div>
 
-                {/* Mock Chart Area */}
+                {/* Activity Chart (28 Days) */}
                 <div className="bg-black border border-border rounded-xl p-6">
-                    <h3 className="font-bold mb-4">Activity (28 Days)</h3>
+                    <h3 className="font-bold mb-4">Activity (14 Days)</h3>
                     <div className="h-48 flex items-end justify-between gap-2">
-                        {Array.from({ length: 14 }).map((_, i) => (
+                        {activityData.map((d, i) => (
                             <div
                                 key={i}
-                                className="w-full bg-[rgb(29,155,240)]/20 rounded-t-sm hover:bg-[rgb(29,155,240)]/50 transition-colors"
-                                style={{ height: `${Math.max(20, Math.random() * 100)}%` }}
+                                className="w-full bg-[rgb(29,155,240)]/20 rounded-t-sm hover:bg-[rgb(29,155,240)]/50 transition-colors flex flex-col justify-end"
+                                style={{ height: `${Math.max(12, d.pct)}%` }}
+                                title={`${d.date}: ${d.count} post${d.count !== 1 ? 's' : ''}`}
                             />
                         ))}
                     </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground mt-2">
+                        <span>{activityData[0]?.date ?? ''}</span>
+                        <span>{activityData[activityData.length - 1]?.date ?? ''}</span>
+                    </div>
                 </div>
 
-                {/* Top Tweets */}
+                {/* Top Posts */}
                 <div>
                     <h3 className="font-bold mb-3">Top Posts</h3>
-                    <div className="space-y-3">
-                        <div className="bg-black border border-border rounded-xl p-4 flex justify-between items-center">
-                            <p className="text-sm line-clamp-1 flex-1">Just launched the new feature! Check it out...</p>
-                            <div className="text-xs text-muted-foreground ml-4">45K Impressions</div>
+                    {topPosts.length > 0 ? (
+                        <div className="space-y-3">
+                            {topPosts.map((post) => {
+                                const c = post._count || {}
+                                const eng = (c.likes ?? 0) + (c.retweets ?? 0) + (c.replies ?? 0)
+                                return (
+                                    <Link
+                                        key={post.id}
+                                        to={`/post/${post.id}`}
+                                        className="block bg-black border border-border rounded-xl p-4 flex justify-between items-center hover:bg-white/[0.03] transition-colors"
+                                    >
+                                        <p className="text-sm line-clamp-1 flex-1">{post.content || '(No content)'}</p>
+                                        <div className="text-xs text-muted-foreground ml-4 whitespace-nowrap">
+                                            {formatCount(eng)} Engagements
+                                        </div>
+                                    </Link>
+                                )
+                            })}
                         </div>
-                        <div className="bg-black border border-border rounded-xl p-4 flex justify-between items-center">
-                            <p className="text-sm line-clamp-1 flex-1">Here is a quick tutorial on React Server Components...</p>
-                            <div className="text-xs text-muted-foreground ml-4">32K Impressions</div>
+                    ) : (
+                        <div className="bg-black border border-border rounded-xl p-8 text-center text-muted-foreground">
+                            No posts yet. Create posts to see your top performers here.
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -90,29 +226,57 @@ export function MediaLibrary() {
     const [uploadOpen, setUploadOpen] = useState(false)
     const [viewOpen, setViewOpen] = useState(false)
     const [selectedMedia, setSelectedMedia] = useState(null)
-    const [mediaItems, setMediaItems] = useState([
-        { id: 1, type: 'JPG', gradient: 'from-pink-500/20 to-purple-500/20', name: 'design-mockup.jpg', size: '2.4 MB', date: 'Jan 15, 2026' },
-        { id: 2, type: 'MP4', gradient: 'from-blue-500/20 to-cyan-500/20', name: 'product-demo.mp4', size: '15.8 MB', date: 'Jan 14, 2026' },
-        { id: 3, type: 'JPG', gradient: 'from-orange-500/20 to-yellow-500/20', name: 'team-photo.jpg', size: '3.1 MB', date: 'Jan 12, 2026' },
-        { id: 4, type: 'JPG', gradient: 'from-pink-500/20 to-purple-500/20', name: 'screenshot.jpg', size: '1.8 MB', date: 'Jan 10, 2026' },
-        { id: 5, type: 'MP4', gradient: 'from-blue-500/20 to-cyan-500/20', name: 'tutorial.mp4', size: '22.3 MB', date: 'Jan 8, 2026' },
-        { id: 6, type: 'JPG', gradient: 'from-orange-500/20 to-yellow-500/20', name: 'banner.jpg', size: '4.2 MB', date: 'Jan 5, 2026' },
-        { id: 7, type: 'JPG', gradient: 'from-pink-500/20 to-purple-500/20', name: 'logo-variants.jpg', size: '1.2 MB', date: 'Jan 3, 2026' },
-        { id: 8, type: 'MP4', gradient: 'from-blue-500/20 to-cyan-500/20', name: 'animation.mp4', size: '8.7 MB', date: 'Jan 1, 2026' }
-    ])
+    const [mediaItems, setMediaItems] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [uploading, setUploading] = useState(false)
 
-    const handleUpload = (e) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            const newMedia = {
-                id: mediaItems.length + 1,
-                type: file.type.includes('video') ? 'MP4' : 'JPG',
-                gradient: 'from-green-500/20 to-emerald-500/20',
-                name: file.name,
-                size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-                date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    useEffect(() => {
+        const fetchLibrary = async () => {
+            try {
+                const items = await mediaService.getLibrary()
+                setMediaItems(Array.isArray(items) ? items : [])
+            } catch (err) {
+                console.error("Failed to load media library:", err)
+                toast.error("Failed to load media library")
+            } finally {
+                setLoading(false)
             }
-            setMediaItems([newMedia, ...mediaItems])
+        }
+        fetchLibrary()
+    }, [])
+
+    const toDisplayItem = (m) => {
+        const ext = m.mediaType === 'video' ? 'MP4' : 'JPG'
+        const gradient = m.mediaType === 'video' ? 'from-blue-500/20 to-cyan-500/20' : 'from-pink-500/20 to-purple-500/20'
+        const sizeStr = m.size ? `${(m.size / (1024 * 1024)).toFixed(1)} MB` : ''
+        const dateStr = m.createdAt ? new Date(m.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+        return { ...m, type: ext, gradient, sizeStr, dateStr }
+    }
+
+    const handleUpload = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploading(true)
+        try {
+            const result = await mediaService.uploadMedia(file)
+            const url = result?.url ?? result?.data?.url ?? result
+            if (url) {
+                const newMedia = {
+                    id: `upload-${Date.now()}`,
+                    mediaType: file.type.startsWith('video/') ? 'video' : 'image',
+                    mediaUrl: url,
+                    thumbnailUrl: result?.thumbnailUrl ?? result?.data?.thumbnailUrl,
+                    size: file.size,
+                    createdAt: new Date().toISOString()
+                }
+                setMediaItems(prev => [toDisplayItem(newMedia), ...prev])
+                toast.success("Media uploaded. Use it when creating a post.")
+            }
+        } catch (err) {
+            console.error("Upload failed:", err)
+            toast.error("Upload failed")
+        } finally {
+            setUploading(false)
             setUploadOpen(false)
         }
     }
@@ -123,40 +287,64 @@ export function MediaLibrary() {
     }
 
     const handleDelete = (id) => {
-        setMediaItems(mediaItems.filter(item => item.id !== id))
+        setMediaItems(prev => prev.filter(item => item.id !== id))
         setViewOpen(false)
+    }
+
+    const API_BASE = import.meta.env.VITE_API_URL || ''
+    const mediaUrl = (m) => {
+        const url = m?.mediaUrl
+        if (!url) return ''
+        return url.startsWith('http') ? url : `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`
     }
 
     return (
         <div>
-            <PageHeader title="Media Studio" description={`${(mediaItems.length * 3.2).toFixed(1)}GB of 15GB used`} icon={Video} />
+            <PageHeader title="Media Studio" description={`${mediaItems.length} items · Media from your posts`} icon={Video} />
             <div className="sticky top-0 z-10 border-b border-border px-4 py-3 flex items-center justify-end bg-background/50">
-                <Button size="sm" className="rounded-full font-bold" onClick={() => setUploadOpen(true)}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload
+                <Button size="sm" className="rounded-full font-bold" onClick={() => setUploadOpen(true)} disabled={uploading}>
+                    {uploading ? "Uploading…" : <><Upload className="w-4 h-4 mr-2" /> Upload</>}
                 </Button>
             </div>
 
             <div className="p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {mediaItems.map((media) => (
-                        <div
-                            key={media.id}
-                            className="aspect-square bg-muted rounded-xl overflow-hidden relative group cursor-pointer border border-border/50"
-                            onClick={() => handleView(media)}
-                        >
-                            <div className={`absolute inset-0 bg-gradient-to-br ${media.gradient}`} />
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                                <span className="text-xs font-bold text-white bg-black/50 px-2 py-1 rounded-full backdrop-blur-sm">View</span>
-                            </div>
-                            <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
-                                <span className="text-[10px] bg-black/60 px-1.5 rounded text-white backdrop-blur-md">
-                                    {media.type}
-                                </span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                {loading ? (
+                    <div className="py-12 text-center text-muted-foreground">Loading media library…</div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {mediaItems.map((media) => {
+                            const d = toDisplayItem(media)
+                            return (
+                                <div
+                                    key={media.id}
+                                    className="aspect-square bg-muted rounded-xl overflow-hidden relative group cursor-pointer border border-border/50"
+                                    onClick={() => handleView(media)}
+                                >
+                                    {media.mediaUrl ? (
+                                        media.mediaType === 'video' ? (
+                                            <video src={mediaUrl(media)} className="w-full h-full object-cover" muted />
+                                        ) : (
+                                            <img src={mediaUrl(media)} alt="" className="w-full h-full object-cover" />
+                                        )
+                                    ) : (
+                                        <div className={`absolute inset-0 bg-gradient-to-br ${d.gradient}`} />
+                                    )}
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                                        <span className="text-xs font-bold text-white bg-black/50 px-2 py-1 rounded-full backdrop-blur-sm">View</span>
+                                    </div>
+                                    <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
+                                        <span className="text-[10px] bg-black/60 px-1.5 rounded text-white backdrop-blur-md">{d.type}</span>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+                {!loading && mediaItems.length === 0 && (
+                    <div className="py-12 text-center text-muted-foreground">
+                        No media yet. Upload when creating a post, or use the Upload button (file will be processed).
+                    </div>
+                )}
             </div>
 
             {/* Upload Dialog */}
@@ -194,44 +382,38 @@ export function MediaLibrary() {
                     {selectedMedia && (
                         <>
                             <DialogHeader>
-                                <DialogTitle>{selectedMedia.name}</DialogTitle>
+                                <DialogTitle>{selectedMedia.mediaUrl?.split('/').pop() || 'Media'}</DialogTitle>
+                                <DialogDescription className="sr-only">Preview media details</DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
-                                {/* Media Preview */}
-                                <div className={`aspect-video rounded-lg bg-gradient-to-br ${selectedMedia.gradient} flex items-center justify-center`}>
-                                    <span className="text-6xl opacity-20">{selectedMedia.type === 'MP4' ? '▶' : '🖼'}</span>
+                                <div className="aspect-video rounded-lg bg-muted overflow-hidden flex items-center justify-center">
+                                    {selectedMedia.mediaType === 'video' ? (
+                                        <video src={mediaUrl(selectedMedia)} controls className="max-w-full max-h-full" />
+                                    ) : selectedMedia.mediaUrl ? (
+                                        <img src={mediaUrl(selectedMedia)} alt="" className="max-w-full max-h-full object-contain" />
+                                    ) : (
+                                        <span className="text-6xl opacity-20">{selectedMedia.type === 'MP4' ? '▶' : '🖼'}</span>
+                                    )}
                                 </div>
-
-                                {/* Media Info */}
                                 <div className="grid grid-cols-3 gap-4 text-sm">
                                     <div>
                                         <div className="text-muted-foreground mb-1">Type</div>
-                                        <div className="font-medium">{selectedMedia.type}</div>
+                                        <div className="font-medium">{selectedMedia.mediaType || selectedMedia.type || '—'}</div>
                                     </div>
                                     <div>
                                         <div className="text-muted-foreground mb-1">Size</div>
-                                        <div className="font-medium">{selectedMedia.size}</div>
+                                        <div className="font-medium">{selectedMedia.sizeStr || (selectedMedia.size ? `${(selectedMedia.size / 1024).toFixed(1)} KB` : '—')}</div>
                                     </div>
                                     <div>
                                         <div className="text-muted-foreground mb-1">Uploaded</div>
-                                        <div className="font-medium">{selectedMedia.date}</div>
+                                        <div className="font-medium">{selectedMedia.dateStr || (selectedMedia.createdAt ? new Date(selectedMedia.createdAt).toLocaleDateString() : '—')}</div>
                                     </div>
                                 </div>
-
-                                {/* Actions */}
                                 <div className="flex gap-2 pt-4">
-                                    <Button variant="outline" className="flex-1">
-                                        Download
-                                    </Button>
-                                    <Button variant="outline" className="flex-1">
+                                    <Button variant="outline" className="flex-1" onClick={() => selectedMedia.mediaUrl && navigator.clipboard.writeText(mediaUrl(selectedMedia)).then(() => toast.success('Link copied'))}>
                                         Copy Link
                                     </Button>
-                                    <Button
-                                        variant="destructive"
-                                        onClick={() => handleDelete(selectedMedia.id)}
-                                    >
-                                        Delete
-                                    </Button>
+                                    <Button variant="ghost" onClick={() => handleDelete(selectedMedia.id)}>Close</Button>
                                 </div>
                             </div>
                         </>
@@ -243,40 +425,55 @@ export function MediaLibrary() {
 }
 
 export function ScheduledPosts() {
-    const [posts, setPosts] = useState([
-        { id: 1, text: "Just recorded a new podcast episode! 🎙️ #tech", date: "Tomorrow, 10:00 AM" },
-        { id: 2, text: "What's everyone building this weekend?", date: "Oct 24, 2:00 PM" },
-        { id: 3, text: "Thread: 5 tips for better React performance 🧵", date: "Oct 25, 9:30 AM" }
-    ])
+    const [posts, setPosts] = useState([])
+    const [loading, setLoading] = useState(true)
     const [createOpen, setCreateOpen] = useState(false)
     const [newPostText, setNewPostText] = useState("")
     const [newPostDate, setNewPostDate] = useState("")
+    const [scheduling, setScheduling] = useState(false)
 
-    const handleCreatePost = (e) => {
+    useEffect(() => {
+        const fetchScheduled = async () => {
+            try {
+                const data = await postService.getScheduledPosts()
+                setPosts(Array.isArray(data) ? data : [])
+            } catch (err) {
+                console.error("Failed to load scheduled posts:", err)
+                toast.error("Failed to load scheduled posts")
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchScheduled()
+    }, [])
+
+    const handleCreatePost = async (e) => {
         e.preventDefault()
-        console.log("Attempting to schedule post:", { text: newPostText, date: newPostDate })
-        if (!newPostText.trim() || !newPostDate) {
-            console.error("Missing text or date")
-            return
+        if (!newPostText.trim() || !newPostDate) return
+        setScheduling(true)
+        try {
+            const scheduledAt = new Date(newPostDate).toISOString()
+            await postService.schedulePost(newPostText.trim(), scheduledAt)
+            const newPost = {
+                id: `temp-${Date.now()}`,
+                content: newPostText,
+                scheduledAt,
+                date: new Date(newPostDate).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+            }
+            setPosts(prev => [newPost, ...prev])
+            setNewPostText("")
+            setNewPostDate("")
+            setCreateOpen(false)
+            toast.success("Post scheduled successfully")
+            setTimeout(() => {
+                postService.getScheduledPosts().then(data => setPosts(Array.isArray(data) ? data : []))
+            }, 500)
+        } catch (err) {
+            console.error("Schedule failed:", err)
+            toast.error("Failed to schedule post")
+        } finally {
+            setScheduling(false)
         }
-
-        const newPost = {
-            id: Date.now(),
-            text: newPostText,
-            date: new Date(newPostDate).toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            })
-        }
-
-        setPosts([newPost, ...posts])
-        setNewPostText("")
-        setNewPostDate("")
-        setCreateOpen(false)
-        console.log("Post scheduled successfully")
     }
 
     return (
@@ -341,9 +538,9 @@ export function ScheduledPosts() {
                                     id="schedule-submit-button"
                                     onClick={handleCreatePost}
                                     className="flex-1 rounded-full bg-blue-500 hover:bg-blue-600 text-white font-bold h-11 shadow-lg shadow-blue-500/20"
-                                    disabled={!newPostText.trim() || !newPostDate}
+                                    disabled={!newPostText.trim() || !newPostDate || scheduling}
                                 >
-                                    Schedule
+                                    {scheduling ? "Scheduling…" : "Schedule"}
                                 </Button>
                             </div>
                         </div>
@@ -352,8 +549,13 @@ export function ScheduledPosts() {
             </div>
 
             <div className="divide-y divide-border">
-                {posts.length > 0 ? (
-                    posts.map((post) => (
+                {loading ? (
+                    <div className="py-12 text-center text-muted-foreground">Loading scheduled posts…</div>
+                ) : posts.length > 0 ? (
+                    posts.map((post) => {
+                        const dateStr = post.date || (post.scheduledAt ? new Date(post.scheduledAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '')
+                        const text = post.content || post.text || ''
+                        return (
                         <div key={post.id} className="p-4 hover:bg-white/[0.02] transition-colors group">
                             <div className="flex gap-4">
                                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full flex-shrink-0 border border-white/5 flex items-center justify-center">
@@ -363,25 +565,33 @@ export function ScheduledPosts() {
                                     <div className="flex justify-between items-start">
                                         <div className="text-[13px] font-medium text-muted-foreground flex items-center gap-1.5">
                                             <Calendar className="w-3.5 h-3.5" />
-                                            Scheduled for {post.date}
+                                            Scheduled for {dateStr}
                                         </div>
                                         <div className="flex gap-2">
-                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 px-3 rounded-full">Edit</Button>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
                                                 className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => setPosts(posts.filter(p => p.id !== post.id))}
+                                                onClick={async () => {
+                                                    try {
+                                                        await postService.deletePost(post.id)
+                                                        setPosts(prev => prev.filter(p => p.id !== post.id))
+                                                        toast.success("Scheduled post removed")
+                                                    } catch (e) {
+                                                        toast.error("Failed to remove")
+                                                    }
+                                                }}
                                             >
                                                 Delete
                                             </Button>
                                         </div>
                                     </div>
-                                    <p className="text-[15px] leading-relaxed pr-8">{post.text}</p>
+                                    <p className="text-[15px] leading-relaxed pr-8">{text}</p>
                                 </div>
                             </div>
                         </div>
-                    ))
+                    )
+                    })
                 ) : (
                     <div className="flex flex-col items-center justify-center py-20 text-center px-4">
                         <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -470,27 +680,104 @@ export function PostDetail() {
     const [replies, setReplies] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-    const { likePost, unlikePost, retweetPost, unretweetPost, deletePost } = usePosts({ tab: 'for-you' })
+    const { deletePost } = usePosts({ tab: 'for-you' })
+
+    const updatePost = (updater) => setPost((prev) => (prev ? updater(prev) : prev))
+    const updateReplies = (updater) => setReplies((prev) => updater(prev))
+
+    const updateItem = (postId, updater) => {
+        if (post?.id === postId) updatePost(updater)
+        else updateReplies((list) => list.map((p) => (p.id === postId ? updater(p) : p)))
+    }
+
+    const likePost = async (postId) => {
+        updateItem(postId, (p) => ({ ...p, _count: { ...p._count, likes: (p._count?.likes || 0) + 1 }, likes: [{ id: 'temp' }] }))
+        try {
+            await postService.likePost(postId)
+        } catch (err) {
+            console.error('Error liking post:', err)
+            updateItem(postId, (p) => ({ ...p, _count: { ...p._count, likes: Math.max((p._count?.likes || 0) - 1, 0) }, likes: [] }))
+        }
+    }
+    const unlikePost = async (postId) => {
+        updateItem(postId, (p) => ({ ...p, _count: { ...p._count, likes: Math.max((p._count?.likes || 0) - 1, 0) }, likes: [] }))
+        try {
+            await postService.unlikePost(postId)
+        } catch (err) {
+            console.error('Error unliking post:', err)
+            updateItem(postId, (p) => ({ ...p, _count: { ...p._count, likes: (p._count?.likes || 0) + 1 }, likes: [{ id: 'temp' }] }))
+        }
+    }
+    const retweetPost = async (postId) => {
+        updateItem(postId, (p) => ({ ...p, _count: { ...p._count, retweets: (p._count?.retweets || 0) + 1 }, retweets: [{ id: 'temp' }] }))
+        try {
+            await postService.retweetPost(postId)
+        } catch (err) {
+            console.error('Error retweeting post:', err)
+            updateItem(postId, (p) => ({ ...p, _count: { ...p._count, retweets: Math.max((p._count?.retweets || 0) - 1, 0) }, retweets: [] }))
+        }
+    }
+    const unretweetPost = async (postId) => {
+        updateItem(postId, (p) => ({ ...p, _count: { ...p._count, retweets: Math.max((p._count?.retweets || 0) - 1, 0) }, retweets: [] }))
+        try {
+            await postService.unretweetPost(postId)
+        } catch (err) {
+            console.error('Error unretweeting post:', err)
+            updateItem(postId, (p) => ({ ...p, _count: { ...p._count, retweets: (p._count?.retweets || 0) + 1 }, retweets: [{ id: 'temp' }] }))
+        }
+    }
+    const bookmarkPost = async (postId) => {
+        updateItem(postId, (p) => ({ ...p, bookmarks: [{ id: 'temp' }] }))
+        try {
+            await postService.bookmarkPost(postId)
+        } catch (err) {
+            console.error('Error bookmarking post:', err)
+            updateItem(postId, (p) => ({ ...p, bookmarks: [] }))
+        }
+    }
+    const unbookmarkPost = async (postId) => {
+        updateItem(postId, (p) => ({ ...p, bookmarks: [] }))
+        try {
+            await postService.unbookmarkPost(postId)
+        } catch (err) {
+            console.error('Error unbookmarking post:', err)
+            updateItem(postId, (p) => ({ ...p, bookmarks: [{ id: 'temp' }] }))
+        }
+    }
+
+    const fetchData = async (isRefetch = false) => {
+        if (!id) return
+        try {
+            if (!isRefetch) setLoading(true)
+            const [postData, repliesData] = await Promise.all([
+                postService.getPost(id),
+                postService.getReplies(id)
+            ])
+            setPost(postData)
+            setReplies(Array.isArray(repliesData) ? repliesData : repliesData?.posts || [])
+        } catch (err) {
+            console.error('PostDetail fetch error:', err)
+            setError(err.response?.data?.message || err.message || 'Failed to load post')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     useEffect(() => {
         if (!id) return
-        const fetchData = async () => {
-            try {
-                setLoading(true)
-                const [postData, repliesData] = await Promise.all([
-                    postService.getPost(id),
-                    postService.getReplies(id)
-                ])
-                setPost(postData)
-                setReplies(Array.isArray(repliesData) ? repliesData : repliesData?.posts || [])
-            } catch (err) {
-                console.error('PostDetail fetch error:', err)
-                setError(err.response?.data?.message || err.message || 'Failed to load post')
-            } finally {
-                setLoading(false)
-            }
-        }
         fetchData()
+    }, [id])
+
+    // Refetch when feed-refresh (e.g. user posted reply) or post_published (new post/reply from anyone)
+    useEffect(() => {
+        const onRefresh = () => fetchData(true)
+        window.addEventListener('feed-refresh', onRefresh)
+        const socket = io(`${API_URL}/feed`, { path: '/ws/live', transports: ['polling', 'websocket'] })
+        socket.on('post_published', onRefresh)
+        return () => {
+            window.removeEventListener('feed-refresh', onRefresh)
+            socket.disconnect()
+        }
     }, [id])
 
     if (loading) {
@@ -519,6 +806,8 @@ export function PostDetail() {
                 onUnlike={unlikePost}
                 onRetweet={retweetPost}
                 onUnretweet={unretweetPost}
+                onBookmark={bookmarkPost}
+                onUnbookmark={unbookmarkPost}
                 onDelete={deletePost}
             />
             {replies.length > 0 && (
@@ -534,6 +823,8 @@ export function PostDetail() {
                             onUnlike={unlikePost}
                             onRetweet={retweetPost}
                             onUnretweet={unretweetPost}
+                            onBookmark={bookmarkPost}
+                            onUnbookmark={unbookmarkPost}
                             onDelete={deletePost}
                         />
                     ))}

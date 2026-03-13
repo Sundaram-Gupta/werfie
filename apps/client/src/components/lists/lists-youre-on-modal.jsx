@@ -3,6 +3,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog"
 
 export function ListsYoureOnModal({ open, onOpenChange, userHandle }) {
@@ -13,6 +14,7 @@ export function ListsYoureOnModal({ open, onOpenChange, userHandle }) {
             <DialogContent className="max-w-md bg-background border-border">
                 <DialogHeader className="space-y-1">
                     <DialogTitle className="text-xl font-bold">Lists you're on</DialogTitle>
+                    <DialogDescription className="sr-only">Lists that {handle} has added you to</DialogDescription>
                     <p className="text-sm text-muted-foreground font-normal">{handle}</p>
                 </DialogHeader>
                 <div className="py-8 text-center">

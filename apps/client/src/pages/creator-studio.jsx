@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
-import { analyticsService } from "@/services/api"
+import { useAuth } from "@/context/AuthContext"
+import { analyticsService, postService, userService } from "@/services/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
@@ -19,29 +20,102 @@ import {
     Loader2
 } from "lucide-react"
 
+function formatCount(n) {
+    const num = Number(n)
+    if (isNaN(num)) return '0'
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+    return String(num)
+}
+
+function formatGrowth(growth) {
+    const n = Number(growth)
+    if (isNaN(n) || n === 0) return '+0'
+    const sign = n > 0 ? '+' : ''
+    return `${sign}${n}`
+}
+
+function formatEarnings(total) {
+    const n = Number(total)
+    if (isNaN(n)) return '$0.00'
+    return '$' + n.toFixed(2)
+}
+
 export default function CreatorStudio() {
-    // State
+    const { user } = useAuth()
     const [stats, setStats] = useState({
-        followers: { total: "0", growth: "+0" },
-        views: { total: "0", growth: "+0%" },
-        engagement: { rate: "0%", growth: "+0%" },
-        earnings: { total: "$0.00", growth: "+$0.00" }
+        totalPosts: { total: 0, growth: 0 },
+        followers: { total: 0, growth: 0 },
+        views: { total: 0, growth: 0 },
+        engagement: { rate: 0, growth: 0 },
+        earnings: { total: 0, growth: 0 }
     })
+    const [recentPosts, setRecentPosts] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         const fetchStats = async () => {
+            const fallbackStats = async (uid) => {
+                try {
+                    const [postCount, followersCount] = await Promise.all([
+                        postService.getPostCount().catch(() => 0),
+                        userService.getFollowersCount(uid).catch(() => 0)
+                    ])
+                    return {
+                        totalPosts: { total: Number(postCount) || 0, growth: 0 },
+                        followers: { total: Number(followersCount) || 0, growth: 0 },
+                        views: { total: 0, growth: 0 },
+                        engagement: { rate: 0, growth: 0 },
+                        earnings: { total: 0, growth: 0 }
+                    }
+                } catch {
+                    return null
+                }
+            }
+
             try {
-                const data = await analyticsService.getCreatorStats()
-                setStats(data)
+                const [apiStats, fbStats] = await Promise.all([
+                    analyticsService.getCreatorStats().catch(() => null),
+                    user?.id ? fallbackStats(user.id) : Promise.resolve(null)
+                ])
+                const preferApiOrFallback = (apiVal, fbVal) => {
+                    const apiNum = apiVal?.total ?? apiVal?.rate
+                    if (apiNum !== undefined && apiNum !== null && Number(apiNum) > 0) return apiVal
+                    return fbVal ?? { total: 0, growth: 0 }
+                }
+                setStats(prev => ({
+                    ...prev,
+                    totalPosts: preferApiOrFallback(apiStats?.totalPosts, fbStats?.totalPosts) ?? prev.totalPosts,
+                    followers: preferApiOrFallback(apiStats?.followers, fbStats?.followers) ?? prev.followers,
+                    views: apiStats?.views ?? prev.views,
+                    engagement: apiStats?.engagement ?? prev.engagement,
+                    earnings: apiStats?.earnings ?? prev.earnings
+                }))
             } catch (error) {
                 console.error("Failed to fetch creator stats:", error)
+                if (user?.id) {
+                    const fb = await fallbackStats(user.id)
+                    if (fb) setStats(fb)
+                }
             } finally {
                 setLoading(false)
             }
         }
         fetchStats()
-    }, [])
+    }, [user?.id])
+
+    useEffect(() => {
+        if (!user?.id) return
+        const fetchRecentPosts = async () => {
+            try {
+                const { posts } = await postService.getPosts({ userId: user.id }) || {}
+                setRecentPosts(Array.isArray(posts) ? posts.slice(0, 5) : [])
+            } catch (error) {
+                console.error("Failed to fetch recent posts:", error)
+            }
+        }
+        fetchRecentPosts()
+    }, [user?.id])
 
     if (loading) {
         return <div className="p-4 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>
@@ -54,19 +128,21 @@ export default function CreatorStudio() {
                     <h1 className="text-xl font-bold">Creator Studio</h1>
                     <p className="text-sm text-muted-foreground">Manage and grow your content</p>
                 </div>
-                <Button variant="outline" size="sm" className="rounded-full border-[rgb(83,100,113)] hover:bg-white/[0.03]">
-                    <Settings className="w-4 h-4 mr-2" />
-                    Settings
+                <Button variant="outline" size="sm" className="rounded-full border-[rgb(83,100,113)] hover:bg-white/[0.03]" asChild>
+                    <Link to="/settings">
+                        <Settings className="w-4 h-4 mr-2" />
+                        Settings
+                    </Link>
                 </Button>
             </div>
 
             <div className="p-4 flex flex-col gap-6">
-                {/* Section A: Overview Metrics */}
+                {/* Section A: Overview Metrics - format raw values on client */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <MetricCard title="Total Posts" value="248" change="+12 this week" icon={<Activity className="text-blue-500" />} />
-                    <MetricCard title="Followers" value={stats.followers.total} change={`${stats.followers.growth} vs last month`} icon={<Users className="text-green-500" />} />
-                    <MetricCard title="Engagement" value={stats.engagement.rate} change={`${stats.engagement.growth} vs last month`} icon={<TrendingUp className="text-purple-500" />} />
-                    <MetricCard title="Impressions" value={stats.views.total} change={`${stats.views.growth} vs last month`} icon={<BarChart className="text-orange-500" />} />
+                    <MetricCard title="Total Posts" value={formatCount(stats.totalPosts?.total ?? 0)} change={`${formatGrowth(stats.totalPosts?.growth ?? 0)} this week`} icon={<Activity className="text-blue-500" />} />
+                    <MetricCard title="Followers" value={formatCount(stats.followers?.total ?? 0)} change={`${formatGrowth(stats.followers?.growth ?? 0)} vs last month`} icon={<Users className="text-green-500" />} />
+                    <MetricCard title="Engagement" value={String(stats.engagement?.rate ?? 0).replace(/%/g, '') + '%'} change={`${formatGrowth(stats.engagement?.growth ?? 0)}% vs last month`} icon={<TrendingUp className="text-purple-500" />} />
+                    <MetricCard title="Impressions" value={formatCount(stats.views?.total ?? 0)} change={`${formatGrowth(stats.views?.growth ?? 0)} vs last month`} icon={<BarChart className="text-orange-500" />} />
                 </div>
 
                 {/* Section B: Tools */}
@@ -81,34 +157,54 @@ export default function CreatorStudio() {
                 <div className="space-y-4">
                     <h2 className="text-xl font-bold">Recent Post Performance</h2>
                     <div className="border border-border rounded-xl bg-black overflow-hidden">
-                        {[1, 2, 3].map((i) => (
-                            <Link to={`/post/${i}`} key={i} className="flex gap-4 p-4 border-b border-border last:border-0 hover:bg-white/[0.05] transition-colors cursor-pointer group">
-                                <div className="w-24 h-24 bg-muted rounded-lg flex-shrink-0 relative overflow-hidden group-hover:scale-[1.02] transition-transform duration-300">
-                                    <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/20 to-purple-500/20" />
-                                    {/* Placeholder image representation */}
-                                    {i === 1 && <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Image</div>}
-                                    {i === 2 && <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Video</div>}
-                                    {i === 3 && <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Link</div>}
-                                </div>
-                                <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-                                    <div>
-                                        <p className="font-medium text-sm line-clamp-2 text-white/90 group-hover:text-blue-400 transition-colors">
-                                            {i === 1 ? "Just launched the new feature! Check it out here: link.com #coding #webdev" :
-                                                i === 2 ? "Here is a quick tutorial on how to use React Server Components. ⚛️" :
-                                                    "Why I switched from VS Code to Zed (and why you might want to too)."}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground mt-1">Posted {i * 2} days ago</p>
+                        {recentPosts.length > 0 ? recentPosts.map((post) => {
+                            const c = post._count || {}
+                            const media = post.media?.[0]
+                            const typeLabel = media?.mediaType === 'video' ? 'Video' : (media ? 'Image' : 'Post')
+                            const timeAgo = post.createdAt ? (() => {
+                                const d = new Date(post.createdAt)
+                                const now = new Date()
+                                const diff = Math.floor((now - d) / (1000 * 60 * 60 * 24))
+                                if (diff === 0) return 'Today'
+                                if (diff === 1) return 'Yesterday'
+                                if (diff < 7) return `${diff} days ago`
+                                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                            })() : ''
+                            return (
+                                <Link to={`/post/${post.id}`} key={post.id} className="flex gap-4 p-4 border-b border-border last:border-0 hover:bg-white/[0.05] transition-colors cursor-pointer group">
+                                    <div className="w-24 h-24 bg-muted rounded-lg flex-shrink-0 relative overflow-hidden group-hover:scale-[1.02] transition-transform duration-300">
+                                        <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/20 to-purple-500/20" />
+                                        {media?.mediaUrl ? (
+                                            <img src={media.mediaUrl.startsWith('http') ? media.mediaUrl : ((import.meta.env.VITE_API_URL || '') + (media.mediaUrl.startsWith('/') ? '' : '/') + media.mediaUrl)} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{typeLabel}</div>
+                                        )}
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
-                                        <MetricItem icon={<Heart className="w-3.5 h-3.5" />} value="1.2K" label="Likes" />
-                                        <MetricItem icon={<MessageCircle className="w-3.5 h-3.5" />} value="84" label="Replies" />
-                                        <MetricItem icon={<Repeat className="w-3.5 h-3.5" />} value="240" label="Reposts" />
-                                        <MetricItem icon={<BarChart className="w-3.5 h-3.5" />} value="45K" label="Views" />
+                                    <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+                                        <div>
+                                            <p className="font-medium text-sm line-clamp-2 text-white/90 group-hover:text-blue-400 transition-colors">
+                                                {post.content || '(No content)'}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">Posted {timeAgo}</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+                                            <MetricItem icon={<Heart className="w-3.5 h-3.5" />} value={formatCount(c.likes ?? 0)} label="Likes" />
+                                            <MetricItem icon={<MessageCircle className="w-3.5 h-3.5" />} value={formatCount(c.replies ?? 0)} label="Replies" />
+                                            <MetricItem icon={<Repeat className="w-3.5 h-3.5" />} value={formatCount(c.retweets ?? 0)} label="Reposts" />
+                                            <MetricItem icon={<BarChart className="w-3.5 h-3.5" />} value={formatCount((c.likes ?? 0) + (c.replies ?? 0) + (c.retweets ?? 0) || 0)} label="Engagements" />
+                                        </div>
                                     </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground self-center group-hover:text-blue-400 transition-colors" />
-                            </Link>
-                        ))}
+                                    <ChevronRight className="w-5 h-5 text-muted-foreground self-center group-hover:text-blue-400 transition-colors" />
+                                </Link>
+                            )
+                        }) : (
+                            <div className="p-8 text-center text-muted-foreground">
+                                <p className="text-sm">No posts yet. Create your first post to see performance here.</p>
+                                <Link to="/">
+                                    <Button variant="outline" size="sm" className="mt-3 rounded-full">Create Post</Button>
+                                </Link>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -134,11 +230,11 @@ export default function CreatorStudio() {
                     <CardContent className="relative z-10 px-5 pb-5 pt-3">
                         <div className="space-y-1">
                             <div className="text-4xl font-black bg-gradient-to-r from-green-300 via-green-400 to-emerald-400 bg-clip-text text-transparent tracking-tight">
-                                {stats.earnings.total}
+                                {formatEarnings(stats.earnings?.total ?? 0)}
                             </div>
                             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                                 <span>Available Balance</span>
-                                <span className="text-green-400 font-bold">{stats.earnings.growth}</span>
+                                <span className="text-green-400 font-bold">+{formatEarnings(stats.earnings?.growth ?? 0)}</span>
                             </p>
                         </div>
                         <div className="flex flex-col gap-2 mt-4">

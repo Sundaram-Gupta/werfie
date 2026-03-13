@@ -71,6 +71,7 @@ curl -X DELETE "http://localhost:3001/api/posts/{id}/like" -H "Authorization: Be
 curl -X POST "http://localhost:3001/api/posts/{id}/retweet" -H "Authorization: Bearer $TOKEN"
 curl -X DELETE "http://localhost:3001/api/posts/{id}/retweet" -H "Authorization: Bearer $TOKEN"
 curl -X GET "http://localhost:3001/api/posts/{id}/replies?limit=20&offset=0"
+curl -X POST "http://localhost:3001/api/posts/{id}/replies" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"content":"Reply text"}'
 curl -X POST "http://localhost:3001/api/posts/{id}/bookmark" -H "Authorization: Bearer $TOKEN"
 curl -X DELETE "http://localhost:3001/api/posts/{id}/bookmark" -H "Authorization: Bearer $TOKEN"
 curl -X GET "http://localhost:3001/api/posts/following?limit=20&offset=0" -H "Authorization: Bearer $TOKEN"

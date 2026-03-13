@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Building, History, ArrowRight, Wallet, CreditCard, Loader2, Plus, Check } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import api from "@/lib/api"
 
@@ -120,6 +120,7 @@ export default function Payouts() {
                         <DialogContent className="bg-[#0a0a0a] border-zinc-900 sm:max-w-md p-6">
                             <DialogHeader>
                                 <DialogTitle className="text-lg font-bold">Add Payment Method</DialogTitle>
+                                <DialogDescription className="sr-only">Add a card or UPI payout method</DialogDescription>
                             </DialogHeader>
                             <div className="space-y-6 py-4">
                                 <div className="grid grid-cols-2 gap-4">

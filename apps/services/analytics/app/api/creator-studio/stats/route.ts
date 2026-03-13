@@ -1,24 +1,75 @@
-import { apiSuccess } from '@/lib/api-response';
+import { headers } from 'next/headers';
+import { NextResponse } from 'next/server';
+
+function getUserIdFromToken(authHeader: string | null): string | null {
+    if (!authHeader?.startsWith('Bearer ')) return null;
+    try {
+        const token = authHeader.slice(7).trim();
+        const payload = token.split('.')[1];
+        if (!payload) return null;
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const decoded = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+        return decoded.sub ?? decoded.userId ?? decoded.id ?? null;
+    } catch {
+        return null;
+    }
+}
 
 export async function GET() {
-    const stats = {
-        followers: {
-            total: "12.4K",
-            growth: "+152"
-        },
-        views: {
-            total: "450K",
-            growth: "+12%"
-        },
-        engagement: {
-            rate: "4.8%",
-            growth: "+0.5%"
-        },
-        earnings: {
-            total: "$248.50",
-            growth: "+$42.00"
+    const h = await headers();
+    let userId = h.get('x-user-id');
+    const authHeader = h.get('authorization');
+    if (!userId && authHeader) {
+        userId = getUserIdFromToken(authHeader);
+    }
+
+    let postCount = 0;
+    let followersCount = 0;
+    let totalEngagements = 0;
+
+    const contentHeaders: Record<string, string> = { 'x-user-id': userId || '' };
+    if (authHeader) contentHeaders['Authorization'] = authHeader;
+
+    if (userId) {
+        try {
+            const [countRes, userRes, engagementRes] = await Promise.all([
+                fetch('http://127.0.0.1:3003/api/posts/count', { headers: contentHeaders }),
+                fetch(`http://127.0.0.1:3002/api/users/${userId}/followers-count`),
+                fetch('http://127.0.0.1:3003/api/posts/engagement-stats', { headers: contentHeaders })
+            ]);
+            if (countRes.ok) {
+                const json = await countRes.json();
+                postCount = json.count ?? json.data?.count ?? 0;
+            }
+            if (userRes.ok) {
+                const json = await userRes.json();
+                followersCount = json.count ?? json.data?.count ?? 0;
+            }
+            if (engagementRes.ok) {
+                const json = await engagementRes.json();
+                totalEngagements = json.totalEngagements ?? json.data?.totalEngagements ?? 0;
+            }
+        } catch {
+            // ignore
         }
+    }
+
+    const impressions = totalEngagements;
+    const engagementRate = postCount > 0 && impressions > 0
+        ? Math.min(100, Number(((impressions / (postCount * 10)) * 100).toFixed(1)))
+        : 0;
+
+    const data = {
+        totalPosts: { total: postCount, growth: 0 },
+        followers: { total: followersCount, growth: 0 },
+        views: { total: impressions, growth: 0 },
+        engagement: { rate: engagementRate, growth: 0 },
+        earnings: { total: 0, growth: 0 }
     };
 
-    return apiSuccess(stats, 'Creator studio stats fetched successfully');
+    return NextResponse.json({
+        status: true,
+        message: 'Creator studio stats fetched successfully',
+        data
+    }, { status: 200 });
 }

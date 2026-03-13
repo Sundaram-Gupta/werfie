@@ -3,6 +3,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BadgeCheck, Heart, Repeat2, MessageCircle, Info } from "lucide-react"
@@ -60,6 +61,7 @@ export function PostAnalyticsModal({ open, onOpenChange, post }) {
             <DialogContent className="max-w-lg bg-black border border-border text-foreground z-[100]">
                 <DialogHeader>
                     <DialogTitle className="text-xl font-bold">Post Analytics</DialogTitle>
+                    <DialogDescription className="sr-only">View engagement stats for this post</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-6">

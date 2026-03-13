@@ -197,6 +197,36 @@ app.post('/media/upload', authenticateToken, (req, res, next) => {
     }
 });
 
+// GET /media/library - Creator Studio: list user's media from their posts
+app.get('/media/library', authenticateToken, async (req, res) => {
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
+    try {
+        const { limit = 50, offset = 0 } = req.query;
+        const media = await prisma.postMedia.findMany({
+            where: { post: { userId } },
+            orderBy: { createdAt: 'desc' },
+            take: Math.min(parseInt(limit) || 50, 100),
+            skip: parseInt(offset) || 0
+        });
+        const items = media.map(m => ({
+            id: m.id,
+            mediaType: m.mediaType,
+            mediaUrl: m.mediaUrl,
+            thumbnailUrl: m.thumbnailUrl,
+            size: m.size,
+            width: m.width,
+            height: m.height,
+            duration: m.duration,
+            createdAt: m.createdAt
+        }));
+        return res.json({ status: true, message: 'Media library fetched', data: items });
+    } catch (err) {
+        console.error('[Media Library]', err);
+        return res.status(500).json({ status: false, message: err.message || 'Failed to fetch library', data: null });
+    }
+});
+
 // Search Posts (route at /search - gateway rewrite strips /api/posts from /api/posts/search)
 app.get('/search', async (req, res) => {
     const { q, limit = 20, offset = 0 } = req.query;
@@ -414,6 +444,39 @@ app.post('/', authenticateToken, upload.fields([{ name: 'media', maxCount: 4 }])
     const body = req.body || {};
     const files = (req.files && req.files.media) ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
     await handleCreatePost(req, res, body, files);
+});
+
+// Get post count for a user (Creator Studio stats - accepts x-user-id or auth)
+app.get('/count', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'] || req.user?.userId || req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized', count: 0 });
+        const where = { userId, ...publishedPostFilter() };
+        const count = await prisma.post.count({ where });
+        res.json({ count });
+    } catch (err) {
+        console.error('[ContentService] Post count error:', err);
+        res.status(500).json({ error: 'Failed to get count', count: 0 });
+    }
+});
+
+// Get engagement stats for a user (Creator Studio - likes, replies, retweets)
+app.get('/engagement-stats', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'] || req.user?.userId || req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized', totalEngagements: 0, totalLikes: 0, totalReplies: 0, totalRetweets: 0 });
+        const where = { userId, ...publishedPostFilter() };
+        const [likesCount, retweetsCount, repliesCount] = await Promise.all([
+            prisma.like.count({ where: { post: where } }),
+            prisma.retweet.count({ where: { post: where } }),
+            prisma.post.count({ where: { replyToId: { not: null }, replyTo: { userId, ...publishedPostFilter() } } })
+        ]);
+        const totalEngagements = likesCount + retweetsCount + repliesCount;
+        res.json({ totalEngagements, totalLikes: likesCount, totalReplies: repliesCount, totalRetweets: retweetsCount });
+    } catch (err) {
+        console.error('[ContentService] Engagement stats error:', err);
+        res.status(500).json({ error: 'Failed', totalEngagements: 0, totalLikes: 0, totalReplies: 0, totalRetweets: 0 });
+    }
 });
 
 // Get user's scheduled posts (for scheduled-posts page)
@@ -791,6 +854,36 @@ app.delete('/:id/retweet', authenticateToken, async (req, res) => {
         }
         console.error('Unretweet Error:', error);
         res.status(500).json({ error: 'Failed to unretweet post' });
+    }
+});
+
+// Create Reply - POST /api/posts/:id/replies
+app.post('/:id/replies', authenticateToken, async (req, res) => {
+    const postId = req.params.id;
+    const body = req.body || {};
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+
+    if (!content) {
+        return res.status(400).json({ error: 'Content is required for a reply' });
+    }
+
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+        const parentPost = await prisma.post.findUnique({ where: { id: postId } });
+        if (!parentPost) {
+            return res.status(404).json({ error: 'Post not found' });
+        }
+
+        await handleCreatePost(req, res, { content, replyToId: postId }, []);
+    } catch (error) {
+        if (!res.headersSent) {
+            console.error('[ContentService] Create reply error:', error);
+            res.status(500).json({ error: 'Failed to create reply', details: error.message });
+        }
     }
 });
 

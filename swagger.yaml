@@ -466,6 +466,31 @@ paths:
           schema: { type: integer }
       responses:
         '200': { description: List of replies }
+    post:
+      summary: Create reply
+      description: Create a reply to a post. Request body must include content.
+      tags: [Posts]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Post ID to reply to
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, description: Reply text (1–280 chars) }
+      responses:
+        '200': { description: Created reply }
+        '400': { description: Content is required }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
+        '404': { description: Post not found }
 
   /api/posts/{id}/bookmark:
     post:
@@ -897,6 +922,31 @@ paths:
       responses:
         '200': { description: Performance }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ============ CREATOR STUDIO ============
+  /api/creator-studio/stats:
+    get:
+      summary: Get creator stats
+      description: Returns followers, views, engagement, and earnings metrics for Creator Studio dashboard.
+      tags: [Creator Studio]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Creator stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      followers: { type: object, properties: { total: { type: string }, growth: { type: string } } }
+                      views: { type: object, properties: { total: { type: string }, growth: { type: string } } }
+                      engagement: { type: object, properties: { rate: { type: string }, growth: { type: string } } }
+                      earnings: { type: object, properties: { total: { type: string }, growth: { type: string } } }
 
   # ============ BUSINESS ============
   /api/business:

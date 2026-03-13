@@ -1,4 +1,4 @@
-import api from '@/lib/api'
+import api, { API_BASE_URL } from '@/lib/api'
 import axios from 'axios'
 
 import i18n from '@/i18n'
@@ -106,8 +106,7 @@ export const authService = {
     },
 }
 
-// Messaging API Instance - use gateway (3001) by default so auth/messaging share same origin; else direct to 3019
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// Messaging API Instance - uses same origin (from lib/api) when VITE_API_URL unset
 const MESSAGING_API_URL = import.meta.env.VITE_MESSAGING_URL || API_BASE_URL
 
 const messagingApi = axios.create({
@@ -159,6 +158,12 @@ messagingApi.interceptors.response.use(
 
 // Post Services
 export const postService = {
+    // Get post count for current user (Creator Studio)
+    getPostCount: async () => {
+        const { data } = await api.get('/api/posts/count')
+        return data?.count ?? data ?? 0
+    },
+
     // Get all posts
     getPosts: async (params = {}) => {
         const { data } = await api.get('/api/posts', { params })
@@ -198,6 +203,12 @@ export const postService = {
     // Schedule post for a future time
     schedulePost: async (content, scheduledAt, files = []) => {
         return postService.createPost(content, files, null, scheduledAt);
+    },
+
+    // Get scheduled posts (Creator Studio)
+    getScheduledPosts: async () => {
+        const { data } = await api.get('/api/posts/scheduled');
+        return Array.isArray(data) ? data : (data?.data ?? []);
     },
 
     // Create poll post. Format: "📊 Poll: question\n1. opt1\n2. opt2"
@@ -265,6 +276,14 @@ export const postService = {
         return data
     },
 
+    // Create reply - POST /api/posts/:id/replies
+    createReply: async (postId, content) => {
+        const { data } = await api.post(`/api/posts/${postId}/replies`, {
+            content: typeof content === 'string' ? content : String(content),
+        })
+        return data
+    },
+
     // Get following feed
     getFollowingPosts: async () => {
         const { data } = await api.get('/api/posts/following')
@@ -317,6 +336,12 @@ export const userService = {
     getFollowers: async (userId, params = {}) => {
         const { data } = await api.get(`/api/users/${userId}/followers`, { params })
         return data
+    },
+
+    // Get followers count (Creator Studio)
+    getFollowersCount: async (userId) => {
+        const { data } = await api.get(`/api/users/${userId}/followers-count`)
+        return data?.count ?? data ?? 0
     },
 
     // Get following
@@ -423,6 +448,12 @@ export const spaceService = {
 
 // Media Services
 export const mediaService = {
+    // Get user's media library (from their posts)
+    getLibrary: async (params = {}) => {
+        const { data } = await api.get('/api/media/library', { params })
+        return data?.data ?? data ?? []
+    },
+
     // Upload media
     uploadMedia: async (file, onProgress) => {
         const formData = new FormData()
@@ -497,7 +528,7 @@ export const analyticsService = {
     },
     getCreatorStats: async () => {
         const { data } = await api.get('/api/creator-studio/stats')
-        return data
+        return data?.data ?? data
     }
 }
 

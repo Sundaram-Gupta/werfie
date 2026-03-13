@@ -13,7 +13,9 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
+    DialogDescription,
 } from "@/components/ui/dialog"
+import { usePosts } from "@/hooks/usePosts"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Link } from "react-router-dom"
 
@@ -44,6 +46,7 @@ export default function Home() {
     const fileInputRef = useRef(null)
     const locationInputRef = useRef(null)
     const { user } = useAuth()
+    const { createPost } = usePosts()
 
     const handleCreatePost = async () => {
         let finalContent = postContent.trim()
@@ -54,13 +57,14 @@ export default function Home() {
 
         setIsPosting(true)
         try {
-            await postService.createPost(finalContent, selectedFiles)
+            await createPost(finalContent, selectedFiles)
             filePreviews.forEach(p => URL.revokeObjectURL(p.url))
             setPostContent("")
             setSelectedFiles([])
             setFilePreviews([])
             setLocation("")
             toast.success(t('feed.posted') || 'Posted!')
+            // createPost already updates the state optimistically, but we keep feed-refresh for other listeners
             window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
             console.error('Error creating post:', error)
@@ -74,6 +78,12 @@ export default function Home() {
     const handleFileSelect = (e) => {
         const files = Array.from(e.target.files || [])
         if (files.length === 0) return
+
+        // Media and polls can't be combined - remove poll from content if present
+        if (isPollContent) {
+            setPostContent("")
+            toast.info("Media replaces poll. Poll removed.")
+        }
 
         const newFiles = []
         const newPreviews = []
@@ -108,6 +118,14 @@ export default function Home() {
         setPostContent(prev => prev + emojiObject.emoji);
     };
 
+    const handleOpenPollModal = () => {
+        if (selectedFiles.length > 0) {
+            toast.error("Remove media to add a poll. Polls and media can't be combined.")
+            return
+        }
+        setShowPollModal(true)
+    };
+
     const handleAddPoll = () => {
         const question = pollQuestion.trim()
         const opts = pollOptions.filter(o => o.trim())
@@ -115,12 +133,18 @@ export default function Home() {
             toast.error("Add a question and at least 2 options")
             return
         }
+        // Polls can't have media - clear any selected files
+        if (selectedFiles.length > 0) {
+            filePreviews.forEach(p => URL.revokeObjectURL(p.url))
+            setSelectedFiles([])
+            setFilePreviews([])
+        }
         const pollText = `📊 Poll: ${question}\n${opts.map((o, i) => `${i + 1}. ${o.trim()}`).join("\n")}`
         setPostContent(prev => (prev ? `${prev}\n\n${pollText}` : pollText))
         setShowPollModal(false)
         setPollQuestion("")
         setPollOptions(["", ""])
-        toast.success("Poll added to post")
+        toast.success("Poll added. Click Post to publish.")
     };
 
     const addPollOption = () => {
@@ -323,7 +347,7 @@ export default function Home() {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setShowPollModal(true)}
+                                onClick={handleOpenPollModal}
                                 className="p-2 hover:bg-primary/10 rounded-full transition"
                                 title={t('feed.add_poll') || 'Add poll'}
                             >
@@ -426,6 +450,9 @@ export default function Home() {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>{t('feed.add_poll') || 'Add poll'}</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Create a poll with multiple options to share with your followers.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
                         <div>
@@ -489,6 +516,9 @@ export default function Home() {
                             <DialogTitle className="text-lg font-semibold m-0">
                                 {t('feed.schedule') || 'Schedule'}
                             </DialogTitle>
+                            <DialogDescription className="sr-only">
+                                Schedule a post to be published at a later date and time.
+                            </DialogDescription>
                         </div>
                         <Button
                             onClick={handleScheduleConfirm}

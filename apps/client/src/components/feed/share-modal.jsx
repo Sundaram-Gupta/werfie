@@ -4,6 +4,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
@@ -119,6 +120,7 @@ export function ShareModal({ isOpen, onClose, postUrl }) {
             <DialogContent className="sm:max-w-[450px] bg-black border-border p-0 overflow-hidden">
                 <DialogHeader className="p-4 border-b border-border">
                     <DialogTitle>Share Post</DialogTitle>
+                    <DialogDescription className="sr-only">Share this post via direct message</DialogDescription>
                 </DialogHeader>
                 
                 <div className="p-4 bg-black">

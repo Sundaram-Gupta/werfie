@@ -1,7 +1,7 @@
 import { io } from "socket.io-client"
 
-// Use gateway (3001) so WebSocket is proxied; direct 3019 if VITE_MESSAGING_URL is set
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// Use '' for same-origin when unset (Vite proxy handles /api; works via IP e.g. 192.168.1.37:5173)
+const API_URL = import.meta.env.VITE_API_URL || ''
 const MESSAGING_URL = import.meta.env.VITE_MESSAGING_URL || API_URL
 
 let socket

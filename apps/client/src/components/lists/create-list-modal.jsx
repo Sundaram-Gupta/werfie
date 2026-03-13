@@ -3,6 +3,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,6 +56,7 @@ export function CreateListModal({ open, onOpenChange, onSuccess }) {
             <DialogContent className="max-w-md bg-background border-border">
                 <DialogHeader className="flex flex-row items-center justify-between gap-4 pb-4">
                     <DialogTitle>Create a new List</DialogTitle>
+                    <DialogDescription className="sr-only">Create a new list with name and description</DialogDescription>
                     <Button
                         onClick={handleSubmit}
                         disabled={loading}

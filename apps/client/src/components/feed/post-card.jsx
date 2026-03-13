@@ -5,7 +5,8 @@ import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
 
 import { getMediaUrl } from "@/lib/utils"
-import { PollDisplay, parsePollContent } from "./poll-display"
+import { PollDisplay } from "./poll-display"
+import { parsePollContent } from "@/lib/poll-utils"
 
 const CONTENT_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003'
 import { useTranslation } from "react-i18next"

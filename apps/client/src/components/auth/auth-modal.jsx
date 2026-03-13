@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useAuthModal } from "./auth-modal-context"
 import { LoginForm } from "./login-form"
 import { SignupForm } from "./signup-form"
@@ -13,6 +13,7 @@ export function AuthModal() {
             <DialogContent className="sm:max-w-[600px] min-h-[400px] p-12 bg-background border-none rounded-2xl">
                 <VisuallyHidden>
                     <DialogTitle>{view === "login" ? "Sign in" : "Sign up"}</DialogTitle>
+                    <DialogDescription>{view === "login" ? "Sign in to your account" : "Create a new account"}</DialogDescription>
                 </VisuallyHidden>
                 <div className="flex justify-center mb-8">
                     <img src={logo} alt="App logo" className="h-14 w-auto invert dark:invert-0" />

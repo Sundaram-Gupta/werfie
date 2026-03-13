@@ -9,9 +9,20 @@ const allowedOrigins = [
     'http://127.0.0.1:5176',
 ];
 
+// Allow LAN IPs (192.168.x.x, 10.x.x.x) for access via IP e.g. http://192.168.1.37:5173
+const isAllowedOrigin = (origin) => {
+    if (!origin) return false;
+    try {
+        const u = new URL(origin);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true;
+        if (u.hostname.startsWith('192.168.') || u.hostname.startsWith('10.')) return true;
+        return allowedOrigins.includes(origin);
+    } catch { return false; }
+};
+
 export function middleware(request) {
     const origin = request.headers.get('origin');
-    const allowedOrigin = origin && (origin.includes('localhost') || origin.includes('127.0.0.1')) ? origin : 'http://localhost:5173';
+    const allowedOrigin = isAllowedOrigin(origin) ? origin : 'http://localhost:5173';
 
     // Handle preflight requests
     if (request.method === 'OPTIONS') {

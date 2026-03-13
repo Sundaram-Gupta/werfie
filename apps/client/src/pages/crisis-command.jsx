@@ -21,7 +21,7 @@ import CrisisAdminPanel from '@/components/crisis/CrisisAdminPanel';
 import { getCrises, getCrisisDetail } from '@/services/crisis.api';
 import { useAuth } from '@/context/AuthContext';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const CrisisCommand = () => {
     const { user } = useAuth();

@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "werfie-api-complete-v1",
-    "name": "Werfie API - Complete",
-    "description": "Complete Werfie API collection (71 APIs). Run **Login** first to set authToken and refreshToken. Use Authorize (Bearer) or collection auth. Base: http://localhost:3001, Admin: http://localhost:3012, Messaging: http://localhost:3019.",
+    "_postman_id": "werfie-complete-all-apis",
+    "name": "Werfie - Complete API Collection",
+    "description": "Single consolidated Werfie API collection (71 APIs). Run **Login** first to set authToken. Base: http://localhost:3001, Admin: http://localhost:3012, Messaging: http://localhost:3019.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -25,32 +25,12 @@
     {
       "name": "Auth",
       "item": [
-        {
-          "name": "Login",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "var j = pm.response.json();",
-                "if (j.accessToken) { pm.collectionVariables.set('authToken', j.accessToken); pm.collectionVariables.set('userId', j.id || ''); if (j.refreshToken) pm.collectionVariables.set('refreshToken', j.refreshToken); }",
-                "pm.test('Status 200', () => pm.response.to.have.status(200));"
-              ],
-              "type": "text/javascript"
-            }
-          }],
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user1@xclone.com\",\n  \"password\": \"password123\"\n}" },
-            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
-          }
-        },
-        { "name": "Get Me", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] } }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }] },
-        { "name": "Register", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"new@example.com\",\n  \"password\": \"pass123\",\n  \"name\": \"New User\",\n  \"handle\": \"newuser\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] } }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"], "type": "text/javascript" } }] },
-        { "name": "Logout", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] } }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }] },
-        { "name": "Refresh Token", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "auth", "refresh"] } }, "event": [{ "listen": "test", "script": { "exec": ["var j = pm.response.json();", "if (j.accessToken) pm.collectionVariables.set('authToken', j.accessToken);", "pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }] },
-        { "name": "Change Password", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newpass123\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "auth", "change-password"] } }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }] }
+        { "name": "Login", "event": [{ "listen": "test", "script": { "exec": ["var j = pm.response.json();", "if (j.accessToken) { pm.collectionVariables.set('authToken', j.accessToken); pm.collectionVariables.set('userId', j.id || ''); if (j.refreshToken) pm.collectionVariables.set('refreshToken', j.refreshToken); }", "pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }], "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user1@xclone.com\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] } } },
+        { "name": "Register", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"new@example.com\",\n  \"password\": \"pass123\",\n  \"name\": \"New User\",\n  \"handle\": \"newuser\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] } } },
+        { "name": "Get Me", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] } } },
+        { "name": "Logout", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] } } },
+        { "name": "Refresh Token", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "auth", "refresh"] } } },
+        { "name": "Change Password", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newpass123\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "auth", "change-password"] } } }
       ]
     },
     {
@@ -71,14 +51,14 @@
       "name": "Posts",
       "item": [
         { "name": "Get Feed", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts?limit=20&offset=0", "host": ["{{baseUrl}}"], "path": ["api", "posts"], "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] } } },
-        { "name": "Create Post", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hello from Postman!\"\n}" }, "url": { "raw": "{{baseUrl}}/api/posts", "host": ["{{baseUrl}}"], "path": ["api", "posts"] } }, "event": [{ "listen": "test", "script": { "exec": ["var j = pm.response.json();", "if (j && (j.id || j.post?.id)) pm.collectionVariables.set('postId', j.id || j.post?.id || '');", "pm.test('Status 200 or 201', () => pm.expect([200, 201]).to.include(pm.response.code));"], "type": "text/javascript" } }] },
+        { "name": "Create Post", "event": [{ "listen": "test", "script": { "exec": ["var j = pm.response.json();", "if (j && (j.id || j.post?.id)) pm.collectionVariables.set('postId', j.id || j.post?.id || '');"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hello from Postman!\"\n}" }, "url": { "raw": "{{baseUrl}}/api/posts", "host": ["{{baseUrl}}"], "path": ["api", "posts"] } } },
         { "name": "Get Post", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}"] } } },
         { "name": "Delete Post", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}"] } } },
         { "name": "Like Post", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/like", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "like"] } } },
         { "name": "Unlike Post", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/like", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "like"] } } },
         { "name": "Retweet", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/retweet", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "retweet"] } } },
         { "name": "Unretweet", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/retweet", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "retweet"] } } },
-        { "name": "Get Replies", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/replies?limit=20&offset=0", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "replies"], "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] } } },
+        { "name": "Get Replies", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/replies?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "replies"], "query": [{ "key": "limit", "value": "20" }] } } },
         { "name": "Create Reply", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"content\": \"This is my reply\"\n}" }, "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/replies", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "replies"] } } },
         { "name": "Bookmark Post", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/bookmark", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "bookmark"] } } },
         { "name": "Remove Bookmark", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/bookmark", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "bookmark"] } } },
@@ -143,8 +123,7 @@
     {
       "name": "Messaging",
       "item": [
-        { "name": "List Conversations (via Gateway)", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations"], "query": [{ "key": "limit", "value": "20" }] } } },
-        { "name": "List Conversations (direct)", "request": { "method": "GET", "url": { "raw": "{{messagingUrl}}/api/messages/conversations?limit=20", "host": ["{{messagingUrl}}"], "path": ["api", "messages", "conversations"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "List Conversations", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations"], "query": [{ "key": "limit", "value": "20" }] } } },
         { "name": "Create Conversation", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"recipientId\": \"{{userId}}\"\n}" }, "url": { "raw": "{{baseUrl}}/api/messages/conversations", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations"] } } },
         { "name": "Get Conversation", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations/{{conversationId}}", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations", "{{conversationId}}"] } } },
         { "name": "Get Messages", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations/{{conversationId}}/messages?limit=50", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations", "{{conversationId}}", "messages"], "query": [{ "key": "limit", "value": "50" }] } } },

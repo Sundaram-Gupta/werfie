@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { getCrises } from '@/services/crisis.api';
 import { io } from 'socket.io-client';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const CrisisBanner = () => {
     const [criticalCrises, setCriticalCrises] = useState([]);

@@ -39,7 +39,8 @@ proxy.on('proxyReq', (proxyReq, req, res, options) => {
         proxyReq.setHeader('x-user-id', req._gatewayUser.userId);
         proxyReq.setHeader('x-user-email', req._gatewayUser.email || '');
     }
-    console.log(`[Gateway] Proxying ${req.method} ${req.url} -> ${options.target}${proxyReq.path}`);
+    const target = typeof options.target === 'string' ? options.target : (options.target?.href || '[Object Target]');
+    console.log(`[Gateway] Proxying ${req.method} ${req.url} -> ${target}${proxyReq.path}`);
 });
 
 let isAppPrepared = false;
@@ -180,6 +181,10 @@ mainServer.all('/api/media*', (req, res) => {
     injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
+// Static media (uploads) - content service serves /uploads
+mainServer.all('/uploads*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
 
 // User Service Proxy – verify JWT at gateway so user-service can trust x-user-id
 mainServer.all('/api/users*', (req, res) => {
@@ -222,6 +227,12 @@ mainServer.all('/api/docs*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3012' });
 });
 
+// Creator Studio & Analytics (port 3009) - same service
+mainServer.all('/api/creator-studio*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3009' });
+});
+
 // 4. Other Microservices Catch-all (timeline/notifications have explicit routes above)
 const microservices = [
     { path: '/api/search', port: 3006 },
@@ -241,9 +252,12 @@ microservices.forEach(svc => {
 mainServer.all('*', (req, res) => {
     if (!isAppPrepared) {
         if (req.url.startsWith('/api/')) {
-            return res.status(503).json({ error: 'Gateway warming up' });
+            return res.status(503).json({ 
+                error: 'Gateway warming up', 
+                message: 'Next.js is still preparing backend routes. Please retry in 10-20 seconds.' 
+            });
         }
-        return res.status(503).send('Next.js is still preparing. Please wait...');
+        return res.status(503).send('Next.js is still preparing. Please wait 10-20 seconds and refresh.');
     }
     const parsedUrl = parse(req.url, true);
     handle(req, res, parsedUrl);

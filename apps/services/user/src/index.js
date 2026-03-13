@@ -169,6 +169,20 @@ app.delete('/:id/follow', authenticateToken, async (req, res) => {
     }
 });
 
+// Get Followers Count (Creator Studio stats)
+app.get('/:id/followers-count', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const count = await prisma.follow.count({
+            where: { followingId: id }
+        });
+        res.json({ count });
+    } catch (error) {
+        console.error('Followers count error:', error);
+        res.status(500).json({ error: 'Failed to get count', count: 0 });
+    }
+});
+
 // Get Followers
 app.get('/:id/followers', async (req, res) => {
     const { id } = req.params;

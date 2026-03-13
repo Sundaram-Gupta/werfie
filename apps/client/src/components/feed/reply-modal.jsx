@@ -2,6 +2,8 @@ import {
     Dialog,
     DialogContent,
     DialogHeader,
+    DialogTitle,
+    DialogDescription,
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -63,7 +65,7 @@ export function ReplyModal({ post, children }) {
 
         setIsPosting(true)
         try {
-            await postService.createPost(replyText.trim(), [], post.id)
+            await postService.createReply(post.id, replyText.trim())
             setReplyText("")
             setOpen(false)
             window.dispatchEvent(new Event('feed-refresh'))
@@ -81,6 +83,8 @@ export function ReplyModal({ post, children }) {
                 {children}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px] bg-black border-[rgb(47,51,54)] p-0 gap-0 top-[20%] translate-y-0 sm:top-[5%] sm:translate-y-0 text-white">
+                <DialogTitle className="sr-only">Reply to post</DialogTitle>
+                <DialogDescription className="sr-only">Compose a reply to this post</DialogDescription>
                 <DialogHeader className="px-4 py-3 flex flex-row items-center justify-between border-b border-transparent">
                     <button className="rounded-full p-2 hover:bg-[rgb(239,243,244,0.1)] transition-colors w-fit h-fit -ml-2" onClick={() => setOpen(false)}>
                         <X className="w-5 h-5" />

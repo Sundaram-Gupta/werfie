@@ -3,6 +3,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
     DialogFooter,
     DialogTrigger,
 } from "@/components/ui/dialog"
@@ -93,6 +94,7 @@ export function EditProfileModal({ user, onUpdate, children }) {
                             <X className="w-5 h-5" />
                         </button>
                         <DialogTitle className="text-[20px] font-bold">Edit Profile</DialogTitle>
+                        <DialogDescription className="sr-only">Update your profile name, bio, and photos</DialogDescription>
                     </div>
                     <Button
                         onClick={handleSubmit}

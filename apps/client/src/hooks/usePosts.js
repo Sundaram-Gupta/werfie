@@ -3,7 +3,8 @@ import { postService, userService, authService, announcementService } from '@/se
 import { useAuth } from '@/context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// Use '' for same-origin when unset (works via IP e.g. 192.168.1.37:5173 - Vite proxies /api)
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 export function usePosts(params = {}) {
     const { user: currentUser } = useAuth()
@@ -97,7 +98,6 @@ export function usePosts(params = {}) {
                 };
             });
 
-            console.log(`[FE_DEBUG_FEED] Items: ${fetchedPosts.length}, Announcements: ${fetchedPosts.filter(i => i.isOfficialAnnouncement).length}`);
             setPosts(fetchedPosts)
             setError(null)
         } catch (err) {

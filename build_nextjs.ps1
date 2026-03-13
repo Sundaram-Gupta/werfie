@@ -4,7 +4,8 @@ $nextUrls = @(
   ".\apps\services\notification",
   ".\apps\services\search",
   ".\apps\services\settings",
-  ".\apps\services\timeline"
+  ".\apps\services\timeline",
+  ".\adminBackend"
 )
 
 $rootDir = Get-Location

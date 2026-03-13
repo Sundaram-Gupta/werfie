@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/AuthContext"
 import { authService, userService } from "@/services/api"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useTranslation } from 'react-i18next'
 
 export default function Settings() {
@@ -252,6 +252,7 @@ export default function Settings() {
                 <DialogContent className="sm:max-w-[425px] bg-black text-white border-border">
                     <DialogHeader>
                         <DialogTitle>{t('settings_page.change_password_title')}</DialogTitle>
+                        <DialogDescription className="sr-only">Enter your current password and new password</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
                         {error && <div className="text-red-500 text-sm bg-red-500/10 p-2 rounded">{error}</div>}

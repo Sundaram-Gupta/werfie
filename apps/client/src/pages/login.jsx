@@ -36,7 +36,7 @@ export default function Login() {
             const data = error.response?.data
             const msg = data?.message ?? data?.error ?? error.message
             setServerError(isNetworkError
-                ? 'Cannot reach server. Check that the app is running (e.g. pm2 list) and try http://localhost:3001 in the browser.'
+                ? 'Cannot reach server. Ensure the backend is running (pm2 list) and port 3001 is reachable from this host.'
                 : (msg || 'Login failed. Please try again.'))
         } finally {
             setLoading(false)
