@@ -224,6 +224,7 @@ model Post {
   userId      String
   content     String
   mediaUrls   String? // JSON array of media URLs (Legacy/User Service compatibility)
+  scheduledAt DateTime? // When set, post is hidden until this time
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -243,6 +244,7 @@ model Post {
   @@index([userId])
   @@index([replyToId])
   @@index([createdAt])
+  @@index([scheduledAt])
 }
 
 model PostMedia {

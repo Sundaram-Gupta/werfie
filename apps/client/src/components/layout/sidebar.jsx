@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom"
-import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet, ShieldAlert, Globe, Activity, ShieldCheck, Gavel } from "lucide-react"
+import { Home, Search, Bell, Users, Mail, User, MoreHorizontal, Feather, Sparkles, List, Briefcase, Megaphone, Mic, Settings, Sun, Moon, Brain, Wallet, ShieldAlert, Globe, Activity, ShieldCheck, Gavel, Bookmark } from "lucide-react"
+import { HomeFilledIcon, MailFilledIcon } from "@/components/icons/nav-icons"
 import { cn } from "@/lib/utils"
 import { useAuthModal } from "../auth/auth-modal-context"
 import { useAuth } from "@/context/AuthContext"
@@ -36,12 +37,13 @@ export function Sidebar() {
     }
 
     const navItems = [
-        { icon: Home, label: t('nav.home'), path: "/" },
-        { icon: Search, label: t('nav.explore'), path: "/explore" },
+        { icon: Home, filledIcon: HomeFilledIcon, label: t('nav.home'), path: "/", filledActive: true },
+        { icon: Search, label: t('nav.explore'), path: "/explore", outlineActive: true },
         { icon: Bell, label: t('nav.notifications'), path: "/notifications" },
         { icon: Brain, label: t('nav.werfie_ai'), path: "/werfie-ai", gradient: true },
         { icon: Users, label: t('nav.follow'), path: "/follow" },
-        { icon: Mail, label: t('nav.chat'), path: "/chat" },
+        { icon: Bookmark, label: "Bookmark", path: "/bookmarks" },
+        { icon: Mail, filledIcon: MailFilledIcon, label: t('nav.chat'), path: "/chat", filledActive: true },
         ...((user?.profile?.verified || user?.institutionalProfile?.isVerified) && (user?.institutionType || user?.institutionalProfile) ? [{ icon: Megaphone, label: "Official Announcements", path: "/announcements" }] : []),
         { icon: Globe, label: "World Leaders", path: "/world-leaders" },
         { icon: User, label: t('nav.profile'), path: "/profile" },
@@ -166,15 +168,25 @@ export function Sidebar() {
                             )}
                             style={{ height: '50px' }}
                         >
-                            <item.icon
-                                className={cn(
-                                    "w-[26.25px] h-[26.25px]",
-                                    isActive && "fill-current",
-                                    item.gradient && "text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500"
-                                )}
-                                strokeWidth={isActive ? 3 : 2}
-                                style={item.gradient ? { stroke: "url(#gradient)" } : {}}
-                            />
+                            {isActive && item.filledIcon ? (
+                                <item.filledIcon
+                                    className={cn(
+                                        "w-[26.25px] h-[26.25px] shrink-0",
+                                        "text-foreground"
+                                    )}
+                                />
+                            ) : (
+                                <item.icon
+                                    className={cn(
+                                        "w-[26.25px] h-[26.25px] shrink-0",
+                                        !item.gradient && (isActive ? "text-foreground" : "text-foreground/70"),
+                                        item.gradient && "text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500"
+                                    )}
+                                    strokeWidth={isActive ? 2.5 : 2}
+                                    fill="none"
+                                    style={item.gradient ? { stroke: "url(#gradient)" } : {}}
+                                />
+                            )}
                             <span className={cn(
                                 "hidden xl:inline leading-6 whitespace-nowrap",
                                 item.gradient && "bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500 bg-clip-text text-transparent"

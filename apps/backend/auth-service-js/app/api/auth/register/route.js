@@ -15,7 +15,15 @@ const registerSchema = z.object({
 
 export async function POST(request) {
     try {
-        const body = await request.json()
+        let body
+        try {
+            body = await request.json()
+        } catch {
+            return apiError('Invalid JSON body', 400, null)
+        }
+        if (!body || typeof body !== 'object') {
+            return apiError('Request body required', 400, null)
+        }
         if (body.handle && typeof body.handle === 'string') {
             body.handle = body.handle.replace(/^@+/, '')
         }

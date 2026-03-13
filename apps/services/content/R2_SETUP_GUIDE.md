@@ -56,17 +56,16 @@
 
 ```env
 # Cloudflare R2 Configuration
-R2_ACCOUNT_ID=your_account_id_here
-R2_ACCESS_KEY_ID=your_access_key_id_here
-R2_SECRET_ACCESS_KEY=your_secret_access_key_here
-R2_BUCKET_NAME=werfie-media
-R2_PUBLIC_URL=https://your-account-id.r2.cloudflarestorage.com/werfie-media
-# OR for custom domain:
-# R2_PUBLIC_URL=https://media.werfie.ai
-
-# Enable R2 storage
 USE_R2_STORAGE=true
+R2_ENDPOINT=https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=your_access_key_id
+R2_SECRET_ACCESS_KEY=your_secret_access_key
+R2_BUCKET_NAME=omretesting
+R2_FOLDER=werfrie
+R2_PUBLIC_URL=https://pub-xxxx.r2.dev
 ```
+
+Flow: **Sharp** (images) / **FFmpeg** (video, audio) compress first, then upload to R2 at `werfrie/images/`, `werfrie/videos/`, etc.
 
 ## Step 5: Test R2 Connection
 

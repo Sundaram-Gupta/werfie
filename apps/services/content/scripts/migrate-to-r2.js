@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { PrismaClient } = require('@prisma/client');
 const { getR2Client, R2_CONFIG } = require('../src/config/r2.config');
 const { uploadToR2, uploadLargeFile } = require('../src/utils/r2-upload');

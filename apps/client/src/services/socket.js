@@ -1,13 +1,15 @@
 import { io } from "socket.io-client"
 
-// Determine URL - default to localhost:3019 for local dev if not going through gateway
-const MESSAGING_URL = import.meta.env.VITE_MESSAGING_URL || 'http://localhost:3019'
+// Use gateway (3001) so WebSocket is proxied; direct 3019 if VITE_MESSAGING_URL is set
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const MESSAGING_URL = import.meta.env.VITE_MESSAGING_URL || API_URL
 
 let socket
 
 export const socketService = {
     connect: () => {
-        const token = localStorage.getItem('accessToken')
+        const raw = localStorage.getItem('accessToken')
+        const token = raw ? raw.trim().replace(/\s+/g, ' ') : null
         if (!token) return
 
         if (socket && socket.connected) return socket

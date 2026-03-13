@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as userService from '@/services/userService';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import {
     Table,
     TableBody,
@@ -27,7 +28,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { MoreHorizontal, Shield, Ban, CheckCircle, Search, Eye, Trash2, UserCog } from 'lucide-react';
+import { MoreHorizontal, Shield, Ban, CheckCircle, Search, Eye, Trash2, RefreshCw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function UsersPage() {
@@ -37,25 +38,25 @@ export default function UsersPage() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
             const data = await userService.getUsers(1, 10, search);
-            // Handle both array response (if no pagination wrapper) or object response
-            const usersList = Array.isArray(data) ? data : data.users || [];
+            const usersList = Array.isArray(data) ? data : data?.users ?? data?.data ?? [];
             setUsers(usersList);
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [search]);
 
     useEffect(() => {
-        // Debounce would be better here in real app
         const timer = setTimeout(fetchUsers, 300);
         return () => clearTimeout(timer);
-    }, [search]);
+    }, [fetchUsers]);
+
+    useRefreshOnFocus(fetchUsers);
 
     const handleAction = async (userId, action, value) => {
         try {
@@ -105,6 +106,10 @@ export default function UsersPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+                <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
             </div>
 
             <div className="flex items-center space-x-2">

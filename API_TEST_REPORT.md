@@ -1,5 +1,5 @@
 # Werfie API Test Report
-Generated: 2026-03-07T06:45:32.184Z
+Generated: 2026-03-12T04:50:47.837Z
 
 ## Summary
 | Metric | Count |
@@ -19,7 +19,7 @@ _No errors._
 | Auth /health | GET | /api/health | 200 | ✅ |
 | Auth /trends | GET | /api/trends?limit=5 | 200 | ✅ |
 | Users profile | GET | /api/users/profile | 200 | ✅ |
-| Users get | GET | /api/users/3d576518-73e8-42d4-8b25-28b86e760aa9 | 200 | ✅ |
+| Users get | GET | /api/users/eea716db-bca5-4531-b035-8e7b6185ddd1 | 200 | ✅ |
 | Users search | GET | /api/users/search?q=user&limit=5 | 200 | ✅ |
 | Users suggestions | GET | /api/users/suggestions?limit=5 | 200 | ✅ |
 | Posts feed | GET | /api/posts?limit=5 | 200 | ✅ |

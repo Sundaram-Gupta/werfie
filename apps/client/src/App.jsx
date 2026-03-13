@@ -7,6 +7,7 @@ import Register from "@/pages/register"
 import Notifications from "@/pages/notifications"
 import Follow from "@/pages/follow"
 import Chat from "@/pages/chat"
+import ChatSettings from "@/pages/chat-settings"
 import Explore from "@/pages/explore"
 import Profile from "@/pages/profile"
 import Lists from "@/pages/lists"
@@ -15,12 +16,21 @@ import Ads from "@/pages/ads"
 import Spaces from "@/pages/spaces"
 import CreatorStudio from "@/pages/creator-studio"
 import Settings from "@/pages/settings"
+import AudienceTaggingSettings from "@/pages/settings/audience-tagging"
+import PhotoTaggingSettings from "@/pages/settings/photo-tagging"
+import MuteAndBlockSettings from "@/pages/settings/mute-and-block"
+import MuteBlockPlaceholder from "@/pages/settings/mute-block-placeholder"
+import BlockedAccountsSettings from "@/pages/settings/blocked-accounts"
+import MutedAccountsSettings from "@/pages/settings/muted-accounts"
+import MutedWordsSettings from "@/pages/settings/muted-words"
+import MutedNotificationsSettings from "@/pages/settings/muted-notifications"
 import InstitutionalSetup from "@/pages/institutional-setup"
 import Announcements from "@/pages/announcements"
 import AnnouncementDetail from "@/pages/announcement-detail"
 import ModerationPanel from "./pages/moderation-panel"
 import WorldLeadersPage from "@/pages/world-leaders"
 import LeaderProfilePage from "@/pages/leader-profile"
+import Bookmarks from "@/pages/bookmarks"
 import WerfieAI from "@/pages/werfie-ai"
 import SearchPage from "@/pages/search"
 import { Analytics, MediaLibrary, ScheduledPosts, AudienceInsights, PostDetail } from "@/pages/creator-tools"
@@ -55,7 +65,9 @@ function App() {
                 <Route path="/explore" element={<Explore />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/follow" element={<Follow />} />
+                <Route path="/bookmarks" element={<Bookmarks />} />
                 <Route path="/chat" element={<Chat />} />
+                <Route path="/chat/settings" element={<ChatSettings />} />
                 <Route path="/profile/:userId?" element={<Profile />} />
                 <Route path="/search" element={<SearchPage />} />
 
@@ -73,6 +85,13 @@ function App() {
                 <Route path="/werfie-ai" element={<WerfieAI />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/settings/institutional" element={<InstitutionalSetup />} />
+                <Route path="/settings/audience-and-tagging" element={<AudienceTaggingSettings />} />
+                <Route path="/settings/photo-tagging" element={<PhotoTaggingSettings />} />
+                <Route path="/settings/mute-and-block" element={<MuteAndBlockSettings />} />
+                <Route path="/settings/blocked-accounts" element={<BlockedAccountsSettings />} />
+                <Route path="/settings/muted-accounts" element={<MutedAccountsSettings />} />
+                <Route path="/settings/muted-words" element={<MutedWordsSettings />} />
+                <Route path="/settings/muted-notifications" element={<MutedNotificationsSettings />} />
                 <Route path="/announcements" element={<Announcements />} />
                 <Route path="/announcements/:id" element={<AnnouncementDetail />} />
                 <Route path="/moderation" element={<ModerationPanel />} />

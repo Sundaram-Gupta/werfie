@@ -15,7 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 app.use(express.json());
 
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -77,6 +77,27 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/health', (req, res) => {
     res.json({ status: 'healthy', service: 'content-service' });
+});
+
+// Internal admin endpoint - for admin panel (same DB as client posts)
+const ADMIN_SECRET = process.env.ADMIN_INTERNAL_SECRET || 'dev-admin-internal';
+app.get('/internal/admin/posts', async (req, res) => {
+    if (req.headers['x-internal-key'] !== ADMIN_SECRET) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+    try {
+        const posts = await prisma.post.findMany({
+            include: {
+                user: { include: { profile: true } },
+                media: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(posts);
+    } catch (err) {
+        console.error('[ContentService] Internal admin posts:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.use('/lists', listsRoutes);
@@ -155,8 +176,7 @@ app.post('/media/upload', authenticateToken, (req, res, next) => {
         } else if (req.file.mimetype.startsWith('audio/')) {
             result = await MediaService.processAudio(req.file);
         } else {
-            await MediaService.cleanup(req.file.path);
-            return res.status(400).json({ status: false, message: 'Unsupported file type', data: null });
+            result = await MediaService.processFile(req.file);
         }
         await MediaService.cleanup(req.file.path);
         return res.json({
@@ -229,30 +249,52 @@ app.get('/search', async (req, res) => {
     }
 });
 
-// Create Post (Media Support)
-app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
-    const { content = '', replyToId } = req.body;
-    const userId = req.user?.userId || req.user?.id;
-    const files = req.files || [];
+// Helper: only show posts that are published (scheduledAt null or in the past)
+const publishedPostFilter = () => ({
+    OR: [
+        { scheduledAt: null },
+        { scheduledAt: { lte: new Date() } }
+    ]
+});
 
-    console.log('[ContentService] Creating post:', { userId, contentLength: content.length, fileCount: files.length });
+// Create Post - shared handler for both JSON (poll/text-only) and FormData (with media)
+async function handleCreatePost(req, res, body, files) {
+    const content = typeof body.content === 'string' ? body.content : (body.content != null ? String(body.content) : '');
+    const replyToId = body.replyToId || null;
+    const rawScheduledAt = body.scheduledAt;
+    const userId = req.user?.userId || req.user?.id;
+    const fileList = Array.isArray(files) ? files : [];
+
+    let scheduledAt = null;
+    if (rawScheduledAt) {
+        const dt = new Date(rawScheduledAt);
+        if (!isNaN(dt.getTime()) && dt > new Date()) {
+            scheduledAt = dt;
+        }
+    }
+
+    console.log('[ContentService] Creating post:', { userId, contentLength: content.length, fileCount: fileList.length, scheduledAt: scheduledAt?.toISOString() || null });
 
     if (!userId) {
         return res.status(401).json({ error: 'User ID missing from token' });
     }
 
+    if (!content.trim() && fileList.length === 0) {
+        return res.status(400).json({ error: 'Content or media is required' });
+    }
+
     try {
-        // 1. Create Post first (or in transaction)
         const post = await prisma.post.create({
             data: {
                 userId,
                 content,
-                replyToId: replyToId || null
+                replyToId: replyToId || null,
+                scheduledAt
             }
         });
 
         // 2. Process Media
-        const mediaPromises = files.map(async (file) => {
+        const mediaPromises = fileList.map(async (file) => {
             try {
                 let processedMedia;
                 if (file.mimetype.startsWith('image/')) {
@@ -295,8 +337,8 @@ app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
             finalPost.replyToHandle = finalPost.replyTo.user?.profile?.handle || finalPost.replyTo.user?.handle || null;
         }
 
-        // Notify if Reply
-        if (replyToId) {
+        // Notify if Reply (skip for scheduled posts - notify when published)
+        if (replyToId && !scheduledAt) {
             const originalPost = await prisma.post.findUnique({ where: { id: replyToId } });
             if (originalPost && originalPost.userId !== userId) {
                 await prisma.notification.create({
@@ -310,47 +352,106 @@ app.post('/', authenticateToken, upload.array('media', 4), async (req, res) => {
             }
         }
 
-        // Emit Kafka Event (fire-and-forget - don't block response)
-        setImmediate(() => {
-            const kafkaProducer = require('./kafka');
-            kafkaProducer.send('POST_CREATED', {
-                id: finalPost.id,
-                userId: finalPost.userId,
-                content: finalPost.content,
-                mediaCount: finalPost.media?.length || 0,
-                createdAt: finalPost.createdAt
-            }).catch(kafkaError => {
-                console.error('Failed to emit POST_CREATED event:', kafkaError);
+        // Emit Kafka: immediate posts -> POST_CREATED; scheduled -> POST_SCHEDULED (publisher emits POST_CREATED when due)
+        const kafkaProducer = require('./kafka');
+        const websocketService = require('./services/websocket.service');
+        if (!scheduledAt) {
+            setImmediate(() => {
+                kafkaProducer.send('POST_CREATED', {
+                    id: finalPost.id,
+                    userId: finalPost.userId,
+                    content: finalPost.content,
+                    mediaCount: finalPost.media?.length || 0,
+                    createdAt: finalPost.createdAt
+                }).catch(kafkaError => {
+                    console.error('Failed to emit POST_CREATED event:', kafkaError);
+                });
+                websocketService.broadcastFeedUpdate();
             });
-        });
+        } else {
+            setImmediate(() => {
+                kafkaProducer.send('POST_SCHEDULED', {
+                    id: finalPost.id,
+                    userId: finalPost.userId,
+                    scheduledAt: scheduledAt.toISOString(),
+                    content: finalPost.content,
+                    mediaCount: finalPost.media?.length || 0
+                }).catch(kafkaError => {
+                    console.error('Failed to emit POST_SCHEDULED event:', kafkaError);
+                });
+            });
+        }
 
-        res.json(finalPost);
+        res.json({ ...finalPost, scheduledAt: scheduledAt ? scheduledAt.toISOString() : null });
     } catch (error) {
         console.error('CREATE POST ERROR:', error);
         // Attempt cleanup for all files on error
-        if (req.files) {
-            for (const file of req.files) {
-                await MediaService.cleanup(file.path);
-            }
+        for (const file of fileList) {
+            if (file && file.path) await MediaService.cleanup(file.path).catch(() => {});
         }
         res.status(500).json({ error: 'Failed to create post', details: error.message });
     }
+}
+
+// JSON route for text-only posts (polls, etc.) - MUST run before multer so body is not consumed
+app.post('/', authenticateToken, async (req, res, next) => {
+    const ct = (req.get('content-type') || '').toLowerCase();
+    if (ct.includes('application/json')) {
+        const body = req.body || {};
+        try {
+            await handleCreatePost(req, res, body, []);
+        } catch (err) {
+            console.error('[ContentService] Create post (JSON) error:', err);
+            if (!res.headersSent) res.status(500).json({ error: 'Failed to create post', details: err.message });
+        }
+        return;
+    }
+    next();
 });
 
-// Get Timeline (Basic) - includes both top-level posts and replies
+// FormData route (with media) - runs when Content-Type is multipart
+app.post('/', authenticateToken, upload.fields([{ name: 'media', maxCount: 4 }]), async (req, res) => {
+    const body = req.body || {};
+    const files = (req.files && req.files.media) ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
+    await handleCreatePost(req, res, body, files);
+});
+
+// Get user's scheduled posts (for scheduled-posts page)
+app.get('/scheduled', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user?.userId || req.user?.id
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+        const posts = await prisma.post.findMany({
+            where: {
+                userId,
+                scheduledAt: { not: null, gt: new Date() }
+            },
+            orderBy: { scheduledAt: 'asc' },
+            include: { user: { include: { profile: true } }, media: true }
+        })
+        res.json(posts)
+    } catch (err) {
+        console.error('Scheduled posts error:', err)
+        res.status(500).json({ error: err.message })
+    }
+})
+
+// Get Timeline (Basic) - only published posts (exclude future-scheduled)
 app.get('/timeline/home', authenticateToken, async (req, res) => {
     try {
+        const currentUserId = req.user?.userId || req.user?.id;
         const posts = await prisma.post.findMany({
+            where: publishedPostFilter(),
             take: 20,
             orderBy: { createdAt: 'desc' },
             include: {
                 user: { include: { profile: true } },
                 media: true,
                 replyTo: { include: { user: { include: { profile: true } } } },
-                _count: { select: { replies: true, likes: true, retweets: true } }
+                _count: { select: { replies: true, likes: true, retweets: true } },
+                bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } }
             }
         });
-
         res.json({ posts });
     } catch (error) {
         console.error('Timeline Error:', error);
@@ -471,13 +572,11 @@ app.get('/', authenticateToken, async (req, res) => {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        // Fetch Posts
-        const where = {};
+        const where = { ...publishedPostFilter() };
         if (userId) where.userId = userId;
         if (repliesOnly === 'true') where.replyToId = { not: null };
 
         console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, query: req.query });
-        console.log(`[ContentService] Fetching announcements?`, (!userId && !repliesOnly));
 
         const posts = await prisma.post.findMany({
             where,
@@ -487,7 +586,8 @@ app.get('/', authenticateToken, async (req, res) => {
                 user: { include: { profile: true } },
                 media: true,
                 replyTo: { include: { user: { include: { profile: true } } } },
-                _count: { select: { replies: true, likes: true, retweets: true } }
+                _count: { select: { replies: true, likes: true, retweets: true } },
+                bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } }
             }
         });
 
@@ -511,9 +611,9 @@ app.get('/following', authenticateToken, async (req, res) => {
 
         const followingIds = following.map(f => f.followingId);
 
-        // Get posts from followed users
         const posts = await prisma.post.findMany({
             where: {
+                ...publishedPostFilter(),
                 userId: { in: followingIds }
             },
             take: 20,
@@ -530,7 +630,8 @@ app.get('/following', authenticateToken, async (req, res) => {
                 retweets: {
                     where: { userId: currentUserId },
                     select: { id: true }
-                }
+                },
+                bookmarks: { where: { userId: currentUserId }, select: { id: true } }
             }
         });
 
@@ -956,8 +1057,10 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
 const http = require('http');
 const server = http.createServer(app);
 const websocketService = require('./services/websocket.service');
+const { startScheduledPostPublisher } = require('./scheduledPostPublisher');
 websocketService.init(server);
 
 server.listen(PORT, '127.0.0.1', () => {
     console.log(`Content Service with WebSockets running on port ${PORT}`);
+    startScheduledPostPublisher(); // Kafka-driven scheduled post publishing (every 60s)
 });

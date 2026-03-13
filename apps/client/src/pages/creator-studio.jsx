@@ -48,7 +48,7 @@ export default function CreatorStudio() {
     }
 
     return (
-        <div className="pb-20">
+        <div className="pb-28">
             <div className="sticky top-0 z-10 bg-black/60 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
                 <div>
                     <h1 className="text-xl font-bold">Creator Studio</h1>
@@ -69,7 +69,15 @@ export default function CreatorStudio() {
                     <MetricCard title="Impressions" value={stats.views.total} change={`${stats.views.growth} vs last month`} icon={<BarChart className="text-orange-500" />} />
                 </div>
 
-                {/* Section B: Content Performance - Mocked for now besides stats */}
+                {/* Section B: Tools */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <ToolCard to="/analytics" title="Analytics" description="Deep dive into your account performance and audience growth." icon={<BarChart className="w-6 h-6 text-blue-500" />} />
+                    <ToolCard to="/media/library" title="Media Studio" description="Manage your uploaded images, videos and GIFs in one library." icon={<Video className="w-6 h-6 text-purple-500" />} />
+                    <ToolCard to="/scheduled-posts" title="Scheduled Posts" description="View and manage content scheduled for the future." icon={<Calendar className="w-6 h-6 text-orange-500" />} />
+                    <ToolCard to="/audience-insights" title="Audience Insights" description="Understand who your followers are and what they like." icon={<Users className="w-6 h-6 text-green-500" />} />
+                </div>
+
+                {/* Section C: Recent Post Performance */}
                 <div className="space-y-4">
                     <h2 className="text-xl font-bold">Recent Post Performance</h2>
                     <div className="border border-border rounded-xl bg-black overflow-hidden">
@@ -104,78 +112,45 @@ export default function CreatorStudio() {
                     </div>
                 </div>
 
-                {/* Section C: Monetization & Tools */}
-                <div className="grid md:grid-cols-4 gap-6 items-start">
-                    {/* Monetization Card */}
-                    <Card className="bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent border-green-500/20 md:col-span-1 border relative overflow-hidden group hover:border-green-500/40 transition-all duration-300">
-                        {/* Animated background gradient */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                        <CardHeader className="relative z-10 px-5 pt-6 pb-2">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2.5 bg-green-500/20 rounded-xl border border-green-500/20 group-hover:scale-110 transition-transform">
-                                    <DollarSign className="w-6 h-6 text-green-400" />
-                                </div>
-                                <div>
-                                    <CardTitle className="text-lg font-bold">Monetization</CardTitle>
-                                    <CardDescription className="flex items-center gap-2 mt-0.5">
-                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-green-500/20 text-green-400 font-semibold text-[10px] uppercase tracking-wider rounded-full border border-green-500/30">
-                                            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                                            Active
-                                        </span>
-                                    </CardDescription>
-                                </div>
+                {/* Section D: Monetization - at bottom of page */}
+                <Card className="bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent border-green-500/20 border relative overflow-hidden group hover:border-green-500/40 transition-all duration-300 rounded-lg max-w-md">
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <CardHeader className="relative z-10 px-5 pt-5 pb-1">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-green-500/20 rounded-xl border border-green-500/20 group-hover:scale-110 transition-transform">
+                                <DollarSign className="w-6 h-6 text-green-400" />
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-6 relative z-10 px-5 pb-6">
-                            <div className="space-y-1">
-                                <div className="text-4xl font-black bg-gradient-to-r from-green-300 via-green-400 to-emerald-400 bg-clip-text text-transparent tracking-tight">
-                                    {stats.earnings.total}
-                                </div>
-                                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                    <span>Available Balance</span>
-                                    <span className="text-green-400 font-bold">{stats.earnings.growth}</span>
-                                </p>
+                            <div>
+                                <CardTitle className="text-lg font-bold">Monetization</CardTitle>
+                                <CardDescription className="flex items-center gap-2 mt-0.5">
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-green-500/20 text-green-400 font-semibold text-[10px] uppercase tracking-wider rounded-full border border-green-500/30">
+                                        <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                                        Active
+                                    </span>
+                                </CardDescription>
                             </div>
-                            <div className="flex flex-col gap-3">
-                                <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold h-11 shadow-lg shadow-blue-500/20 transition-all active:scale-95">
-                                    View Payouts
-                                </Button>
-                                <Button variant="ghost" className="w-full rounded-xl text-sm font-semibold hover:bg-white/5 transition-colors text-muted-foreground hover:text-white h-11">
-                                    Subscription Settings
-                                </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="relative z-10 px-5 pb-5 pt-3">
+                        <div className="space-y-1">
+                            <div className="text-4xl font-black bg-gradient-to-r from-green-300 via-green-400 to-emerald-400 bg-clip-text text-transparent tracking-tight">
+                                {stats.earnings.total}
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Tools Grid */}
-                    <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <ToolCard
-                            to="/analytics"
-                            title="Analytics"
-                            description="Deep dive into your account performance and audience growth."
-                            icon={<BarChart className="w-6 h-6 text-blue-500" />}
-                        />
-                        <ToolCard
-                            to="/media/library"
-                            title="Media Studio"
-                            description="Manage your uploaded images, videos and GIFs in one library."
-                            icon={<Video className="w-6 h-6 text-purple-500" />}
-                        />
-                        <ToolCard
-                            to="/scheduled-posts"
-                            title="Scheduled Posts"
-                            description="View and manage content scheduled for the future."
-                            icon={<Calendar className="w-6 h-6 text-orange-500" />}
-                        />
-                        <ToolCard
-                            to="/audience-insights"
-                            title="Audience Insights"
-                            description="Understand who your followers are and what they like."
-                            icon={<Users className="w-6 h-6 text-green-500" />}
-                        />
-                    </div>
-                </div>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                <span>Available Balance</span>
+                                <span className="text-green-400 font-bold">{stats.earnings.growth}</span>
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 mt-4">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold h-10 shadow-lg shadow-blue-500/20 transition-all active:scale-95">
+                                View Payouts
+                            </Button>
+                            <Button variant="ghost" className="w-full rounded-xl text-sm font-semibold hover:bg-white/5 transition-colors text-muted-foreground hover:text-white h-9">
+                                Subscription Settings
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     )

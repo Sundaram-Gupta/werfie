@@ -152,11 +152,13 @@ export default function Settings() {
                     label={t('settings_page.audience_tagging')}
                     description={t('settings_page.audience_tagging_desc')}
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                    onClick={() => navigate('/settings/audience-and-tagging')}
                 />
                 <SettingsItem
                     label={t('settings_page.mute_block')}
                     description={t('settings_page.mute_block_desc')}
                     action={<ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                    onClick={() => navigate('/settings/mute-and-block')}
                 />
 
                 <Separator className="my-2 opacity-50" />

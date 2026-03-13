@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import api from '@/lib/axios';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import {
     Table,
     TableBody,
@@ -55,8 +56,7 @@ export default function AdsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [revenueShare, setRevenueShare] = useState(20); // Percentage
 
-    useEffect(() => {
-        const fetchData = async () => {
+    const fetchData = useCallback(async () => {
             try {
                 const [campaignsRes, accountsRes, creatorsRes] = await Promise.all([
                     api.get('/admin/ads'),
@@ -100,9 +100,13 @@ export default function AdsPage() {
             } finally {
                 setIsLoading(false);
             }
-        };
+        }, []);
+
+    useEffect(() => {
         fetchData();
-    }, []);
+    }, [fetchData]);
+
+    useRefreshOnFocus(fetchData);
 
     // -- Campaign Actions --
     const toggleCampaignStatus = async (id) => {

@@ -34,13 +34,15 @@ import { userService, moderationService, listService } from "@/services/api"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
 import { AddToListModal } from "../lists/add-to-list-modal"
+import { PostAnalyticsModal } from "./post-analytics-modal"
 
-export function MoreOptionsDropdown({ user, contentType = 'post', contentId, onDelete }) {
+export function MoreOptionsDropdown({ user, contentType = 'post', contentId, post, onDelete }) {
     const { user: currentUser } = useAuth()
     const [isFollowing, setIsFollowing] = useState(false)
     const [isReporting, setIsReporting] = useState(false)
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [showListsModal, setShowListsModal] = useState(false)
+    const [showAnalyticsModal, setShowAnalyticsModal] = useState(false)
 
     const isOwner = currentUser?.id === user.id || currentUser?.id === user.userId 
 
@@ -106,6 +108,13 @@ export function MoreOptionsDropdown({ user, contentType = 'post', contentId, onD
 
     return (
         <>
+            {post && (
+                <PostAnalyticsModal
+                    open={showAnalyticsModal}
+                    onOpenChange={setShowAnalyticsModal}
+                    post={post}
+                />
+            )}
             <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <DialogContent>
                     <DialogHeader>
@@ -211,7 +220,14 @@ export function MoreOptionsDropdown({ user, contentType = 'post', contentId, onD
 
                 <DropdownMenuItem 
                     className="flex gap-3 px-4 py-3 cursor-pointer text-[15px] font-bold text-white hover:bg-[rgb(22,24,28)] focus:bg-[rgb(22,24,28)]"
-                    onClick={(e) => handleComingSoon(e, 'Post analytics')}
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        if (post) {
+                            setTimeout(() => setShowAnalyticsModal(true), 50)
+                        } else {
+                            handleComingSoon(e, 'Post analytics')
+                        }
+                    }}
                 >
                     <BarChart2 className="w-[18px] h-[18px]" />
                     <span>View post engagements</span>

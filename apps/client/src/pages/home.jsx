@@ -1,6 +1,6 @@
 import { Feed } from "@/components/feed/feed"
-import { Image, AlignLeft, CalendarClock, Smile, MapPin, X } from "lucide-react"
-import { useState, useRef } from "react"
+import { Image, BarChart2, CalendarClock, Smile, MapPin, X, Calendar } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { postService } from "@/services/api"
 import { useAuth } from "@/context/AuthContext"
@@ -14,6 +14,8 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Link } from "react-router-dom"
 
 import EmojiPicker from 'emoji-picker-react';
 import { useTranslation } from "react-i18next"
@@ -33,8 +35,12 @@ export default function Home() {
     const [location, setLocation] = useState("")
     const [pollQuestion, setPollQuestion] = useState("")
     const [pollOptions, setPollOptions] = useState(["", ""])
-    const [scheduledDate, setScheduledDate] = useState("")
-    const [scheduledTime, setScheduledTime] = useState("")
+    const [scheduledMonth, setScheduledMonth] = useState("")
+    const [scheduledDay, setScheduledDay] = useState("")
+    const [scheduledYear, setScheduledYear] = useState("")
+    const [scheduledHour, setScheduledHour] = useState("12")
+    const [scheduledMinute, setScheduledMinute] = useState("00")
+    const [scheduledAmPm, setScheduledAmPm] = useState("PM")
     const fileInputRef = useRef(null)
     const locationInputRef = useRef(null)
     const { user } = useAuth()
@@ -54,10 +60,12 @@ export default function Home() {
             setSelectedFiles([])
             setFilePreviews([])
             setLocation("")
+            toast.success(t('feed.posted') || 'Posted!')
             window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
             console.error('Error creating post:', error)
-            alert('Failed to create post. Please try again.')
+            const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Failed to create post'
+            toast.error(msg)
         } finally {
             setIsPosting(false)
         }
@@ -123,20 +131,86 @@ export default function Home() {
         if (pollOptions.length > 2) setPollOptions(pollOptions.filter((_, i) => i !== idx))
     };
 
-    const handleScheduleConfirm = () => {
-        if (!scheduledDate || !scheduledTime) {
-            toast.error("Select date and time")
+    const getScheduleDateTime = () => {
+        const now = new Date()
+        const m = scheduledMonth || String(now.getMonth() + 1)
+        const d = scheduledDay || String(now.getDate())
+        const y = scheduledYear || String(now.getFullYear())
+        let h = parseInt(scheduledHour || "12", 10)
+        if (scheduledAmPm === "PM" && h !== 12) h += 12
+        if (scheduledAmPm === "AM" && h === 12) h = 0
+        const min = scheduledMinute || "00"
+        return new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T${String(h).padStart(2, "0")}:${min}:00`)
+    }
+
+    const getScheduleSummary = () => {
+        const dt = getScheduleDateTime()
+        return dt.toLocaleString("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+        })
+    }
+
+    const getTimezoneName = () => {
+        try {
+            return new Intl.DateTimeFormat("en-US", { timeZoneName: "long" })
+                .formatToParts(new Date())
+                .find((p) => p.type === "timeZoneName")?.value || Intl.DateTimeFormat().resolvedOptions().timeZone
+        } catch {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone
+        }
+    }
+
+    useEffect(() => {
+        if (showScheduleModal) {
+            const t = new Date()
+            t.setDate(t.getDate() + 1)
+            setScheduledMonth(String(t.getMonth() + 1))
+            setScheduledDay(String(t.getDate()))
+            setScheduledYear(String(t.getFullYear()))
+            const h = t.getHours()
+            setScheduledHour(String(h % 12 || 12))
+            setScheduledMinute(String(t.getMinutes()).padStart(2, "0"))
+            setScheduledAmPm(h >= 12 ? "PM" : "AM")
+        }
+    }, [showScheduleModal])
+
+    const handleScheduleConfirm = async () => {
+        let finalContent = postContent.trim()
+        if (location.trim()) {
+            finalContent = finalContent ? `${finalContent}\n\n📍 ${location.trim()}` : `📍 ${location.trim()}`
+        }
+        if (!finalContent && selectedFiles.length === 0) {
+            toast.error("Add content or media to schedule")
             return
         }
-        const dt = new Date(`${scheduledDate}T${scheduledTime}`)
+        const dt = getScheduleDateTime()
         if (dt <= new Date()) {
             toast.error("Schedule time must be in the future")
             return
         }
-        toast.info(`Scheduling requires backend support. Your post will be published immediately. Scheduled time saved: ${dt.toLocaleString()}`)
-        setShowScheduleModal(false)
-        setScheduledDate("")
-        setScheduledTime("")
+        setIsPosting(true)
+        try {
+            await postService.schedulePost(finalContent, dt, selectedFiles)
+            filePreviews.forEach(p => URL.revokeObjectURL(p.url))
+            setPostContent("")
+            setSelectedFiles([])
+            setFilePreviews([])
+            setLocation("")
+            setShowScheduleModal(false)
+            window.dispatchEvent(new Event('feed-refresh'))
+            toast.success(t("feed.scheduled") || `Post scheduled for ${dt.toLocaleString()}`)
+        } catch (error) {
+            console.error("Schedule post error:", error)
+            const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || "Failed to schedule post"
+            toast.error(msg)
+        } finally {
+            setIsPosting(false)
+        }
     };
 
     const handleLocationSubmit = (e) => {
@@ -150,7 +224,9 @@ export default function Home() {
         }
     };
 
-    const canPost = postContent.trim() || selectedFiles.length > 0 || location.trim()
+    const isPollContent = /poll/i.test(postContent)
+    const charLimit = isPollContent ? 500 : 280
+    const canPost = (postContent.trim() || selectedFiles.length > 0 || location.trim()) && postContent.length <= charLimit
 
 
     const userName = user?.profile?.name || user?.name || 'User'
@@ -190,7 +266,7 @@ export default function Home() {
                         onKeyPress={handleKeyPress}
                         placeholder={t('right_sidebar.whats_happening')}
                         className="w-full bg-transparent outline-none text-[20px] placeholder-muted-foreground mb-3 text-foreground resize-none min-h-[60px]"
-                        maxLength={280}
+                        maxLength={charLimit}
                     />
 
                     {/* Media Previews */}
@@ -251,7 +327,7 @@ export default function Home() {
                                 className="p-2 hover:bg-primary/10 rounded-full transition"
                                 title={t('feed.add_poll') || 'Add poll'}
                             >
-                                <AlignLeft className="w-5 h-5" />
+                                <BarChart2 className="w-5 h-5" />
                             </button>
 
                             <div className="relative">
@@ -327,15 +403,15 @@ export default function Home() {
                             {postContent.length > 0 && (
                                 <span className={cn(
                                     "text-sm",
-                                    postContent.length > 260 ? "text-red-500" : "text-muted-foreground"
+                                    postContent.length > charLimit - 20 ? "text-red-500" : "text-muted-foreground"
                                 )}>
-                                    {postContent.length}/280
+                                    {postContent.length}/{charLimit}
                                 </span>
                             )}
                             <button
                                 type="button"
                                 onClick={handleCreatePost}
-                                disabled={!canPost || isPosting || postContent.length > 280}
+                                disabled={!canPost || isPosting}
                                 className="bg-primary text-primary-foreground font-bold text-[15px] px-4 py-1.5 rounded-full hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isPosting ? t('feed.posting') : t('nav.post')}
@@ -399,38 +475,131 @@ export default function Home() {
 
             {/* Schedule Modal */}
             <Dialog open={showScheduleModal} onOpenChange={setShowScheduleModal}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('feed.schedule_post') || 'Schedule post'}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
+                <DialogContent className="sm:max-w-md gap-0 p-0 [&>button]:hidden">
+                    {/* Header: X, Title, Confirm */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowScheduleModal(false)}
+                                className="p-2 hover:bg-muted rounded-full transition-colors -ml-2"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                            <DialogTitle className="text-lg font-semibold m-0">
+                                {t('feed.schedule') || 'Schedule'}
+                            </DialogTitle>
+                        </div>
+                        <Button
+                            onClick={handleScheduleConfirm}
+                            className="rounded-full bg-muted hover:bg-muted/80 text-foreground font-semibold"
+                        >
+                            {t('feed.schedule_confirm') || 'Confirm'}
+                        </Button>
+                    </div>
+
+                    <div className="px-4 py-4 space-y-5">
+                        {/* Summary */}
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="w-4 h-4 shrink-0" />
+                            <span>
+                                {t('feed.schedule_will_send') || 'Will send on'} {getScheduleSummary()}
+                            </span>
+                        </div>
+
+                        {/* Date */}
                         <div>
                             <label className="text-sm font-medium block mb-2">{t('feed.date') || 'Date'}</label>
-                            <Input
-                                type="date"
-                                value={scheduledDate}
-                                onChange={(e) => setScheduledDate(e.target.value)}
-                                min={new Date().toISOString().slice(0, 10)}
-                                className="w-full"
-                            />
+                            <div className="flex gap-2">
+                                <Select value={scheduledMonth} onValueChange={setScheduledMonth}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder={t('feed.month') || 'Month'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                                            <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Select value={scheduledDay} onValueChange={setScheduledDay}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder={t('feed.day') || 'Day'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                                            <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Select value={scheduledYear} onValueChange={setScheduledYear}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder={t('feed.year') || 'Year'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Array.from({ length: 3 }, (_, i) => new Date().getFullYear() + i).map((y) => (
+                                            <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <div className="flex items-center justify-center w-10 h-10 rounded-md border border-input bg-background shrink-0">
+                                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Time */}
                         <div>
                             <label className="text-sm font-medium block mb-2">{t('feed.time') || 'Time'}</label>
-                            <Input
-                                type="time"
-                                value={scheduledTime}
-                                onChange={(e) => setScheduledTime(e.target.value)}
-                                className="w-full"
-                            />
+                            <div className="flex gap-2">
+                                <Select value={scheduledHour} onValueChange={setScheduledHour}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder="Hour" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                                            <SelectItem key={h} value={String(h)}>{h}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Select value={scheduledMinute} onValueChange={setScheduledMinute}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder="Min" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0")).map((m) => (
+                                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Select value={scheduledAmPm} onValueChange={setScheduledAmPm}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="AM">AM</SelectItem>
+                                        <SelectItem value="PM">PM</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            {t('feed.schedule_note') || 'Note: Scheduling requires backend support. Your post will be published immediately.'}
-                        </p>
+
+                        {/* Timezone */}
+                        <div>
+                            <label className="text-sm font-medium block mb-2">{t('feed.timezone') || 'Time zone'}</label>
+                            <p className="text-sm text-muted-foreground">{getTimezoneName()}</p>
+                        </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowScheduleModal(false)}>{t('common.cancel') || 'Cancel'}</Button>
-                        <Button onClick={handleScheduleConfirm}>{t('feed.schedule') || 'Schedule'}</Button>
-                    </DialogFooter>
+
+                    {/* Footer */}
+                    <div className="px-4 py-3 border-t border-border">
+                        <Link
+                            to="/scheduled-posts"
+                            onClick={() => setShowScheduleModal(false)}
+                            className="text-sm text-primary hover:underline"
+                        >
+                            {t('feed.scheduled_posts') || 'Scheduled posts'}
+                        </Link>
+                    </div>
                 </DialogContent>
             </Dialog>
 

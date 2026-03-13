@@ -5,18 +5,30 @@ import bcrypt from "bcrypt"
 
 export async function POST(request) {
     try {
-        const authHeader = request.headers.get("Authorization")
+        const authHeader = request.headers.get("Authorization") || request.headers.get("authorization")
         if (!authHeader?.startsWith("Bearer ")) {
             return apiError("Unauthorized", 401, null)
         }
 
-        const token = authHeader.split(" ")[1]
+        const token = authHeader.split(" ")[1]?.trim()
+        if (!token) {
+            return apiError("Unauthorized", 401, null)
+        }
         const payload = await verifyToken(token)
         if (!payload) {
             return apiError("Invalid token", 401, null)
         }
 
-        const { currentPassword, newPassword } = await request.json()
+        let body
+        try {
+            body = await request.json()
+        } catch {
+            return apiError("Request body required", 400, null)
+        }
+        const { currentPassword, newPassword } = body || {}
+        if (!currentPassword || !newPassword) {
+            return apiError("currentPassword and newPassword are required", 400, null)
+        }
 
         const user = await prisma.user.findUnique({ where: { id: payload.sub } })
         if (!user) {

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 
 export function Feed({ tab = 'for-you' }) {
     const { t } = useTranslation()
-    const { posts, loading, error, likePost, unlikePost, retweetPost, unretweetPost, deletePost } = usePosts({ tab })
+    const { posts, loading, error, likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost } = usePosts({ tab })
 
     if (loading) {
         return (
@@ -43,6 +43,14 @@ export function Feed({ tab = 'for-you' }) {
     }
 
     if (posts.length === 0) {
+        if (tab === 'bookmarks') {
+            return (
+                <div className="p-8 text-center text-muted-foreground">
+                    <p className="font-medium">{t('bookmarks.empty_title') || 'No bookmarks yet'}</p>
+                    <p className="text-sm mt-1">{t('bookmarks.empty_subtitle') || 'Save posts by tapping the bookmark icon on any post.'}</p>
+                </div>
+            )
+        }
         return (
             <div className="p-8 text-center text-muted-foreground">
                 <p>{t('feed.no_posts_yet') || 'No posts yet.'}</p>
@@ -65,6 +73,8 @@ export function Feed({ tab = 'for-you' }) {
                         onUnlike={unlikePost}
                         onRetweet={retweetPost}
                         onUnretweet={unretweetPost}
+                        onBookmark={bookmarkPost}
+                        onUnbookmark={unbookmarkPost}
                         onDelete={deletePost}
                     />
                 )

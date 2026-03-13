@@ -72,30 +72,22 @@ async function test(name, method, url, body = null, auth = false, adminAuth = fa
 async function run() {
     console.log('=== Werfie API Test Suite ===\n');
     console.log('1. Logging in...');
-    const loginRes = await request('POST', `${BASE}/api/auth/login`, { email: 'testuser@example.com', password: 'password123' });
-    if (loginRes.parsed?.data) {
-        token = loginRes.parsed.data.accessToken;
-        refreshToken = loginRes.parsed.data.refreshToken;
-        userId = loginRes.parsed.data.id;
-        console.log('   OK - Got token');
-    } else if (loginRes.parsed?.accessToken) {
-        token = loginRes.parsed.accessToken;
-        refreshToken = loginRes.parsed.refreshToken;
-        userId = loginRes.parsed.id;
-        console.log('   OK - Got token (legacy format)');
-    } else {
-        console.log('   WARN - Login failed, trying user1@xclone.com...');
-        const alt = await request('POST', `${BASE}/api/auth/login`, { email: 'user1@xclone.com', password: 'password123' });
-        if (alt.parsed?.data) {
-            token = alt.parsed.data.accessToken;
-            refreshToken = alt.parsed.data.refreshToken;
-            userId = alt.parsed.data.id;
-        } else if (alt.parsed?.accessToken) {
-            token = alt.parsed.accessToken;
-            refreshToken = alt.parsed.refreshToken;
-            userId = alt.parsed.id;
+    const logins = [
+        { email: 'apitest@example.com', password: 'password123' },
+        { email: 'testuser@example.com', password: 'password123' },
+        { email: 'user1@xclone.com', password: 'password123' },
+        { email: 'john@example.com', password: 'password123' },
+        { email: 'test@gmail.com', password: 'password123' }
+    ];
+    for (const cred of logins) {
+        const loginRes = await request('POST', `${BASE}/api/auth/login`, cred);
+        if (loginRes.parsed?.data?.accessToken || loginRes.parsed?.accessToken) {
+            token = loginRes.parsed?.data?.accessToken || loginRes.parsed.accessToken;
+            refreshToken = loginRes.parsed?.data?.refreshToken || loginRes.parsed.refreshToken;
+            userId = loginRes.parsed?.data?.id || loginRes.parsed?.id;
+            console.log(`   OK - Got token (${cred.email})`);
+            break;
         }
-        if (token) console.log('   OK - Got token');
     }
 
     if (!token) {

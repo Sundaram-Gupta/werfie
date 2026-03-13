@@ -17,22 +17,22 @@ export function getSocketServer(httpServer) {
             adapter: undefined // Ready for redis-adapter in future
         })
 
-        // Middleware for Authentication
-        io.use((socket, next) => {
+        // Middleware for Authentication (async - verifyJWT returns a Promise)
+        io.use(async (socket, next) => {
             console.log('--- New Socket Auth Attempt ---')
-            const token = socket.handshake.auth?.token || socket.handshake.query?.token
+            let token = socket.handshake.auth?.token || socket.handshake.query?.token
+            if (typeof token === 'string') token = token.trim().replace(/\s+/g, ' ')
 
             if (!token) {
                 console.error('❌ Socket Auth Failed: No token provided')
                 return next(new Error('Authentication error: Token required'))
             }
 
-            console.log('🔑 Token received:', token.substring(0, 15) + '...')
-
             try {
-                const decoded = verifyJWT(token)
-                console.log('✅ Socket Auth Success. User:', decoded.userId || decoded.sub)
-                socket.user = decoded
+                const decoded = await verifyJWT(token)
+                const userId = decoded.userId || decoded.sub
+                console.log('✅ Socket Auth Success. User:', userId)
+                socket.user = { ...decoded, userId }
                 next()
             } catch (err) {
                 console.error('❌ Socket Auth Failed: Verification Error:', err.message)
@@ -144,8 +144,8 @@ export function getSocketServer(httpServer) {
                 }
             })
 
-            socket.on('disconnect', () => {
-                console.log(`❌ User disconnected: ${userId}`)
+            socket.on('disconnect', (reason) => {
+                console.log(`❌ User disconnected: ${userId}. Reason: ${reason}`)
                 socket.broadcast.emit('user_offline', { userId })
             })
         })

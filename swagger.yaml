@@ -6,22 +6,58 @@ info:
     - **Client Gateway**: http://localhost:3001
     - **Admin Backend**: http://localhost:3012
     - **Messaging Service**: http://localhost:3019 (direct or via gateway)
+
+    ## Quick test (always 200)
+    **GET /api/health** - No auth. Returns 200 when gateway is up.
+
+    ## Auth Flow (to get 200 on protected endpoints)
+    1. Call **POST /api/auth/login** with `{"email":"user1@xclone.com","password":"password123"}`
+    2. Copy the `accessToken` from the response (from `data.accessToken`)
+    3. Click **Authorize** (lock icon, top right), paste ONLY the token (no "Bearer " prefix)
+    4. Protected endpoints (/api/auth/me, /api/auth/logout, /api/auth/change-password) will now return 200
+
+    ## Proxied endpoints (Users, Posts, etc.)
+    Endpoints like /api/users/*, /api/posts/* are proxied to microservices. Ensure those services are running (see ecosystem.config.js) or you may get 5xx.
   version: 1.0.0
 
 servers:
+  - url: /
+    description: Same origin (use this - no CORS)
   - url: http://localhost:3001
     description: Client Gateway (Auth, Users, Posts, etc.)
+  - url: http://127.0.0.1:3001
+    description: Client Gateway (127.0.0.1)
   - url: http://localhost:3019
     description: Messaging Service (direct)
   - url: http://localhost:3012
     description: Admin Backend
 
+tags:
+  - name: Ads
+    description: |
+      **All Ads endpoints require authentication.** If you get 401 Unauthorized:
+      1. Call **POST /api/auth/login** and copy `data.accessToken`
+      2. Click **Authorize** (lock icon), paste the token (no "Bearer " prefix), then **Authorize**
+      3. Try the Ads request again.
+
 components:
+  responses:
+    Unauthorized:
+      description: Unauthorized - use Authorize with accessToken from POST /api/auth/login
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: boolean, example: false }
+              message: { type: string, example: "Unauthorized" }
+              data: { type: object, nullable: true }
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: Paste the accessToken from /api/auth/login (no "Bearer " prefix)
     cookieAuth:
       type: apiKey
       in: cookie
@@ -31,8 +67,21 @@ components:
     - bearerAuth: []
 
 paths:
+  # ============ HEALTH ============
+  /api/health:
+    get:
+      summary: Gateway health check
+      description: Returns 200 when the gateway is running. No auth required.
+      tags: [Health]
+      security: []
+      responses:
+        '200': { description: Gateway is healthy }
+
   # ============ AUTH ============
-  # Use POST /api/auth/login first with the example body, then copy accessToken and click "Authorize" (lock icon) to paste it. Then /me, /change-password work. For /logout use refresh token in Authorize; for /refresh send refreshToken in body.
+  # STEP 1: Call POST /api/auth/login with email/password
+  # STEP 2: Copy the accessToken from the response
+  # STEP 3: Click the Authorize button (lock icon, top right) and paste ONLY the token (no "Bearer ")
+  # STEP 4: Now GET /me, POST /logout, POST /change-password will return 200
   /api/auth/login:
     post:
       summary: Login
@@ -155,9 +204,13 @@ paths:
   /api/users/profile:
     get:
       summary: Get my profile
+      description: Requires Bearer token. Use Authorize (lock icon) and paste the accessToken from POST /api/auth/login.
       tags: [Users]
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: User profile }
+        '401': { description: Unauthorized - call Authorize and add your accessToken from login }
 
   /api/users/{id}:
     get:
@@ -173,7 +226,10 @@ paths:
         '404': { description: User not found }
     put:
       summary: Update profile
+      description: Requires Bearer token. Authorize with accessToken from login. Use your user id in path.
       tags: [Users]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -190,11 +246,15 @@ paths:
                 avatarUrl: { type: string }
       responses:
         '200': { description: Updated }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/users/{id}/follow:
     post:
       summary: Follow user
+      description: Requires Bearer token. Authorize with accessToken from login. Id = user to follow.
       tags: [Users]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -202,9 +262,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Following }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     delete:
       summary: Unfollow user
+      description: Requires Bearer token. Authorize with accessToken from login. Id = user to unfollow.
       tags: [Users]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -212,6 +276,7 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Unfollowed }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/users/{id}/followers:
     get:
@@ -276,10 +341,12 @@ paths:
         '200': { description: Suggested users }
 
   # ============ POSTS ============
+  # All post endpoints require Bearer token. Use Authorize with accessToken from POST /api/auth/login.
   /api/posts:
     get:
       summary: Get feed
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: limit
           in: query
@@ -289,9 +356,11 @@ paths:
           schema: { type: integer, default: 0 }
       responses:
         '200': { description: List of posts }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     post:
       summary: Create post
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           multipart/form-data:
@@ -302,6 +371,7 @@ paths:
                 media: { type: array, items: { type: string, format: binary } }
       responses:
         '201': { description: Post created }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/{id}:
     get:
@@ -317,6 +387,7 @@ paths:
     delete:
       summary: Delete post
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -324,11 +395,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Deleted }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/{id}/like:
     post:
       summary: Like post
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -336,9 +409,11 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Liked }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     delete:
       summary: Unlike post
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -346,11 +421,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Unliked }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/{id}/retweet:
     post:
       summary: Retweet
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -358,9 +435,11 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Retweeted }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     delete:
       summary: Remove retweet
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -368,6 +447,7 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Removed }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/{id}/replies:
     get:
@@ -391,6 +471,7 @@ paths:
     post:
       summary: Bookmark post
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -398,9 +479,11 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Bookmarked }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     delete:
       summary: Remove bookmark
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -408,11 +491,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Removed }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/following:
     get:
       summary: Get following feed
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: limit
           in: query
@@ -422,11 +507,13 @@ paths:
           schema: { type: integer }
       responses:
         '200': { description: Feed }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/timeline/home:
     get:
       summary: Home timeline
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: limit
           in: query
@@ -436,6 +523,7 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Home timeline }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/posts/search:
     get:
@@ -459,14 +547,18 @@ paths:
     get:
       summary: Get bookmarks
       tags: [Posts]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Bookmarked posts }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   # ============ TIMELINE & EXPLORE ============
   /api/timeline/home:
     get:
       summary: Home timeline
+      description: Requires Bearer token. Use **Authorize** and paste your accessToken from POST /api/auth/login.
       tags: [Timeline]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: limit
           in: query
@@ -476,6 +568,7 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Home timeline }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/trends:
     get:
@@ -513,7 +606,10 @@ paths:
   /api/notifications:
     get:
       summary: Get notifications
+      description: Requires Bearer token. Use Authorize with accessToken from POST /api/auth/login.
       tags: [Notifications]
+      security:
+        - bearerAuth: []
       parameters:
         - name: limit
           in: query
@@ -523,11 +619,15 @@ paths:
           schema: { type: integer }
       responses:
         '200': { description: Notifications }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/notifications/{id}/read:
     put:
       summary: Mark notification as read
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Notifications]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -535,24 +635,33 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Updated }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/notifications/read-all:
     put:
       summary: Mark all as read
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Notifications]
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Updated }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   # ============ SPACES ============
   /api/spaces:
     get:
       summary: List spaces
       tags: [Spaces]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Active spaces }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     post:
       summary: Create space
+      description: Requires Bearer token. Use Authorize with accessToken from POST /api/auth/login.
       tags: [Spaces]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -563,11 +672,14 @@ paths:
                 scheduledAt: { type: string, format: date-time }
       responses:
         '201': { description: Space created }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/spaces/{id}/start:
     post:
       summary: Start space
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Spaces]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -575,11 +687,14 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Space started }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/spaces/{id}/end:
     post:
       summary: End space
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Spaces]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -587,33 +702,43 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Space ended }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   # ============ LISTS ============
+  # All list endpoints require Bearer token. Use Authorize with accessToken from POST /api/auth/login.
   /api/lists/pinned:
     get:
       summary: Get pinned lists
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Pinned lists }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/lists/discover:
     get:
       summary: Discover lists
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Lists }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/lists/yours:
     get:
       summary: Your lists
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: User lists }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/lists:
     post:
       summary: Create list
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -625,11 +750,14 @@ paths:
                 isPrivate: { type: boolean }
       responses:
         '201': { description: List created }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/lists/{id}/members:
     post:
       summary: Add member to list
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -644,9 +772,12 @@ paths:
                 userId: { type: string }
       responses:
         '200': { description: Added }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
     delete:
       summary: Remove member from list
+      description: Requires Bearer token. Use Authorize with accessToken from login.
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -658,11 +789,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Removed }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/lists/membership/{userId}:
     get:
       summary: Get list membership for user
       tags: [Lists]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: userId
           in: path
@@ -670,17 +803,23 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Membership }
+        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   # ============ ADS ============
   /api/ads/account:
     get:
       summary: Get ads account
+      description: Requires Bearer token. Click **Authorize** (lock icon) and paste your accessToken from POST /api/auth/login, then try again.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Ads account }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     put:
       summary: Update billing
+      description: Requires Bearer token. Click **Authorize** and paste your accessToken from login.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -691,16 +830,22 @@ paths:
                 paymentMethodId: { type: string }
       responses:
         '200': { description: Updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/ads/campaigns:
     get:
       summary: List campaigns
+      description: Requires Bearer token. Use **Authorize** with accessToken from login.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Campaigns }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       summary: Create campaign
+      description: Requires Bearer token. Use **Authorize** with accessToken from login.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -713,11 +858,14 @@ paths:
                 endDate: { type: string }
       responses:
         '201': { description: Campaign created }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/ads/ads:
     post:
       summary: Create ad
+      description: Requires Bearer token. Use **Authorize** with accessToken from login.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -728,20 +876,27 @@ paths:
                 creativeId: { type: string }
       responses:
         '201': { description: Ad created }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/ads/creatives:
     get:
       summary: List creatives
+      description: Requires Bearer token. Use **Authorize** with accessToken from login.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Creatives }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/ads/performance:
     get:
       summary: Get performance metrics
+      description: Requires Bearer token. Use **Authorize** with accessToken from login.
       tags: [Ads]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Performance }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ============ BUSINESS ============
   /api/business:

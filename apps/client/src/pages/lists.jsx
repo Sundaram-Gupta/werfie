@@ -1,36 +1,48 @@
 import { useState, useEffect } from "react"
 import { listService } from "@/services/api"
-import { ArrowLeft, MoreHorizontal, Search, FileText, Plus, Loader2 } from "lucide-react"
+import { ArrowLeft, MoreHorizontal, FileText, FilePlus, Plus, Loader2 } from "lucide-react"
+import { CreateListModal } from "@/components/lists/create-list-modal"
+import { ListsYoureOnModal } from "@/components/lists/lists-youre-on-modal"
 import { useNavigate } from "react-router-dom"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 
 export default function Lists() {
     const navigate = useNavigate()
+    const { user } = useAuth()
+    const userHandle = user?.profile?.handle || user?.handle || 'user'
 
     // State
     const [pinned, setPinned] = useState([])
     const [yours, setYours] = useState([])
     const [discover, setDiscover] = useState([])
     const [loading, setLoading] = useState(true)
+    const [showCreateModal, setShowCreateModal] = useState(false)
+    const [showListsYoureOnModal, setShowListsYoureOnModal] = useState(false)
+
+    const toArray = (v) => (Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : [])
+
+    const fetchData = async () => {
+        try {
+            const [pinnedData, yoursData, discoverData] = await Promise.allSettled([
+                listService.getPinned(),
+                listService.getYours(),
+                listService.getDiscover()
+            ])
+            setPinned(toArray(pinnedData.status === 'fulfilled' ? pinnedData.value : []))
+            setYours(toArray(yoursData.status === 'fulfilled' ? yoursData.value : []))
+            setDiscover(toArray(discoverData.status === 'fulfilled' ? discoverData.value : []))
+        } catch (error) {
+            console.error("Failed to fetch lists data:", error)
+            setPinned([])
+            setYours([])
+            setDiscover([])
+        } finally {
+            setLoading(false)
+        }
+    }
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [pinnedData, yoursData, discoverData] = await Promise.all([
-                    listService.getPinned(),
-                    listService.getYours(),
-                    listService.getDiscover()
-                ])
-                setPinned(pinnedData)
-                setYours(yoursData)
-                setDiscover(discoverData)
-            } catch (error) {
-                console.error("Failed to fetch lists data:", error)
-            } finally {
-                setLoading(false)
-            }
-        }
         fetchData()
     }, [])
 
@@ -47,15 +59,25 @@ export default function Lists() {
                 </div>
                 <div className="flex-1">
                     <h1 className="text-[20px] font-bold leading-5">Lists</h1>
-                    <span className="text-[13px] text-muted-foreground">@ashish5423</span>
+                    <span className="text-[13px] text-muted-foreground">@{userHandle}</span>
                 </div>
                 <div className="flex gap-2">
-                    <div className="p-2 hover:bg-muted/50 rounded-full cursor-pointer transition">
-                        <FileText className="w-5 h-5" />
-                    </div>
-                    <div className="p-2 hover:bg-muted/50 rounded-full cursor-pointer transition">
+                    <button
+                        type="button"
+                        onClick={() => setShowCreateModal(true)}
+                        className="p-2 hover:bg-muted/50 rounded-full cursor-pointer transition"
+                        aria-label="Create new list"
+                    >
+                        <FilePlus className="w-5 h-5" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowListsYoureOnModal(true)}
+                        className="p-2 hover:bg-muted/50 rounded-full cursor-pointer transition"
+                        aria-label="Lists you're on"
+                    >
                         <MoreHorizontal className="w-5 h-5" />
-                    </div>
+                    </button>
                 </div>
             </div>
 
@@ -133,6 +155,17 @@ export default function Lists() {
                     ))}
                 </div>
             </div>
+
+            <CreateListModal
+                open={showCreateModal}
+                onOpenChange={setShowCreateModal}
+                onSuccess={fetchData}
+            />
+            <ListsYoureOnModal
+                open={showListsYoureOnModal}
+                onOpenChange={setShowListsYoureOnModal}
+                userHandle={userHandle}
+            />
         </div>
     )
 }

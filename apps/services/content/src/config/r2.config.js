@@ -1,11 +1,13 @@
 const { S3Client } = require('@aws-sdk/client-s3');
 
-// R2 Configuration
+// R2 Configuration - Cloudflare R2 (S3-compatible)
+// Use R2_ENDPOINT for jurisdiction-specific endpoint, or R2_ACCOUNT_ID for default
 const R2_CONFIG = {
-    accountId: process.env.R2_ACCOUNT_ID,
+    endpoint: process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : null),
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    bucketName: process.env.R2_BUCKET_NAME || 'werfie-media',
+    bucketName: process.env.R2_BUCKET_NAME || 'omretesting',
+    folder: process.env.R2_FOLDER || 'werfrie',
     publicUrl: process.env.R2_PUBLIC_URL,
     useR2: process.env.USE_R2_STORAGE === 'true'
 };
@@ -17,11 +19,11 @@ function validateR2Config() {
         return false;
     }
 
-    const required = ['accountId', 'accessKeyId', 'secretAccessKey', 'publicUrl'];
+    const required = ['endpoint', 'accessKeyId', 'secretAccessKey', 'publicUrl'];
     const missing = required.filter(key => !R2_CONFIG[key]);
 
     if (missing.length > 0) {
-        console.error('[R2] Missing required environment variables:', missing.map(k => `R2_${k.toUpperCase()}`).join(', '));
+        console.error('[R2] Missing required: R2_ENDPOINT (or R2_ACCOUNT_ID), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL');
         throw new Error('R2 configuration incomplete. Please set all required environment variables.');
     }
 
@@ -37,7 +39,7 @@ function createR2Client() {
     try {
         const client = new S3Client({
             region: 'auto',
-            endpoint: `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com`,
+            endpoint: R2_CONFIG.endpoint,
             credentials: {
                 accessKeyId: R2_CONFIG.accessKeyId,
                 secretAccessKey: R2_CONFIG.secretAccessKey

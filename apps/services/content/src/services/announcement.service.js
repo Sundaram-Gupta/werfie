@@ -246,28 +246,30 @@ class AnnouncementService {
      * Fetch feed with filters.
      */
     static async getFeed(filters = {}) {
-        const { category, severity, region, status = 'published' } = filters;
+        const { category, severity, status = 'published' } = filters;
         try {
             const where = { status };
             if (category) where.category = category;
             if (severity) where.severityLevel = { gte: parseInt(severity) };
-            if (region) {
-                where.regions = { path: [], array_contains: region };
-            }
-            return await prisma.announcement.findMany({
+            const items = await prisma.announcement.findMany({
                 where,
                 orderBy: [{ severityLevel: 'desc' }, { createdAt: 'desc' }],
                 include: { revisions: { orderBy: { timestamp: 'desc' }, take: 5 } }
             });
+            return items;
         } catch (err) {
-            if (err.message && err.message.includes('crisisId')) {
-                const rows = await prisma.$queryRawUnsafe(
-                    `SELECT * FROM "Announcement" WHERE status = $1 ORDER BY "severityLevel" DESC, "createdAt" DESC`,
-                    status
-                );
+            console.error('[AnnouncementService] getFeed error:', err?.message);
+            try {
+                const rows = await prisma.$queryRaw`
+                    SELECT * FROM "Announcement" WHERE status = ${status}
+                    ORDER BY "severityLevel" DESC, "createdAt" DESC
+                    LIMIT 100
+                `;
                 return Array.isArray(rows) ? rows : [];
+            } catch (rawErr) {
+                console.error('[AnnouncementService] getFeed raw fallback error:', rawErr?.message);
+                return [];
             }
-            throw err;
         }
     }
 }

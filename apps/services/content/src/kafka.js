@@ -1,8 +1,10 @@
 const { Kafka } = require('kafkajs');
 
+// localhost:9093 = Kafka in Docker (host); kafka:9092 = inside Docker
+const brokers = [(process.env.KAFKA_BROKER || 'localhost:9093')];
 const kafka = new Kafka({
     clientId: 'content-service',
-    brokers: [process.env.KAFKA_BROKER || 'kafka:9092'],
+    brokers,
     retry: {
         retries: 5,
         initialRetryTime: 300,

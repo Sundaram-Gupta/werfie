@@ -31,10 +31,10 @@ router.put('/update/:id', authenticateToken, async (req, res) => {
 router.get('/feed', async (req, res) => {
     try {
         const feed = await AnnouncementService.getFeed(req.query);
-        res.json(feed);
+        res.status(200).json(feed);
     } catch (error) {
         console.error('Get Feed Error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(200).json([]);
     }
 });
 

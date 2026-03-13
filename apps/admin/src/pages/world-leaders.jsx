@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,12 @@ export default function WorldLeadersAdminPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchLeaders();
+  }, []);
+
+  useRefreshOnFocus(fetchLeaders);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;

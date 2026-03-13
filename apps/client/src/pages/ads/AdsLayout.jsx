@@ -17,6 +17,7 @@ export default function AdsLayout() {
     const [activeTab, setActiveTab] = useState("dashboard")
     const [isLoading, setIsLoading] = useState(true)
     const [hasBusinessProfile, setHasBusinessProfile] = useState(true)
+    const [adAccountId, setAdAccountId] = useState(null)
 
     const tabs = [
         { id: "dashboard", label: "Overview", icon: LayoutDashboard },
@@ -99,10 +100,15 @@ export default function AdsLayout() {
             {/* Ads Sidebar (Desktop) */}
             <aside className="w-64 border-r border-border sticky top-0 h-screen hidden md:flex flex-col bg-black">
                 <div className="p-4 border-b border-border/50">
-                    <div className="flex items-center gap-2 mb-6 text-blue-500">
+                    <div className="flex items-center gap-2 mb-2 text-blue-500">
                         <Megaphone className="w-6 h-6" />
                         <span className="font-bold text-xl tracking-tight text-white">Ads Manager</span>
                     </div>
+                    {adAccountId && (
+                        <p className="text-xs text-muted-foreground font-mono truncate" title={adAccountId}>
+                            Account: {adAccountId.slice(0, 8)}…
+                        </p>
+                    )}
                 </div>
 
                 <nav className="flex-1 p-4 space-y-1">

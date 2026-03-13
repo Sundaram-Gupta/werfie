@@ -1,6 +1,9 @@
+import { io } from 'socket.io-client'
 import { postService, userService, authService, announcementService } from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 export function usePosts(params = {}) {
     const { user: currentUser } = useAuth()
@@ -14,7 +17,10 @@ export function usePosts(params = {}) {
             let data;
             let announcementsData = [];
 
-            if (params.tab === 'following') {
+            if (params.tab === 'bookmarks') {
+                const res = await postService.getBookmarks({ limit: 50 })
+                data = Array.isArray(res) ? res : (res?.posts || [])
+            } else if (params.tab === 'following') {
                 data = await postService.getFollowingPosts()
             } else if (params.tab === 'for-you') {
                 // Fetch posts and announcements concurrently as requested
@@ -37,45 +43,59 @@ export function usePosts(params = {}) {
                 fetchedPosts = data.posts;
             }
 
-            // Merge with announcements and annotate
+            // For bookmarks tab, each post is already bookmarked (mark for UI)
+            if (params.tab === 'bookmarks') {
+                fetchedPosts = fetchedPosts.map(p => ({ ...p, bookmarks: p.bookmarks?.length ? p.bookmarks : [{ id: 'bookmarked' }] }))
+            }
+
+            // Merge with announcements (skip for bookmarks tab)
             const annotatedAnnouncements = announcementsData.map(ann => ({
                 ...ann,
                 isOfficialAnnouncement: true
             }));
+            if (params.tab !== 'bookmarks') {
+                fetchedPosts = [...fetchedPosts, ...annotatedAnnouncements].sort((a, b) =>
+                    new Date(b.createdAt) - new Date(a.createdAt)
+                );
+            } else {
+                fetchedPosts = [...fetchedPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            }
 
-            fetchedPosts = [...fetchedPosts, ...annotatedAnnouncements].sort((a, b) =>
-                new Date(b.createdAt) - new Date(a.createdAt)
-            );
-
-            // Extract unique user IDs (excluding announcements)
+            // Extract unique user IDs (excluding announcements; bookmarks tab may already have user)
             const userIds = [...new Set(
                 fetchedPosts
                     .filter(item => !item.isOfficialAnnouncement && item.userId)
                     .map(item => item.userId)
             )];
 
-            // Bulk fetch users
+            // Bulk fetch users (non-fatal: show posts with Unknown if fetch fails)
+            let userMap = {};
             if (userIds.length > 0) {
-                const users = await userService.getUsers(userIds);
-                const userMap = {};
-                users.forEach(user => {
-                    userMap[user.id] = user;
-                });
-
-                // Hydrate posts (only if not an announcement)
-                fetchedPosts = fetchedPosts.map(item => {
-                    if (item.isOfficialAnnouncement) return item;
-                    return {
-                        ...item,
-                        user: userMap[item.userId] || {
-                            id: item.userId,
-                            name: 'Unknown',
-                            handle: 'unknown',
-                            profile: { name: 'Unknown', handle: 'unknown', avatar: null }
-                        }
-                    };
-                });
+                try {
+                    const users = await userService.getUsers(userIds);
+                    (Array.isArray(users) ? users : []).forEach(user => {
+                        userMap[user.id] = user;
+                    });
+                } catch (err) {
+                    console.warn('Failed to fetch user profiles for posts, using fallbacks:', err?.response?.data?.details || err?.message);
+                }
             }
+
+            // Hydrate posts (only if not an announcement); preserve bookmarks so filled icon shows on load/refresh
+            fetchedPosts = fetchedPosts.map(item => {
+                if (item.isOfficialAnnouncement) return item;
+                const bookmarks = Array.isArray(item.bookmarks) ? item.bookmarks : [];
+                return {
+                    ...item,
+                    bookmarks,
+                    user: userMap[item.userId] || {
+                        id: item.userId,
+                        name: 'Unknown',
+                        handle: 'unknown',
+                        profile: { name: 'Unknown', handle: 'unknown', avatar: null }
+                    }
+                };
+            });
 
             console.log(`[FE_DEBUG_FEED] Items: ${fetchedPosts.length}, Announcements: ${fetchedPosts.filter(i => i.isOfficialAnnouncement).length}`);
             setPosts(fetchedPosts)
@@ -98,6 +118,13 @@ export function usePosts(params = {}) {
         const onRefresh = () => fetchRef.current()
         window.addEventListener('feed-refresh', onRefresh)
         return () => window.removeEventListener('feed-refresh', onRefresh)
+    }, [])
+
+    // WebSocket via gateway – scheduled posts appear when published (no polling, no page refresh)
+    useEffect(() => {
+        const socket = io(`${API_URL}/feed`, { path: '/ws/live', transports: ['polling', 'websocket'] })
+        socket.on('post_published', () => fetchRef.current())
+        return () => socket.disconnect()
     }, [])
 
     const createPost = async (content, mediaUrls = [], replyToId = null) => {
@@ -199,6 +226,38 @@ export function usePosts(params = {}) {
         }
     }
 
+    const bookmarkPost = async (postId) => {
+        const previousPosts = [...posts]
+        setPosts(posts.map(post =>
+            post.id === postId
+                ? { ...post, bookmarks: [{ id: 'temp' }] }
+                : post
+        ))
+        try {
+            await postService.bookmarkPost(postId)
+        } catch (err) {
+            console.error('Error bookmarking post:', err)
+            setPosts(previousPosts)
+        }
+    }
+
+    const unbookmarkPost = async (postId) => {
+        const previousPosts = [...posts]
+        if (params.tab === 'bookmarks') {
+            setPosts(posts.filter(p => p.id !== postId))
+        } else {
+            setPosts(posts.map(post =>
+                post.id === postId ? { ...post, bookmarks: [] } : post
+            ))
+        }
+        try {
+            await postService.unbookmarkPost(postId)
+        } catch (err) {
+            console.error('Error removing bookmark:', err)
+            setPosts(previousPosts)
+        }
+    }
+
     return {
         posts,
         loading,
@@ -208,6 +267,8 @@ export function usePosts(params = {}) {
         unlikePost,
         retweetPost,
         unretweetPost,
+        bookmarkPost,
+        unbookmarkPost,
         deletePost,
         refetch: fetchPosts,
     }

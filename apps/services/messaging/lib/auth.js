@@ -1,13 +1,16 @@
 // Verify JWT - try jose first (matches auth), fallback to jsonwebtoken
+import { AsyncLocalStorage } from 'async_hooks'
 import { jwtVerify } from 'jose'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const JWT_SECRET_BYTES = new TextEncoder().encode(JWT_SECRET)
 
+const authContext = new AsyncLocalStorage()
+
 export async function verifyJWT(token) {
     if (!token) throw new Error('No token provided')
-    const cleanToken = token.replace(/^Bearer\s+/i, '')
+    const cleanToken = String(token).trim().replace(/\s+/g, ' ').replace(/^Bearer\s+/i, '')
     try {
         const { payload } = await jwtVerify(cleanToken, JWT_SECRET_BYTES)
         const userId = payload.userId || payload.sub || payload.id
@@ -32,36 +35,44 @@ export async function createJWT(payload, expiresIn = '7d') {
 }
 
 // Next.js middleware helper - optionalGraceful: return 200 with empty when auth fails (for GET conversations)
+// Trusts x-verified-gateway + x-user-id when set by gateway (gateway verifies JWT before proxying)
+// Uses AsyncLocalStorage to pass user - avoids new Request() which causes "Cannot read private member #state" with proxied requests
 export function withAuth(handler, options = {}) {
     return async (request, context) => {
-        const authHeader = request.headers.get('authorization')
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            if (options.gracefulGet && request.method === 'GET' && request.url?.includes('/conversations')) {
-                return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 })
+        let user = null
+
+        const gatewayVerified = request.headers.get('x-verified-gateway')
+        const gatewayUserId = request.headers.get('x-user-id')
+        if (gatewayVerified === 'true' && gatewayUserId) {
+            user = { userId: gatewayUserId, email: request.headers.get('x-user-email') || '' }
+        } else {
+            const authHeader = request.headers.get('authorization')
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                if (options.gracefulGet && request.method === 'GET' && request.url?.includes('/conversations')) {
+                    return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 })
+                }
+                return new Response(JSON.stringify({ status: false, message: 'Unauthorized', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
             }
-            return new Response(JSON.stringify({ status: false, message: 'Unauthorized', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
-        }
-        const token = authHeader.split(' ')[1]
-        try {
-            const user = await verifyJWT(token)
-            const headers = new Headers(request.headers)
-            headers.set('x-user-id', user.userId)
-            headers.set('x-user-email', user.email)
-            const newRequest = new Request(request, { headers })
-            return handler(newRequest, context)
-        } catch (error) {
-            if (options.gracefulGet && request.method === 'GET' && request.url?.includes('/conversations')) {
-                return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 })
+            try {
+                user = await verifyJWT(authHeader.split(' ')[1])
+            } catch (error) {
+                if (options.gracefulGet && request.method === 'GET' && request.url?.includes('/conversations')) {
+                    return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 })
+                }
+                return new Response(JSON.stringify({ status: false, message: 'Invalid token', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
             }
-            return new Response(JSON.stringify({ status: false, message: 'Invalid token', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
         }
+
+        return authContext.run(user, () => handler(request, context))
     }
 }
 
-// Extract user from request (checking both middleware headers and direct token)
+// Extract user from request (AsyncLocalStorage first, then headers, then Authorization)
 export async function getUserFromRequest(request) {
+    const ctx = authContext.getStore()
+    if (ctx) return ctx
     const headerUserId = request.headers.get('x-user-id')
-    if (headerUserId) return { userId: headerUserId, email: request.headers.get('x-user-email') }
+    if (headerUserId) return { userId: headerUserId, email: request.headers.get('x-user-email') || '' }
     const authHeader = request.headers.get('authorization')
     if (authHeader && authHeader.startsWith('Bearer ')) {
         try {

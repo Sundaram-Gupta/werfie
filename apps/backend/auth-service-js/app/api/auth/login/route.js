@@ -12,20 +12,30 @@ const loginSchema = z.object({
 export async function POST(request) {
     try {
         console.log('[Login] Received login request');
-        const body = await request.json()
+        let body
+        try {
+            body = await request.json()
+        } catch (parseErr) {
+            return apiError('Invalid JSON body', 400, null)
+        }
+        if (!body || typeof body !== 'object') {
+            return apiError('Request body required', 400, null)
+        }
         console.log('[Login] Parsed body:', { email: body.email, hasPassword: !!body.password });
 
         const { email, password } = loginSchema.parse(body)
 
-        // Find user
+        // Find user - raw query to avoid Prisma schema/DB mismatch
         console.log(`[Login] Looking up user: ${email}`);
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: {
-                profile: true,
-                institutionalProfile: true
-            }
-        })
+        const rows = await prisma.$queryRaw`SELECT id, email, "passwordHash" FROM "User" WHERE email = ${email} LIMIT 1`
+        const user = rows[0] || null
+        let profile = null
+        if (user) {
+            try {
+                const prof = await prisma.$queryRaw`SELECT * FROM "Profile" WHERE "userId" = ${user.id} LIMIT 1`
+                profile = prof[0] || null
+            } catch (_) {}
+        }
 
         if (!user) {
             console.log('[Login] User not found');
@@ -57,24 +67,22 @@ export async function POST(request) {
         const expiresAt = new Date()
         expiresAt.setDate(expiresAt.getDate() + 7)
 
-        await prisma.refreshToken.create({
-            data: {
-                userId: user.id,
-                token: refreshToken,
-                expiresAt
-            }
-        })
+        const { randomUUID } = await import('crypto')
+        await prisma.$executeRaw`
+            INSERT INTO "RefreshToken" (id, "userId", token, "expiresAt", "createdAt")
+            VALUES (${randomUUID()}, ${user.id}, ${refreshToken}, ${expiresAt}, NOW())
+        `
 
-        console.log('[Login] Login successful. Institutional ID:', user.institutionalProfile?.id || 'None');
+        console.log('[Login] Login successful');
         return apiSuccess({
             accessToken,
             refreshToken,
             id: user.id,
             email: user.email,
-            profile: user.profile,
-            institutionType: user.institutionType,
-            institutionalProfile: user.institutionalProfile,
-            preferredLanguage: user.preferredLanguage
+            profile,
+            institutionType: null,
+            institutionalProfile: null,
+            preferredLanguage: 'en'
         }, 'Login successful')
 
     } catch (error) {
@@ -83,7 +91,9 @@ export async function POST(request) {
             return apiError('Validation error', 400, { details: error.issues })
         }
 
-        console.error('[Login] Internal Error:', error)
-        return apiError('Internal server error', 500, { details: error.message })
+        const msg = error?.message || String(error)
+        console.error('[Login] Internal Error:', msg)
+        const isDev = process.env.NODE_ENV !== 'production'
+        return apiError(isDev ? msg : 'Internal server error', 500, isDev ? { error: msg } : null)
     }
 }

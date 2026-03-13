@@ -83,7 +83,10 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
 export default function Follow() {
     const { user: currentUser } = useAuth()
     const { t } = useTranslation()
+    const [activeTab, setActiveTab] = useState('following')
     const [following, setFollowing] = useState([])
+    const [followers, setFollowers] = useState([])
+    const verifiedFollowers = followers.filter(u => u.profile?.verified)
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
 
@@ -95,12 +98,21 @@ export default function Follow() {
 
             // Fetch users the current user is following
             const followingData = await userService.getFollowing(currentUser.id, { limit: 50 })
-            setFollowing(followingData)
+            setFollowing(Array.isArray(followingData) ? followingData : [])
+
+            // Fetch followers
+            const followersData = await userService.getFollowers(currentUser.id, { limit: 50 })
+            setFollowers(
+                Array.isArray(followersData)
+                    ? followersData
+                    : Array.isArray(followersData?.users)
+                        ? followersData.users
+                        : []
+            )
 
             // Fetch suggested users (users not currently followed)
             const allSuggestions = await userService.getSuggestions(50)
-            // Filter out current user and users already followed
-            const followingIds = new Set(followingData.map(u => u.id))
+            const followingIds = new Set((Array.isArray(followingData) ? followingData : []).map(u => u.id))
             const filtered = allSuggestions.filter(u => u.id !== currentUser.id && !followingIds.has(u.id))
             setSuggestions(filtered.slice(0, 12))
         } catch (error) {
@@ -112,65 +124,149 @@ export default function Follow() {
 
     useEffect(() => {
         fetchData()
-    }, [currentUser])
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-screen">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-        )
-    }
+    }, [currentUser?.id])
 
     return (
         <div>
-            <div className="sticky top-0 z-10 bg-black/60 backdrop-blur-md border-b border-border px-4 py-3">
-                <h1 className="text-xl font-bold">{t('follow.title')}</h1>
-                <p className="text-sm text-muted-foreground">{t('follow.subtitle')}</p>
+            <div className="sticky top-0 z-10 bg-black/60 backdrop-blur-md border-b border-border">
+                <div className="px-4 py-3">
+                    <h1 className="text-xl font-bold">{t('follow.title')}</h1>
+                    <p className="text-sm text-muted-foreground">{t('follow.subtitle')}</p>
+                </div>
+
+                {/* Tabs: Verified Followers | Followers | Following (reference: first image) */}
+                <div className="flex border-b border-border">
+                    <button
+                        onClick={() => setActiveTab('verified_followers')}
+                        className={`flex-1 py-4 text-[15px] font-bold transition-colors relative ${activeTab === 'verified_followers' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        {t('follow.section_verified_followers') || 'Verified Followers'}
+                        {activeTab === 'verified_followers' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('followers')}
+                        className={`flex-1 py-4 text-[15px] font-bold transition-colors relative ${activeTab === 'followers' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        {t('follow.section_followers') || 'Followers'}
+                        {activeTab === 'followers' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('following')}
+                        className={`flex-1 py-4 text-[15px] font-bold transition-colors relative ${activeTab === 'following' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        {t('follow.section_following')}
+                        {activeTab === 'following' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        )}
+                    </button>
+                </div>
             </div>
 
             <div className="pb-20">
-                {/* Following Section */}
-                <div className="px-4 py-3 border-b border-border">
-                    <h2 className="text-xl font-bold mb-4">{t('follow.section_following')} ({following.length})</h2>
-                    {following.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            {t('follow.empty_following')}
+                {loading ? (
+                    <div className="flex justify-center items-center py-16">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                ) : activeTab === 'following' ? (
+                    <>
+                        {/* Following Section */}
+                        <div className="px-4 py-3 border-b border-border">
+                            <h2 className="text-xl font-bold mb-4">{t('follow.section_following')} ({following.length})</h2>
+                            {following.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    {t('follow.empty_following')}
+                                </div>
+                            ) : (
+                                <div className="border border-border rounded-xl overflow-hidden bg-background">
+                                    {following.map((user) => (
+                                        <FollowCard
+                                            key={user.id}
+                                            user={user}
+                                            initialFollowing={true}
+                                            allowFollow={true}
+                                            onFollowChange={fetchData}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <div className="border border-border rounded-xl overflow-hidden bg-background">
-                            {following.map((user) => (
-                                <FollowCard
-                                    key={user.id}
-                                    user={user}
-                                    initialFollowing={true}
-                                    onFollowChange={fetchData}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
 
-                {/* Suggested Section */}
-                <div className="px-4 py-3">
-                    <h2 className="text-xl font-bold mb-4">{t('follow.section_suggested')} ({suggestions.length})</h2>
-                    {suggestions.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            {t('follow.empty_suggestions')}
+                        {/* Suggested Section */}
+                        <div className="px-4 py-3">
+                            <h2 className="text-xl font-bold mb-4">{t('follow.section_suggested')} ({suggestions.length})</h2>
+                            {suggestions.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    {t('follow.empty_suggestions')}
+                                </div>
+                            ) : (
+                                <div className="border border-border rounded-xl overflow-hidden bg-background">
+                                    {suggestions.map((user) => (
+                                        <FollowCard
+                                            key={user.id}
+                                            user={user}
+                                            allowFollow={true}
+                                            onFollowChange={fetchData}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <div className="border border-border rounded-xl overflow-hidden bg-background">
-                            {suggestions.map((user) => (
-                                <FollowCard
-                                    key={user.id}
-                                    user={user}
-                                    allowFollow={true}
-                                    onFollowChange={fetchData}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
+                    </>
+                ) : activeTab === 'verified_followers' ? (
+                    /* Verified Followers Section (reference: second image layout) */
+                    <div className="px-4 py-3">
+                        <h2 className="text-xl font-bold mb-4">{t('follow.section_verified_followers') || 'Verified Followers'} ({verifiedFollowers.length})</h2>
+                        {verifiedFollowers.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                                {t('follow.empty_verified_followers') || 'No verified followers yet'}
+                            </div>
+                        ) : (
+                            <div className="border border-border rounded-xl overflow-hidden bg-background">
+                                {verifiedFollowers.map((user) => {
+                                    const followingIds = new Set(following.map(u => u.id))
+                                    return (
+                                        <FollowCard
+                                            key={user.id}
+                                            user={user}
+                                            initialFollowing={followingIds.has(user.id)}
+                                            allowFollow={true}
+                                            onFollowChange={fetchData}
+                                        />
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    /* Followers Section (reference: second image layout) */
+                    <div className="px-4 py-3">
+                        <h2 className="text-xl font-bold mb-4">{t('follow.section_followers') || 'Followers'} ({followers.length})</h2>
+                        {followers.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                                {t('follow.empty_followers') || 'No followers yet'}
+                            </div>
+                        ) : (
+                            <div className="border border-border rounded-xl overflow-hidden bg-background">
+                                {followers.map((user) => {
+                                    const followingIds = new Set(following.map(u => u.id))
+                                    return (
+                                        <FollowCard
+                                            key={user.id}
+                                            user={user}
+                                            initialFollowing={followingIds.has(user.id)}
+                                            allowFollow={true}
+                                            onFollowChange={fetchData}
+                                        />
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     )

@@ -27,7 +27,8 @@ router.get('/list', async (req, res) => {
         const crises = await crisisService.listCrises(req.query);
         res.json(crises);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.warn('[Crisis] list failed:', error?.message);
+        res.status(200).json([]);
     }
 });
 

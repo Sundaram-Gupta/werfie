@@ -3,11 +3,20 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 const authenticateToken = (req, res, next) => {
+    // Trust gateway-injected identity when gateway has already verified the JWT
+    if (req.headers['x-verified-gateway'] === 'true' && req.headers['x-user-id']) {
+        req.user = {
+            userId: req.headers['x-user-id'],
+            id: req.headers['x-user-id'],
+            email: req.headers['x-user-email'] || ''
+        };
+        return next();
+    }
+
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-        // Check for x-user-id fallback (Gateway might set it in future)
         if (req.headers['x-user-id']) {
             req.user = { userId: req.headers['x-user-id'], id: req.headers['x-user-id'] };
             return next();
@@ -22,8 +31,8 @@ const authenticateToken = (req, res, next) => {
             return res.status(401).json({ error: 'Unauthorized', details: err.message });
         }
         req.user = user;
-        req.user.userId = user.sub || user.id || user.userId; // Map standard claims
-        req.user.id = req.user.userId; // Ensure .id is also available
+        req.user.userId = user.sub || user.id || user.userId;
+        req.user.id = req.user.userId;
         next();
     });
 };

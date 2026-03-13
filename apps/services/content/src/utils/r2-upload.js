@@ -18,8 +18,8 @@ async function uploadToR2(buffer, folder, extension, contentType) {
         throw new Error('R2 client not initialized. Check R2 configuration.');
     }
 
-    // Add werfie/ prefix to organize media in the bucket
-    const key = `werfie/${folder}/${uuidv4()}.${extension}`;
+    const prefix = R2_CONFIG.folder ? `${R2_CONFIG.folder}/` : '';
+    const key = `${prefix}${folder}/${uuidv4()}.${extension}`;
 
     try {
         const command = new PutObjectCommand({
@@ -57,8 +57,8 @@ async function uploadLargeFile(data, folder, extension, contentType) {
         throw new Error('R2 client not initialized. Check R2 configuration.');
     }
 
-    // Add werfie/ prefix to organize media in the bucket
-    const key = `werfie/${folder}/${uuidv4()}.${extension}`;
+    const prefix = R2_CONFIG.folder ? `${R2_CONFIG.folder}/` : '';
+    const key = `${prefix}${folder}/${uuidv4()}.${extension}`;
 
     try {
         const upload = new Upload({

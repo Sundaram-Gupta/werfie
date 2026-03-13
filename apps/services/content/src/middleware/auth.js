@@ -3,19 +3,24 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    console.log(`Auth Middleware: Header: ${authHeader ? 'Present' : 'Missing'}`);
+    // Trust gateway-injected identity when gateway has already verified the JWT
+    if (req.headers['x-verified-gateway'] === 'true' && req.headers['x-user-id']) {
+        req.user = {
+            userId: req.headers['x-user-id'],
+            id: req.headers['x-user-id'],
+            email: req.headers['x-user-email'] || ''
+        };
+        return next();
+    }
 
+    const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-        // Check for x-user-id fallback (Gateway might set it in future)
         if (req.headers['x-user-id']) {
-            console.log('Auth Middleware: Using x-user-id fallback');
             req.user = { userId: req.headers['x-user-id'], id: req.headers['x-user-id'] };
             return next();
         }
-        console.log('Auth Middleware: No token provided');
         return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
     }
 

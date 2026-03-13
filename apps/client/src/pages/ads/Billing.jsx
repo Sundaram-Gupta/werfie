@@ -95,6 +95,11 @@ export default function Billing() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Current Balance */}
                 <div className="bg-zinc-900/50 border border-border/50 rounded-xl p-6">
+                    {adAccount?.id && (
+                        <div className="text-xs text-muted-foreground mb-3 font-mono truncate" title={adAccount.id}>
+                            Account ID: {adAccount.id}
+                        </div>
+                    )}
                     <div className="text-sm text-muted-foreground mb-1">Outstanding Balance</div>
                     <div className="text-3xl font-bold mb-4">${adAccount?.balance?.toFixed(2) || "0.00"}</div>
                     <div className="flex items-center gap-2 text-xs text-yellow-500 mb-4 bg-yellow-500/10 p-2 rounded">

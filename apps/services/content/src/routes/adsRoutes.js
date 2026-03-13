@@ -6,18 +6,22 @@ const router = express.Router();
 const authenticateToken = require('../middleware/auth');
 console.log('Ads Routes Module Loaded');
 
-// GET /account: Fetch or create Ad Account
+// GET /account: Fetch or create Ad Account (auto-create business + ad account if missing so campaign launch works)
 router.get('/account', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
-//g
-        // Find business profile
-        const business = await prisma.businessProfile.findUnique({
+
+        let business = await prisma.businessProfile.findUnique({
             where: { userId }
         });
 
         if (!business) {
-            return res.status(200).json({ status: true, message: 'No business profile yet', data: null });
+            business = await prisma.businessProfile.create({
+                data: {
+                    userId,
+                    companyName: 'My Business'
+                }
+            });
         }
 
         let adAccount = await prisma.adAccount.findFirst({
@@ -25,7 +29,6 @@ router.get('/account', authenticateToken, async (req, res) => {
         });
 
         if (!adAccount) {
-            // Auto-create ad account for now (or wait for approval)
             adAccount = await prisma.adAccount.create({
                 data: {
                     businessId: business.id,

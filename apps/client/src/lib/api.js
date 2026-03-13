@@ -12,10 +12,11 @@ const api = axios.create({
     },
 })
 
-// Request interceptor - Add auth token; for FormData, let browser set Content-Type with boundary
+// Request interceptor - Add auth token (trim to avoid control-char / JSON parse errors)
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('accessToken')
+        const raw = localStorage.getItem('accessToken')
+        const token = raw ? raw.trim().replace(/\s+/g, ' ') : null
         if (token && !config.headers.Authorization) {
             config.headers.Authorization = `Bearer ${token}`
         }

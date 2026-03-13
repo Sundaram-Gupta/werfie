@@ -18,7 +18,7 @@ const THUMB_DIR = path.join(UPLOADS_DIR, 'thumbnails');
 
 class MediaService {
     /**
-     * Process Image using Sharp and upload to R2
+     * Process Image: Sharp (resize + compress to WebP) then upload to R2
      */
     static async processImage(file) {
         const outName = `${uuidv4()}.webp`;
@@ -62,7 +62,7 @@ class MediaService {
     }
 
     /**
-     * Process Audio using FFmpeg (Convert to MP3/AAC)
+     * Process Audio: FFmpeg (convert to MP3) then upload to R2
      */
     static async processAudio(file) {
         const outName = `${uuidv4()}.mp3`;
@@ -112,7 +112,7 @@ class MediaService {
     }
 
     /**
-     * Process Video using FFmpeg and upload to R2
+     * Process Video: FFmpeg (720p, h264, compress) then upload to R2
      */
     static async processVideo(file) {
         const outName = `${uuidv4()}.mp4`;
@@ -222,6 +222,39 @@ class MediaService {
                     });
             });
         });
+    }
+
+    /**
+     * Process generic file: upload to R2 (no Sharp/FFmpeg; use for documents, etc.)
+     */
+    static async processFile(file) {
+        const ext = path.extname(file.originalname || file.path).slice(1) || 'bin';
+        const outName = `${uuidv4()}.${ext}`;
+
+        try {
+            const buffer = await fs.readFile(file.path);
+            let mediaUrl;
+
+            if (isR2Enabled()) {
+                const { url } = await uploadToR2(buffer, 'files', ext, file.mimetype || 'application/octet-stream');
+                mediaUrl = url;
+            } else {
+                const FILES_DIR = path.join(UPLOADS_DIR, 'files');
+                if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });
+                const outPath = path.join(FILES_DIR, outName);
+                await fs.writeFile(outPath, buffer);
+                mediaUrl = `/uploads/files/${outName}`;
+            }
+
+            return {
+                mediaType: 'file',
+                mediaUrl,
+                size: buffer.length
+            };
+        } catch (error) {
+            console.error('[MediaService] File upload failed:', error);
+            throw error;
+        }
     }
 
     /**

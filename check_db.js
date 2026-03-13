@@ -1,6 +1,6 @@
 const { Client } = require('pg');
 
-const DATABASE_URL = "postgresql://postgres:12345678@localhost:5432/xclone_db";
+const DATABASE_URL = "postgresql://postgres:root@localhost:5432/xclone_db";
 
 async function checkDb() {
     const client = new Client({

@@ -10,7 +10,7 @@ import { PollDisplay, parsePollContent } from "./poll-display"
 const CONTENT_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003'
 import { useTranslation } from "react-i18next"
 
-export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDelete }) {
+export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     
@@ -84,7 +84,7 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDel
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground whitespace-nowrap">{timestamp}</span>
                     </div>
-                    <MoreOptionsDropdown user={user} contentId={post.id} onDelete={onDelete} />
+                    <MoreOptionsDropdown user={user} contentId={post.id} post={post} onDelete={onDelete} />
                 </div>
 
                 {/* Reply indicator */}
@@ -99,11 +99,13 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDel
 
                 {/* Post content: poll or plain text */}
                 {(() => {
-                    const text = post.content ?? post.text ?? post.body ?? ''
-                    const parsed = parsePollContent(String(text))
-                    return parsed ? (
-                        <PollDisplay content={String(text)} createdAt={post.createdAt || post.timestamp} />
-                    ) : (
+                    const raw = post.content ?? post.text ?? post.body ?? post.data?.content ?? ''
+                    const text = typeof raw === 'object' ? JSON.stringify(raw) : String(raw ?? '')
+                    const parsed = parsePollContent(text)
+                    if (parsed) {
+                        return <PollDisplay content={text} createdAt={post.createdAt || post.timestamp} />
+                    }
+                    return (
                         <div className="text-[15px] leading-5 whitespace-pre-wrap break-words text-foreground mt-0.5">
                             {text}
                         </div>
@@ -165,6 +167,8 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onDel
                     onUnlike={onUnlike}
                     onRetweet={onRetweet}
                     onUnretweet={onUnretweet}
+                    onBookmark={onBookmark}
+                    onUnbookmark={onUnbookmark}
                 />
             </div>
         </div>

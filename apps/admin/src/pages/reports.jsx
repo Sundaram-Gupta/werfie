@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as contentService from '@/services/contentService';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import {
     Table,
     TableBody,
@@ -16,29 +17,38 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, AlertCircle, CheckCircle, ArrowUpRight } from 'lucide-react';
+import { MoreHorizontal, AlertCircle, CheckCircle, ArrowUpRight, RefreshCw } from 'lucide-react';
 
 export default function ReportsPage() {
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchReports = async () => {
-            try {
-                const data = await contentService.getReports();
-                setReports(Array.isArray(data) ? data : []);
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchReports();
+    const fetchReports = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await contentService.getReports();
+            setReports(Array.isArray(data) ? data : data?.data ?? []);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
+    useEffect(() => {
+        fetchReports();
+    }, [fetchReports]);
+
+    useRefreshOnFocus(fetchReports);
+
     const handleStatusUpdate = async (id, status) => {
-        setReports(reports.map(r => r.id === id ? { ...r, status } : r));
-        await contentService.updateReportStatus(id, status);
+        setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+        try {
+            await contentService.updateReportStatus(id, status);
+            await fetchReports();
+        } catch (error) {
+            console.error(error);
+        }
     };
 
     const getStatusBadge = (status) => {
@@ -52,7 +62,13 @@ export default function ReportsPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Reports & Abuse</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-3xl font-bold tracking-tight">Reports & Abuse</h1>
+                <Button variant="outline" size="sm" onClick={fetchReports} disabled={loading}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
+            </div>
 
             <div className="rounded-xl glass-card overflow-hidden">
                 <Table>

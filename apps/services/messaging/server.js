@@ -40,7 +40,7 @@ expressApp.get('/health', (req, res) => {
 // 3. Handle Next.js Requests
 expressApp.all('*', (req, res, nextCallback) => {
     if (req.url.includes('/api/messages/ws')) {
-        return nextCallback()
+        return; // Let Socket.io handle this
     }
     if (!isAppPrepared) {
         if (req.url.startsWith('/api/')) {
@@ -55,8 +55,14 @@ expressApp.all('*', (req, res, nextCallback) => {
 // 4. Initialize Socket.IO
 getSocketServer(httpServer)
 
-// Attach Express to httpServer
-httpServer.on('request', expressApp)
+// Attach Express to httpServer with path filtering
+httpServer.on('request', (req, res) => {
+    // Correctly match Socket.IO path (including polling and websocket)
+    if (req.url && req.url.includes('/api/messages/ws')) {
+        return; // Let Socket.io handle this
+    }
+    expressApp(req, res);
+});
 
 // 5. Start Server
 httpServer.listen(port, '127.0.0.1', (err) => {

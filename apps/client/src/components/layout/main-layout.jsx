@@ -27,7 +27,8 @@ export default function MainLayout() {
      * Hidden on: /chat, /werfie-ai (full-width pages)
      * Visible on: all other routes
      */
-    const hideRightSidebar = location.pathname === "/chat" || 
+    const hideRightSidebar = location.pathname === "/chat" ||
+                             location.pathname === "/chat/settings" || 
                              location.pathname === "/werfie-ai" || 
                              location.pathname === "/settings/institutional" || 
                              location.pathname === "/announcements" || 

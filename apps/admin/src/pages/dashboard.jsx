@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/shared/StatCard';
@@ -7,6 +7,7 @@ import { Users, FileText, Shield, AlertTriangle, Activity, Server, Database, Arr
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/axios';
+import { useRefreshOnFocus, useRefreshInterval } from '@/hooks/useRefreshOnFocus';
 import {
     AreaChart,
     Area,
@@ -47,31 +48,35 @@ export default function Dashboard() {
     const [activities, setActivities] = useState([]);
     const [error, setError] = useState(null);
 
-    useEffect(() => {
-        const loadData = async () => {
-            try {
-                setLoading(true);
-                const [statsRes, activityRes] = await Promise.all([
-                    api.get('/admin/dashboard/stats'),
-                    api.get('/admin/dashboard/recent-activity')
-                ]);
+    const loadData = useCallback(async (silent = false) => {
+        try {
+            if (!silent) setLoading(true);
+            const [statsRes, activityRes] = await Promise.all([
+                api.get('/admin/dashboard/stats'),
+                api.get('/admin/dashboard/recent-activity')
+            ]);
 
-                if (statsRes.data?.stats) {
-                    setStats(statsRes.data.stats);
-                }
-                if (Array.isArray(activityRes.data)) {
-                    setActivities(activityRes.data);
-                }
-                setError(null);
-            } catch (error) {
-                console.error("Failed to load dashboard data", error);
-                setError("Failed to connect to the server. Please try again later.");
-            } finally {
-                setLoading(false);
+            if (statsRes.data?.stats) {
+                setStats(statsRes.data.stats);
             }
-        };
-        loadData();
+            const acts = activityRes.data?.data ?? activityRes.data;
+            if (Array.isArray(acts)) {
+                setActivities(acts);
+            }
+            setError(null);
+        } catch (error) {
+            console.error("Failed to load dashboard data", error);
+            setError("Failed to connect to the server. Please try again later.");
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useRefreshOnFocus(() => loadData(true));
 
     if (loading) {
         return (

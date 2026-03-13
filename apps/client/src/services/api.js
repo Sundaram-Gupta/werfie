@@ -106,22 +106,24 @@ export const authService = {
     },
 }
 
-// Messaging API Instance
-const MESSAGING_API_URL = import.meta.env.VITE_MESSAGING_URL || 'http://localhost:3019'
+// Messaging API Instance - use gateway (3001) by default so auth/messaging share same origin; else direct to 3019
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const MESSAGING_API_URL = import.meta.env.VITE_MESSAGING_URL || API_BASE_URL
 
 const messagingApi = axios.create({
     baseURL: MESSAGING_API_URL,
     headers: { 'Content-Type': 'application/json' }
 })
 
-// Add auth token to messaging requests
+// Add auth token to messaging requests (trim to avoid control-char issues)
 messagingApi.interceptors.request.use((config) => {
-    const token = localStorage.getItem('accessToken')
+    const raw = localStorage.getItem('accessToken')
+    const token = raw ? raw.trim().replace(/\s+/g, ' ') : null
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config
 })
 
-// Normalize messaging API { status, message, data } responses
+// Normalize messaging API responses + handle 401 with token refresh
 messagingApi.interceptors.response.use(
     (response) => {
         const d = response?.data
@@ -130,7 +132,29 @@ messagingApi.interceptors.response.use(
         }
         return response
     },
-    (error) => Promise.reject(error)
+    async (error) => {
+        const originalRequest = error.config
+        if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
+            originalRequest._retry = true
+            try {
+                const refreshToken = localStorage.getItem('refreshToken')
+                if (refreshToken) {
+                    const { data } = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+                        refreshToken,
+                    })
+                    const payload = data?.data ?? data
+                    if (payload?.accessToken) {
+                        localStorage.setItem('accessToken', payload.accessToken)
+                        originalRequest.headers.Authorization = `Bearer ${payload.accessToken}`
+                        return messagingApi(originalRequest)
+                    }
+                }
+            } catch {
+                // Refresh failed - let error propagate
+            }
+        }
+        return Promise.reject(error)
+    }
 )
 
 // Post Services
@@ -147,21 +171,44 @@ export const postService = {
         return data
     },
 
-    // Create post (with optional media and optional replyToId for replies)
-    createPost: async (content, files = [], replyToId = null) => {
-        const formData = new FormData();
-        formData.append('content', content);
-        if (replyToId) {
-            formData.append('replyToId', replyToId);
+    // Create post (with optional media, replyToId, scheduledAt)
+    // Use JSON for text-only (polls, etc.) to avoid FormData/multipart parsing issues
+    createPost: async (content, files = [], replyToId = null, scheduledAt = null) => {
+        const fileList = files || [];
+        const contentStr = typeof content === 'string' ? content : (content != null ? String(content) : '');
+
+        if (fileList.length === 0) {
+            const payload = { content: contentStr };
+            if (replyToId) payload.replyToId = replyToId;
+            if (scheduledAt) payload.scheduledAt = typeof scheduledAt === 'string' ? scheduledAt : scheduledAt.toISOString();
+            const { data } = await api.post('/api/posts', payload);
+            return data;
         }
 
-        // Append media files
-        (files || []).forEach((file) => {
-            formData.append('media', file);
-        });
+        const formData = new FormData();
+        formData.append('content', contentStr);
+        if (replyToId) formData.append('replyToId', replyToId);
+        if (scheduledAt) formData.append('scheduledAt', typeof scheduledAt === 'string' ? scheduledAt : scheduledAt.toISOString());
+        fileList.forEach((file) => formData.append('media', file));
 
         const { data } = await api.post('/api/posts', formData);
         return data;
+    },
+
+    // Schedule post for a future time
+    schedulePost: async (content, scheduledAt, files = []) => {
+        return postService.createPost(content, files, null, scheduledAt);
+    },
+
+    // Create poll post. Format: "📊 Poll: question\n1. opt1\n2. opt2"
+    createPoll: async (question, options, intro = '', files = []) => {
+        if (!question?.trim() || !Array.isArray(options) || options.filter(o => o?.trim()).length < 2) {
+            throw new Error('Poll needs a question and at least 2 options');
+        }
+        const opts = options.filter(o => o?.trim()).slice(0, 4);
+        const pollText = `📊 Poll: ${question.trim()}\n${opts.map((o, i) => `${i + 1}. ${o.trim()}`).join('\n')}`;
+        const content = intro.trim() ? `${intro.trim()}\n\n${pollText}` : pollText;
+        return postService.createPost(content, files);
     },
 
     // Delete post
@@ -191,6 +238,24 @@ export const postService = {
     // Unretweet post
     unretweetPost: async (postId) => {
         const { data } = await api.delete(`/api/posts/${postId}/retweet`)
+        return data
+    },
+
+    // Bookmark post
+    bookmarkPost: async (postId) => {
+        const { data } = await api.post(`/api/posts/${postId}/bookmark`)
+        return data
+    },
+
+    // Remove bookmark
+    unbookmarkPost: async (postId) => {
+        const { data } = await api.delete(`/api/posts/${postId}/bookmark`)
+        return data
+    },
+
+    // Get bookmarked posts
+    getBookmarks: async (params = {}) => {
+        const { data } = await api.get('/api/posts/bookmarks', { params })
         return data
     },
 

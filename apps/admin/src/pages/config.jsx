@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
 import { configService } from '@/services/configService';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { 
     Key, 
     Bell, 
@@ -73,10 +74,6 @@ export default function ConfigPage() {
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
     const [broadcastData, setBroadcastData] = useState({ title: '', message: '', targetType: 'all' });
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
     const fetchData = async () => {
         setLoading(true);
         try {
@@ -96,6 +93,12 @@ export default function ConfigPage() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    useRefreshOnFocus(fetchData);
 
     const handleCreateKey = async () => {
         try {

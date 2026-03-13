@@ -25,6 +25,15 @@ exports.init = (server) => {
         });
     });
 
+    // Feed namespace - for real-time updates when new/scheduled posts appear
+    const feedNsp = io.of('/feed');
+    feedNsp.on('connection', (socket) => {
+        console.log('[ContentService:FeedWS] Client connected:', socket.id);
+        socket.on('disconnect', () => {
+            console.log('[ContentService:FeedWS] Client disconnected:', socket.id);
+        });
+    });
+
     // Enterprise Signals Namespace
     const enterpriseNsp = io.of('/enterprise-signals');
     enterpriseNsp.on('connection', (socket) => {
@@ -118,4 +127,10 @@ exports.broadcastEnterpriseSignal = (signal) => {
     if (!io) return;
     // Broadcast on the enterprise namespace
     io.of('/enterprise-signals').emit('new_market_signal', signal);
+};
+
+/** Emit when a new post is published (immediate or scheduled) - client triggers feed refresh */
+exports.broadcastFeedUpdate = () => {
+    if (!io) return;
+    io.of('/feed').emit('post_published', { timestamp: new Date().toISOString() });
 };

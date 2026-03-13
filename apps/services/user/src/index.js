@@ -315,12 +315,21 @@ app.get('/search', async (req, res) => {
     }
 });
 
+// UUID v4 regex for validation
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 // Get Multiple Users (Bulk Fetch)
 app.get('/', async (req, res) => {
     const { ids } = req.query;
-    if (!ids) return res.status(400).json({ error: 'Missing ids parameter' });
+    if (!ids || typeof ids !== 'string') return res.status(400).json({ error: 'Missing ids parameter' });
 
-    const userIds = ids.split(',').filter(id => id.trim() !== '');
+    const userIds = ids.split(',')
+        .map(id => (id || '').trim())
+        .filter(id => id && UUID_REGEX.test(id));
+
+    if (userIds.length === 0) {
+        return res.json([]);
+    }
 
     try {
         const users = await prisma.user.findMany({
@@ -340,8 +349,11 @@ app.get('/', async (req, res) => {
 
         res.json(safeUsers);
     } catch (error) {
-        console.error('Bulk Fetch Error:', error);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Bulk Fetch Error:', error?.message || error, error?.stack);
+        res.status(500).json({
+            error: 'Server error',
+            details: process.env.NODE_ENV !== 'production' ? (error?.message || String(error)) : undefined
+        });
     }
 });
 

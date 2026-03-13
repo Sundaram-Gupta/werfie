@@ -105,8 +105,7 @@ export function ComposeModal({ children }) {
             setSelectedFiles([])
             setFilePreviews([])
             setOpen(false)
-            // Refresh the feed
-            window.location.reload()
+            window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
             console.error('Error creating post:', error)
             alert('Failed to create post. Please try again.')

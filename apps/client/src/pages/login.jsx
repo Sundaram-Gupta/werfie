@@ -32,7 +32,12 @@ export default function Login() {
             navigate('/')
         } catch (error) {
             console.error('Login failed:', error)
-            setServerError(error.response?.data?.error || error.message || 'Login failed. Please try again.')
+            const isNetworkError = !error.response && (error.code === 'ERR_NETWORK' || error.message === 'Network Error')
+            const data = error.response?.data
+            const msg = data?.message ?? data?.error ?? error.message
+            setServerError(isNetworkError
+                ? 'Cannot reach server. Check that the app is running (e.g. pm2 list) and try http://localhost:3001 in the browser.'
+                : (msg || 'Login failed. Please try again.'))
         } finally {
             setLoading(false)
         }

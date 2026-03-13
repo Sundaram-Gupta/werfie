@@ -18,13 +18,14 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Mail, Phone, MapPin, Globe, Building2, User as UserIcon, ShieldCheck } from 'lucide-react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 
 export default function VerificationPage() {
     const [loading, setLoading] = useState(false);
     const [institutionalRequests, setInstitutionalRequests] = useState([]);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-    
+
     // Original mock data for standard user verifications (can be replaced with API later)
     const [standardRequests, setStandardRequests] = useState([
         { id: 1, user: '@elon_musk_parody', name: 'Elon Musk (Parody)', type: 'Government ID', date: '2024-01-16', status: 'Pending', doc: 'passport.jpg' },
@@ -50,6 +51,8 @@ export default function VerificationPage() {
         fetchInstitutional();
     }, [fetchInstitutional]);
 
+    useRefreshOnFocus(fetchInstitutional);
+
     const handleStandardAction = (id, action) => {
         setStandardRequests(standardRequests.map(r => r.id === id ? { ...r, status: action === 'approve' ? 'Approved' : 'Rejected' } : r));
         toast.success(`Verification request ${action === 'approve' ? 'approved' : 'rejected'}`);
@@ -57,9 +60,9 @@ export default function VerificationPage() {
 
     const handleInstitutionalAction = async (id, status) => {
         try {
-            await reviewInstitutionalProfile(id, { 
-                status, 
-                badgeType: status === 'approved' ? 'official' : null 
+            await reviewInstitutionalProfile(id, {
+                status,
+                badgeType: status === 'approved' ? 'official' : null
             });
             toast.success(`Institutional request ${status === 'approved' ? 'approved' : 'rejected'}`);
             fetchInstitutional();

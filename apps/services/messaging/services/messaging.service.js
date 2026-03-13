@@ -153,7 +153,6 @@ export class MessagingService {
 
     static async getConversations(userId) {
         try {
-            // Get conversations for user, sorted by last message
             const conversations = await prisma.conversation.findMany({
                 where: {
                     participants: {
@@ -170,7 +169,7 @@ export class MessagingService {
             })
             return conversations
         } catch (error) {
-            console.error(`getConversations Error for userId ${userId}:`, error)
+            console.error(`getConversations Error for userId ${userId}:`, error?.message || error)
             throw error
         }
     }

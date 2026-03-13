@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const next = require('next');
 const http = require('http');
@@ -11,6 +12,9 @@ const swaggerUi = require('swagger-ui-express');
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = 3001;
+
+// Service targets - use env vars for flexibility, fallback to defaults
+const USER_SERVICE_TARGET = process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 3002}`;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -30,6 +34,11 @@ proxy.on('error', (err, req, res) => {
 });
 
 proxy.on('proxyReq', (proxyReq, req, res, options) => {
+    if (req._gatewayUser) {
+        proxyReq.setHeader('x-verified-gateway', 'true');
+        proxyReq.setHeader('x-user-id', req._gatewayUser.userId);
+        proxyReq.setHeader('x-user-email', req._gatewayUser.email || '');
+    }
     console.log(`[Gateway] Proxying ${req.method} ${req.url} -> ${options.target}${proxyReq.path}`);
 });
 
@@ -48,6 +57,11 @@ mainServer.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 
+// Health check - always 200 when gateway is up (before proxy/catch-all)
+mainServer.get('/api/health', (req, res) => {
+    res.status(200).json({ status: true, message: 'Gateway healthy', data: { service: 'gateway', timestamp: new Date().toISOString() } });
+});
+
 // Logging middleware
 mainServer.use((req, res, next) => {
     if (req.url && !req.url.startsWith('/_next')) {
@@ -64,95 +78,140 @@ if (fs.existsSync(swaggerPath)) {
         res.send(fs.readFileSync(swaggerPath, 'utf8'));
     });
     mainServer.use('/api-docs', swaggerUi.serve, swaggerUi.setup(null, {
-        swaggerOptions: { url: '/api-docs/spec' }
+        swaggerOptions: {
+            url: '/api-docs/spec',
+            persistAuthorization: true,
+            displayRequestDuration: true,
+            tryItOutEnabled: true,
+            filter: true
+        }
     }));
     console.log('[Gateway] Swagger UI at http://localhost:' + port + '/api-docs');
 } else {
     console.warn('[Gateway] swagger.yaml not found at', swaggerPath);
 }
 
-// 1. Messaging Service Proxy (WS + REST)
-mainServer.all('/api/messages*', (req, res) => {
+// 1. Messaging Service Proxy (WS + REST) - verify JWT at gateway and inject x-user-id for downstream
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+
+// Helper: verify JWT and attach gateway user so proxyReq can set headers (http-proxy may not forward modified req.headers)
+function injectUserFromToken(req) {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7).trim().replace(/\s+/g, ' ');
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const userId = decoded.sub || decoded.userId || decoded.id;
+            if (userId) {
+                req._gatewayUser = { userId, email: decoded.email || '' };
+                req.headers['x-verified-gateway'] = 'true';
+                req.headers['x-user-id'] = userId;
+                req.headers['x-user-email'] = decoded.email || '';
+            }
+        } catch (e) {
+            // Verification failed - downstream may return 401
+        }
+    }
+}
+
+mainServer.all('/api/messages*', (req, res, next) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3019' });
 });
 
-// 2. Content Service Proxy
+// 2. Content Service Proxy – verify JWT at gateway and inject x-user-id for posts, etc.
 mainServer.all('/api/posts*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/explore*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 mainServer.all('/api/communities*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 mainServer.all('/api/spaces*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/lists*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/ads*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/announcements*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/comments*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/ws/live*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/soapbox*', (req, res) => {
-    console.log(`[Gateway] Explicit Proxy -> Soapbox: ${req.url}`);
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/crisis*', (req, res) => {
-    console.log(`[Gateway] Explicit Proxy -> Crisis: ${req.url}`);
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/debate*', (req, res) => {
-    console.log(`[Gateway] Explicit Proxy -> Debate: ${req.url}`);
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/feed*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/enterprise*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
-
 mainServer.all('/api/media*', (req, res) => {
+    injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 
-// User Service Proxy
+// User Service Proxy – verify JWT at gateway so user-service can trust x-user-id
 mainServer.all('/api/users*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
 });
 
 mainServer.all('/api/business*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
 });
 
 mainServer.all('/api/institutional*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
 });
 
 mainServer.all('/api/leaders*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3002' });
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
+});
+
+// Notifications (content service) – verify JWT and inject x-user-id
+mainServer.all('/api/notifications*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+// Timeline (content service) – verify JWT and inject x-user-id for /api/timeline/home etc.
+mainServer.all('/api/timeline*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 
 // Admin Backend Proxy (admin-backend runs on 3012)
@@ -163,10 +222,8 @@ mainServer.all('/api/docs*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3012' });
 });
 
-// 4. Other Microservices Catch-all
+// 4. Other Microservices Catch-all (timeline/notifications have explicit routes above)
 const microservices = [
-    { path: '/api/timeline', port: 3003 },
-    { path: '/api/notifications', port: 3003 },
     { path: '/api/search', port: 3006 },
     { path: '/api/analytics', port: 3009 },
     { path: '/api/moderation', port: 3010 },
@@ -222,10 +279,21 @@ httpServer.on('upgrade', (req, socket, head) => {
     }
 });
 
+// Handle listen errors (e.g. EADDRINUSE) so we don't crash-loop silently
+httpServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`[Gateway] Port ${port} is already in use. Free it with: netstat -ano | findstr :${port} then taskkill /PID <pid> /F`);
+        process.exit(1);
+    }
+    console.error('[Gateway] Server error:', err.message);
+    process.exit(1);
+});
+
 // Start listening immediately
 httpServer.listen(port, (err) => {
     if (err) {
         console.error(`[Gateway] Failed to listen on port ${port}:`, err.message);
+        process.exit(1);
         return;
     }
     console.log(`> Gateway (auth-service-js) listening on http://${hostname}:${port}`);

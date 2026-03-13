@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { spaceService } from '@/services/spaceService';
@@ -11,29 +11,34 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 
 export default function SpacesPage() {
     const [spaces, setSpaces] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchSpaces = async () => {
-            try {
-                const data = await spaceService.getAllSpaces();
-                setSpaces(data || []);
-            } catch (error) {
-                console.error("Failed to fetch spaces", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchSpaces();
+    const fetchSpaces = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await spaceService.getAllSpaces();
+            setSpaces(data || []);
+        } catch (error) {
+            console.error("Failed to fetch spaces", error);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchSpaces();
+    }, [fetchSpaces]);
+
+    useRefreshOnFocus(fetchSpaces);
 
     const handleCancelSpace = async (id) => {
         try {
-            await spaceService.cancelSpace(id); // Ensure this endpoint exists or mock it
-            setSpaces(spaces.filter(s => s.id !== id));
+            await spaceService.cancelSpace(id);
+            await fetchSpaces();
         } catch (error) {
             console.error("Failed to cancel space", error);
         }

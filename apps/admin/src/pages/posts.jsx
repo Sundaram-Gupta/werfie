@@ -1,38 +1,55 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as contentService from '@/services/contentService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertCircle, EyeOff, Trash2, CheckCircle } from 'lucide-react';
+import { EyeOff, Trash2, CheckCircle, RefreshCw } from 'lucide-react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { toast } from 'sonner';
 
 export default function PostsPage() {
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
 
-    useEffect(() => {
-        const fetchPosts = async () => {
-            setLoading(true);
-            try {
-                const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all');
-                setPosts(Array.isArray(data) ? data : []);
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchPosts();
+    const fetchPosts = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all');
+            setPosts(Array.isArray(data) ? data : data?.data ?? []);
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to load posts');
+        } finally {
+            setLoading(false);
+        }
     }, [filter]);
 
+    useEffect(() => {
+        fetchPosts();
+    }, [fetchPosts]);
+
+    useRefreshOnFocus(fetchPosts);
+
     const handleAction = async (postId, action) => {
-        // Optimistic UI update could go here
-        alert(`${action} action on post ${postId} (Mock)`);
-        if (action === 'delete') {
-            await contentService.deletePost(postId);
-            setPosts(posts.filter(p => p.id !== postId));
+        try {
+            if (action === 'delete') {
+                await contentService.deletePost(postId);
+                await fetchPosts();
+                toast.success('Post deleted');
+            } else if (action === 'hide') {
+                await contentService.hidePost(postId);
+                await fetchPosts();
+                toast.success('Post hidden');
+            } else if (action === 'dismiss') {
+                await fetchPosts();
+                toast.success('Reports dismissed');
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Action failed');
         }
     };
 
@@ -40,6 +57,10 @@ export default function PostsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold tracking-tight">Post Moderation</h1>
+                <Button variant="outline" size="sm" onClick={fetchPosts} disabled={loading}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
             </div>
 
             <Tabs defaultValue="all" onValueChange={setFilter}>
