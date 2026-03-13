@@ -1,0 +1,173 @@
+{
+    "settings": "Einstellungen",
+    "language": "Sprache",
+    "select_language": "Sprache auswählen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "account": "Konto",
+    "privacy_safety": "Datenschutz und Sicherheit",
+    "display": "Anzeige",
+    "notifications": "Benachrichtigungen",
+    "data_usage": "Datennutzung",
+    "dark_mode": "Dunkelmodus",
+    "feed": {
+        "title": "Startseite",
+        "for_you": "Für dich",
+        "actions": {
+            "reply": "Antworten",
+            "repost": "Reposten",
+            "like": "Gefällt mir",
+            "view": "Ansicht",
+            "share": "Teilen"
+        },
+        "unable_to_load_posts": "Beiträge können nicht geladen werden.",
+        "no_posts_yet": "Noch keine Beiträge.",
+        "be_first_to_post": "Sei der Erste, der etwas postet!",
+        "everyone_can_reply": "Jeder kann antworten",
+        "uploading": "Hochladen...",
+        "posting": "Posten..."
+    },
+    "time": {
+        "s": "s",
+        "m": "m",
+        "h": "h",
+        "d": "t"
+    },
+    "profile_menu": {
+        "login_another_account": "Mit anderem Konto anmelden",
+        "logout_user": "Abmelden @{{userHandle}}"
+    },
+    "nav": {
+        "home": "Startseite",
+        "explore": "Entdecken",
+        "notifications": "Mitteilungen",
+        "werfie_ai": "Werfie AI",
+        "follow": "Folgen",
+        "chat": "Nachrichten",
+        "profile": "Profil",
+        "more": "Mehr",
+        "post": "Posten"
+    },
+    "more_menu": {
+        "creator_studio": "Creator Studio",
+        "lists": "Listen",
+        "business": "Unternehmen",
+        "ads": "Werbung",
+        "create_space": "Erstelle deinen Space",
+        "settings_privacy": "Einstellungen und Datenschutz",
+        "theme": "Thema",
+        "dark": "Dunkel",
+        "light": "Hell"
+    },
+    "right_sidebar": {
+        "search_placeholder": "Suchen",
+        "whats_happening": "Was gerade passiert",
+        "who_to_follow": "Wem folgen?",
+        "show_more": "Mehr anzeigen",
+        "terms": "Nutzungsbedingungen",
+        "privacy": "Datenschutzrichtlinie",
+        "cookies": "Cookie-Richtlinie",
+        "accessibility": "Barrierefreiheit",
+        "ads_info": "Werbeinfo",
+        "loading_trends": "Trends werden geladen...",
+        "no_trends": "Keine Trends gefunden",
+        "no_suggestions": "Keine Vorschläge"
+    },
+    "common": {
+        "following": "Folge ich",
+        "loading": "Laden..."
+    },
+    "explore": {
+        "tabs": {
+            "foryou": "Für dich",
+            "trending": "Trends",
+            "news": "Nachrichten",
+            "sports": "Sport",
+            "entertainment": "Unterhaltung"
+        },
+        "trends_for_you": "Trends für dich",
+        "no_trends": "Noch keine Trends",
+        "no_items": "Keine Elemente zum Anzeigen"
+    },
+    "notifications": {
+        "title": "Benachrichtigungen",
+        "tabs": {
+            "all": "Alle",
+            "verified": "Verifiziert",
+            "mentions": "Erwähnungen"
+        },
+        "empty": "Noch keine Benachrichtigungen",
+        "types": {
+            "like": "hat deinen Beitrag gefallen",
+            "repost": "hat deinen Beitrag repostet",
+            "follow": "folgt dir",
+            "reply": "hat auf deinen Beitrag geantwortet",
+            "mention": "hat dich erwähnt"
+        }
+    },
+    "follow": {
+        "title": "Folgen",
+        "subtitle": "Personen, die du kennen könntest, und Konten, denen du folgst",
+        "section_following": "Folgend",
+        "section_suggested": "Für dich vorgeschlagen",
+        "empty_following": "Du folgst noch niemandem",
+        "empty_suggestions": "Keine Vorschläge verfügbar"
+    },
+    "chat": {
+        "requests": "Anfragen",
+        "sent": "Gesendet",
+        "start_new_message": "Neue Nachricht",
+        "start_conversation": "Unterhaltung beginnen",
+        "choose_conversation": "Wähle aus deinen bestehenden Unterhaltungen oder beginne eine neue.",
+        "new_chat": "Neuer Chat"
+    },
+    "profile": {
+        "posts_count": "Beiträge",
+        "edit_profile": "Profil bearbeiten",
+        "joined": "Beigetreten",
+        "following_count": "Folge ich",
+        "followers_count": "Follower",
+        "message_user": "Nachricht an @{{handle}}",
+        "no_replies": "Noch keine Antworten",
+        "tabs": {
+            "posts": "Beiträge",
+            "replies": "Antworten",
+            "highlights": "Highlights",
+            "articles": "Artikel",
+            "media": "Medien",
+            "likes": "Gefällt mir"
+        }
+    },
+    "settings_page": {
+        "username": "Benutzername",
+        "email": "E-Mail",
+        "change_password": "Passwort ändern",
+        "change_password_desc": "Aktualisiere dein Passwort jederzeit.",
+        "new_pass_error": "Die neuen Passwörter stimmen nicht überein",
+        "pass_update_success": "Passwort erfolgreich aktualisiert",
+        "pass_update_error": "Fehler beim Aktualisieren des Passworts",
+        "deactivate_account": "Deaktiviere dein Konto",
+        "deactivate_account_desc": "Erfahre, wie du dein Konto deaktivieren kannst.",
+        "audience_tagging": "Zielgruppe und Markierung",
+        "audience_tagging_desc": "Verwalte, welche Informationen andere Personen auf X sehen dürfen.",
+        "mute_block": "Stummschalten und Blockieren",
+        "mute_block_desc": "Verwalte die Konten, Wörter und Benachrichtigungen, die du stummgeschaltet oder blockiert hast.",
+        "display_desc": "Passe das Erscheinungsbild von X an.",
+        "notifications_push": "Push-Benachrichtigungen",
+        "notifications_push_desc": "Erhalte Push-Benachrichtigungen, um zu erfahren, was passiert, wenn du nicht auf X bist.",
+        "notifications_email": "E-Mail-Benachrichtigungen",
+        "notifications_sms": "SMS-Benachrichtigungen",
+        "data_usage": "Datennutzung",
+        "data_saver": "Datensparmodus",
+        "data_saver_desc": "Reduziere die Datennutzung, indem Bilder und Videos in geringerer Qualität geladen werden.",
+        "security_access": "Sicherheit und Kontozugriff",
+        "security": "Sicherheit",
+        "security_desc": "Verwalte die Sicherheit deines Kontos.",
+        "additional_resources": "Zusätzliche Ressourcen",
+        "help_center": "Hilfe-Center",
+        "change_password_title": "Passwort ändern",
+        "current_password": "Aktuelles Passwort",
+        "new_password": "Neues Passwort",
+        "confirm_new_password": "Neues Passwort bestätigen"
+    }
+}

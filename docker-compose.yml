@@ -1,0 +1,430 @@
+version: '3.8'
+
+services:
+  # Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: xclone-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: xclone
+      POSTGRES_PASSWORD: xclone_dev_password
+      POSTGRES_DB: xclone_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U xclone" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # API Gateway (Nginx)
+  gateway:
+    build:
+      context: ./apps/gateway
+      dockerfile: Dockerfile
+    container_name: xclone-gateway
+    restart: always
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+      - user-service
+      - content-service
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # User Service (Microservice)
+  user-service:
+    build:
+      context: ./apps/services/user
+      dockerfile: Dockerfile
+    container_name: xclone-user-service
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://xclone:xclone_dev_password@postgres:5432/xclone_db"
+      JWT_SECRET: "dev-secret"
+      PORT: 3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Content Service (Microservice)
+  content-service:
+    build:
+      context: ./apps/services/content
+      dockerfile: Dockerfile
+    container_name: xclone-content-service
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://xclone:xclone_dev_password@postgres:5432/xclone_db"
+      JWT_SECRET: "dev-secret"
+      PORT: 3003
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Timeline Service (Next.js Microservice)
+  timeline-service:
+    build:
+      context: ./apps/services/timeline
+      dockerfile: Dockerfile
+    container_name: xclone-timeline-service
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://xclone:xclone_dev_password@postgres:5432/xclone_db"
+      JWT_SECRET: "dev-secret"
+      KAFKA_BROKER: "kafka:9092"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "xclone_redis_password"
+      PORT: 3004
+    ports:
+      - "3004:3004"
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Notification Service (WebSockets + Kafka)
+  notification-service:
+    build:
+      context: ./apps/services/notification
+      dockerfile: Dockerfile
+    container_name: xclone-notification-service
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://xclone:xclone_dev_password@postgres:5432/xclone_db"
+      KAFKA_BROKER: "kafka:9092"
+      PORT: 3005
+    ports:
+      - "3005:3005"
+    depends_on:
+      - postgres
+      - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Search Service (Next.js + Elasticsearch + Kafka)
+  search-service:
+    build:
+      context: ./apps/services/search
+      dockerfile: Dockerfile
+    container_name: xclone-search-service
+    restart: always
+    environment:
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      KAFKA_BROKER: "kafka:9092"
+      PORT: 3006
+    ports:
+      - "3006:3006"
+    depends_on:
+      - elasticsearch
+      - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Messaging Service (WebSockets + Kafka)
+  messaging-service:
+    build:
+      context: ./apps/services/messaging
+      dockerfile: Dockerfile
+    container_name: xclone-messaging-service
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://xclone:xclone_dev_password@postgres:5432/xclone_db"
+      KAFKA_BROKER: "kafka:9092"
+      PORT: 3007
+    ports:
+      - "3007:3007"
+    depends_on:
+      - postgres
+      - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Media Service (Express)
+  media-service:
+    build:
+      context: ./apps/services/media
+      dockerfile: Dockerfile
+    container_name: xclone-media-service
+    restart: always
+    environment:
+      PORT: 3008
+    ports:
+      - "3008:3008"
+    volumes:
+      - media_data:/app/uploads
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: ./apps/services/analytics
+      dockerfile: Dockerfile
+    container_name: xclone-analytics-service
+    restart: always
+    environment:
+      PORT: 3009
+    ports:
+      - "3009:3009"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Moderation Service
+  moderation-service:
+    build:
+      context: ./apps/services/moderation
+      dockerfile: Dockerfile
+    container_name: xclone-moderation-service
+    restart: always
+    environment:
+      PORT: 3010
+    ports:
+      - "3010:3010"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Settings Service
+  settings-service:
+    build:
+      context: ./apps/services/settings
+      dockerfile: Dockerfile
+    container_name: xclone-settings-service
+    restart: always
+    environment:
+      PORT: 3011
+    ports:
+      - "3011:3011"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Backend Service (Module Monolith - Legacy)
+  backend:
+    build:
+      context: ./apps/backend/auth-service-js
+      dockerfile: Dockerfile
+    container_name: xclone-backend
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://xclone:xclone_dev_password@postgres:5432/xclone_db"
+      PORT: 3001
+      NODE_ENV: development
+      JWT_SECRET: "dev-secret"
+      NEXTAUTH_SECRET: "dev-secret"
+    expose:
+      - "3001"
+    volumes:
+      - ./apps/backend/auth-service-js:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  # Client Service (Vite)
+  client:
+    build:
+      context: ./apps/client
+      dockerfile: Dockerfile
+    container_name: xclone-client
+    restart: always
+    environment:
+      VITE_API_URL: "http://localhost:3001"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/client:/app
+      - /app/node_modules
+    depends_on:
+      - gateway
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  # Admin Panel Service (Vite)
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+    container_name: xclone-admin
+    restart: always
+    environment:
+      VITE_API_URL: "http://localhost:3001"
+    ports:
+      - "5175:5175"
+    volumes:
+      - ./apps/admin:/app
+      - /app/node_modules
+    depends_on:
+      - gateway
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  # ==================== INFRASTRUCTURE SERVICES ====================
+
+  # Zookeeper (Required for Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: xclone-zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Kafka (Event Streaming)
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: xclone-kafka
+    restart: always
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  # Redis (Caching & Rate Limiting)
+  redis:
+    image: redis:7-alpine
+    container_name: xclone-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass xclone_redis_password
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Elasticsearch (Search Engine)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: xclone-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  # Kafka UI (Optional - for monitoring)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: xclone-kafka-ui
+    restart: always
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: xclone-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  postgres_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+  redis_data:
+  elasticsearch_data:
+  media_data:

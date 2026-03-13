@@ -1,0 +1,522 @@
+openapi: 3.0.0
+info:
+  title: X.com Clone API
+  description: Complete API documentation for the X.com clone application including Auth, User, Tweet, Follow, and Admin services.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local Development Server
+  - url: https://api.staging.x-clone.com/v1
+    description: Staging Server
+  - url: https://api.x-clone.com/v1
+    description: Production Server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # --- Common Schemas ---
+    Error:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+          example: Invalid credentials
+        code:
+          type: string
+          example: AUTH_INVALID_CREDENTIALS
+
+    # --- User Schemas ---
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        username:
+          type: string
+          example: johndoe
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        displayName:
+          type: string
+          example: John Doe
+        avatarUrl:
+          type: string
+          example: https://example.com/avatar.jpg
+        bio:
+          type: string
+          example: Software Engineer
+        role:
+          type: string
+          enum: [user, admin, moderator]
+          example: user
+        createdAt:
+          type: string
+          format: date-time
+
+    # --- Tweet Schemas ---
+    Tweet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+          example: Hello world! This is my first tweet.
+        authorId:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/User'
+        likesCount:
+          type: integer
+          example: 0
+        retweetsCount:
+          type: integer
+          example: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    # --- Auth Schemas ---
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5c...
+        refreshToken:
+          type: string
+          example: d782c3...
+        user:
+          $ref: '#/components/schemas/User'
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Auth
+    description: Authentication services
+  - name: Users
+    description: User profile management
+  - name: Tweets
+    description: Tweet operations
+  - name: Follow
+    description: Social graph (Follow/Unfollow)
+  - name: Admin
+    description: Administrative actions
+
+paths:
+  # ============================
+  # AUTH SERVICE
+  # ============================
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, handle, email, password]
+              properties:
+                name:
+                  type: string
+                handle:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        201:
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        400:
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        200:
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        401:
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        200:
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout user
+      responses:
+        200:
+          description: Logout successful
+
+  # ============================
+  # USER SERVICE
+  # ============================
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      responses:
+        200:
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    put:
+      tags: [Users]
+      summary: Update current user profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                bio:
+                  type: string
+                avatarUrl:
+                  type: string
+      responses:
+        200:
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: User profile found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        404:
+          description: User not found
+
+    delete:
+      tags: [Users]
+      summary: Delete user (Admin only)
+      description: Requires Admin role
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        204:
+          description: User deleted
+        403:
+          description: Forbidden (Not Admin)
+
+  # ============================
+  # TWEET SERVICE
+  # ============================
+  /tweets:
+    post:
+      tags: [Tweets]
+      summary: Create a new tweet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  maxLength: 280
+      responses:
+        201:
+          description: Tweet created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tweet'
+    get:
+      tags: [Tweets]
+      summary: Get feed / tweets
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of tweets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tweet'
+
+  /tweets/{id}:
+    get:
+      tags: [Tweets]
+      summary: Get tweet by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Tweet found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tweet'
+    delete:
+      tags: [Tweets]
+      summary: Delete tweet
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Tweet deleted
+
+  # ============================
+  # FOLLOW SERVICE
+  # ============================
+  /follow/{userId}:
+    post:
+      tags: [Follow]
+      summary: Follow a user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: User followed
+    delete:
+      tags: [Follow]
+      summary: Unfollow a user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: User unfollowed
+
+  /followers/{userId}:
+    get:
+      tags: [Follow]
+      summary: Get followers of a user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of followers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /following/{userId}:
+    get:
+      tags: [Follow]
+      summary: Get users followed by a user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of following
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  # ============================
+  # ADMIN SERVICE
+  # ============================
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users (Admin)
+      responses:
+        200:
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /admin/users/{id}/ban:
+    patch:
+      tags: [Admin]
+      summary: Ban a user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        200:
+          description: User banned
+
+  /admin/reports:
+    get:
+      tags: [Admin]
+      summary: Get system reports
+      responses:
+        200:
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+
+  /admin/tweets/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete any tweet (Admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Tweet deleted by admin

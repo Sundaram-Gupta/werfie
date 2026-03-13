@@ -1,0 +1,2 @@
+Resolved to: D:\MERN\aspire\werfie\Werfie-Repo\apps\backend\auth-service-js\node_modules\@prisma\client\default.js
+User model exists

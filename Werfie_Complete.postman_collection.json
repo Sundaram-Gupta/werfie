@@ -1,0 +1,172 @@
+{
+  "info": {
+    "_postman_id": "werfie-complete-all-apis",
+    "name": "Werfie - Complete API Collection",
+    "description": "Single consolidated Werfie API collection (71 APIs). Run **Login** first to set authToken. Base: http://localhost:3001, Admin: http://localhost:3012, Messaging: http://localhost:3019.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001", "type": "string" },
+    { "key": "adminUrl", "value": "http://localhost:3012", "type": "string" },
+    { "key": "messagingUrl", "value": "http://localhost:3019", "type": "string" },
+    { "key": "authToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "postId", "value": "", "type": "string" },
+    { "key": "notificationId", "value": "", "type": "string" },
+    { "key": "spaceId", "value": "", "type": "string" },
+    { "key": "conversationId", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        { "name": "Login", "event": [{ "listen": "test", "script": { "exec": ["var j = pm.response.json();", "if (j.accessToken) { pm.collectionVariables.set('authToken', j.accessToken); pm.collectionVariables.set('userId', j.id || ''); if (j.refreshToken) pm.collectionVariables.set('refreshToken', j.refreshToken); }", "pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }], "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user1@xclone.com\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] } } },
+        { "name": "Register", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"new@example.com\",\n  \"password\": \"pass123\",\n  \"name\": \"New User\",\n  \"handle\": \"newuser\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] } } },
+        { "name": "Get Me", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] } } },
+        { "name": "Logout", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] } } },
+        { "name": "Refresh Token", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "auth", "refresh"] } } },
+        { "name": "Change Password", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newpass123\"\n}" }, "url": { "raw": "{{baseUrl}}/api/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "auth", "change-password"] } } }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "My Profile", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "profile"] } } },
+        { "name": "Get User", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}"] } } },
+        { "name": "Update Profile", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"bio\": \"My bio\"\n}" }, "url": { "raw": "{{baseUrl}}/api/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}"] } } },
+        { "name": "Follow User", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/users/{{userId}}/follow", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}", "follow"] } } },
+        { "name": "Unfollow User", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/users/{{userId}}/follow", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}", "follow"] } } },
+        { "name": "Get Followers", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/{{userId}}/followers?limit=20&offset=0", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}", "followers"], "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] } } },
+        { "name": "Get Following", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/{{userId}}/following?limit=20&offset=0", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}", "following"], "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] } } },
+        { "name": "Search Users", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/search?q=user&limit=20", "host": ["{{baseUrl}}"], "path": ["api", "users", "search"], "query": [{ "key": "q", "value": "user" }, { "key": "limit", "value": "20" }] } } },
+        { "name": "Suggestions", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/suggestions?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "users", "suggestions"], "query": [{ "key": "limit", "value": "20" }] } } }
+      ]
+    },
+    {
+      "name": "Posts",
+      "item": [
+        { "name": "Get Feed", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts?limit=20&offset=0", "host": ["{{baseUrl}}"], "path": ["api", "posts"], "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] } } },
+        { "name": "Create Post", "event": [{ "listen": "test", "script": { "exec": ["var j = pm.response.json();", "if (j && (j.id || j.post?.id)) pm.collectionVariables.set('postId', j.id || j.post?.id || '');"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hello from Postman!\"\n}" }, "url": { "raw": "{{baseUrl}}/api/posts", "host": ["{{baseUrl}}"], "path": ["api", "posts"] } } },
+        { "name": "Get Post", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}"] } } },
+        { "name": "Delete Post", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}"] } } },
+        { "name": "Like Post", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/like", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "like"] } } },
+        { "name": "Unlike Post", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/like", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "like"] } } },
+        { "name": "Retweet", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/retweet", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "retweet"] } } },
+        { "name": "Unretweet", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/retweet", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "retweet"] } } },
+        { "name": "Get Replies", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/replies?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "replies"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "Create Reply", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"content\": \"This is my reply\"\n}" }, "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/replies", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "replies"] } } },
+        { "name": "Bookmark Post", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/bookmark", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "bookmark"] } } },
+        { "name": "Remove Bookmark", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/posts/{{postId}}/bookmark", "host": ["{{baseUrl}}"], "path": ["api", "posts", "{{postId}}", "bookmark"] } } },
+        { "name": "Following Feed", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/following?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "posts", "following"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "Home Timeline", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/timeline/home?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "posts", "timeline", "home"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "Get Bookmarks", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/posts/bookmarks", "host": ["{{baseUrl}}"], "path": ["api", "posts", "bookmarks"] } } }
+      ]
+    },
+    {
+      "name": "Explore",
+      "item": [
+        { "name": "Trends", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/trends?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "trends"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "Explore", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/explore?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "explore"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "Communities", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/communities", "host": ["{{baseUrl}}"], "path": ["api", "communities"] } } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "Get Notifications", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/notifications?limit=20&offset=0", "host": ["{{baseUrl}}"], "path": ["api", "notifications"], "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] } } },
+        { "name": "Mark Read", "request": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/read", "host": ["{{baseUrl}}"], "path": ["api", "notifications", "{{notificationId}}", "read"] } } },
+        { "name": "Mark All Read", "request": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/notifications/read-all", "host": ["{{baseUrl}}"], "path": ["api", "notifications", "read-all"] } } }
+      ]
+    },
+    {
+      "name": "Spaces",
+      "item": [
+        { "name": "List Spaces", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/spaces", "host": ["{{baseUrl}}"], "path": ["api", "spaces"] } } },
+        { "name": "Create Space", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"title\": \"My Space\"\n}" }, "url": { "raw": "{{baseUrl}}/api/spaces", "host": ["{{baseUrl}}"], "path": ["api", "spaces"] } } },
+        { "name": "Start Space", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/start", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "start"] } } },
+        { "name": "End Space", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/end", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "end"] } } }
+      ]
+    },
+    {
+      "name": "Lists",
+      "item": [
+        { "name": "Pinned Lists", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/lists/pinned", "host": ["{{baseUrl}}"], "path": ["api", "lists", "pinned"] } } },
+        { "name": "Discover Lists", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/lists/discover", "host": ["{{baseUrl}}"], "path": ["api", "lists", "discover"] } } },
+        { "name": "Your Lists", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/lists/yours", "host": ["{{baseUrl}}"], "path": ["api", "lists", "yours"] } } },
+        { "name": "Create List", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"My List\",\n  \"description\": \"\",\n  \"isPrivate\": false\n}" }, "url": { "raw": "{{baseUrl}}/api/lists", "host": ["{{baseUrl}}"], "path": ["api", "lists"] } } }
+      ]
+    },
+    {
+      "name": "Business",
+      "item": [
+        { "name": "Get Business", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/business", "host": ["{{baseUrl}}"], "path": ["api", "business"] } } },
+        { "name": "Create Business", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"My Biz\",\n  \"category\": \"Tech\",\n  \"description\": \"\"\n}" }, "url": { "raw": "{{baseUrl}}/api/business", "host": ["{{baseUrl}}"], "path": ["api", "business"] } } },
+        { "name": "Business Stats", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/business/stats", "host": ["{{baseUrl}}"], "path": ["api", "business", "stats"] } } },
+        { "name": "Boost Post", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"postId\": \"{{postId}}\"\n}" }, "url": { "raw": "{{baseUrl}}/api/business/boost", "host": ["{{baseUrl}}"], "path": ["api", "business", "boost"] } } },
+        { "name": "Get Team", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/business/team", "host": ["{{baseUrl}}"], "path": ["api", "business", "team"] } } }
+      ]
+    },
+    {
+      "name": "Ads",
+      "item": [
+        { "name": "Get Account", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/ads/account", "host": ["{{baseUrl}}"], "path": ["api", "ads", "account"] } } },
+        { "name": "Get Campaigns", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/ads/campaigns", "host": ["{{baseUrl}}"], "path": ["api", "ads", "campaigns"] } } },
+        { "name": "Create Campaign", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Campaign 1\",\n  \"budget\": 100\n}" }, "url": { "raw": "{{baseUrl}}/api/ads/campaigns", "host": ["{{baseUrl}}"], "path": ["api", "ads", "campaigns"] } } },
+        { "name": "Get Performance", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/ads/performance", "host": ["{{baseUrl}}"], "path": ["api", "ads", "performance"] } } }
+      ]
+    },
+    {
+      "name": "Messaging",
+      "item": [
+        { "name": "List Conversations", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations"], "query": [{ "key": "limit", "value": "20" }] } } },
+        { "name": "Create Conversation", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"recipientId\": \"{{userId}}\"\n}" }, "url": { "raw": "{{baseUrl}}/api/messages/conversations", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations"] } } },
+        { "name": "Get Conversation", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations/{{conversationId}}", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations", "{{conversationId}}"] } } },
+        { "name": "Get Messages", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/messages/conversations/{{conversationId}}/messages?limit=50", "host": ["{{baseUrl}}"], "path": ["api", "messages", "conversations", "{{conversationId}}", "messages"], "query": [{ "key": "limit", "value": "50" }] } } },
+        { "name": "Send Message", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"recipientId\": \"{{userId}}\",\n  \"content\": \"Hello!\"\n}" }, "url": { "raw": "{{baseUrl}}/api/messages/send", "host": ["{{baseUrl}}"], "path": ["api", "messages", "send"] } } }
+      ]
+    },
+    {
+      "name": "Monetization",
+      "item": [
+        { "name": "Get Profile", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/monetization/profile", "host": ["{{baseUrl}}"], "path": ["api", "monetization", "profile"] } } },
+        { "name": "Apply", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/api/monetization/apply", "host": ["{{baseUrl}}"], "path": ["api", "monetization", "apply"] } } },
+        { "name": "Get Stats", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/monetization/stats", "host": ["{{baseUrl}}"], "path": ["api", "monetization", "stats"] } } },
+        { "name": "Get Transactions", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/monetization/transactions?limit=20", "host": ["{{baseUrl}}"], "path": ["api", "monetization", "transactions"], "query": [{ "key": "limit", "value": "20" }] } } }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        { "name": "Get Settings", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/settings", "host": ["{{baseUrl}}"], "path": ["api", "settings"] } } },
+        { "name": "Update Settings", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/api/settings", "host": ["{{baseUrl}}"], "path": ["api", "settings"] } } }
+      ]
+    },
+    {
+      "name": "Moderation",
+      "item": [
+        { "name": "Report", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"contentType\": \"post\",\n  \"contentId\": \"{{postId}}\",\n  \"reason\": \"spam\"\n}" }, "url": { "raw": "{{baseUrl}}/api/moderation/report", "host": ["{{baseUrl}}"], "path": ["api", "moderation", "report"] } } }
+      ]
+    },
+    {
+      "name": "Announcements",
+      "item": [
+        { "name": "Feed", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/announcements/feed", "host": ["{{baseUrl}}"], "path": ["api", "announcements", "feed"] } } },
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"leaderId\": \"\",\n  \"content\": \"Announcement\"\n}" }, "url": { "raw": "{{baseUrl}}/api/announcements/create", "host": ["{{baseUrl}}"], "path": ["api", "announcements", "create"] } } }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "Admin Login", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin\"\n}" }, "url": { "raw": "{{adminUrl}}/api/admin/login", "host": ["{{adminUrl}}"], "path": ["api", "admin", "login"] } } },
+        { "name": "Admin Health", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": { "raw": "{{adminUrl}}/api/admin/health", "host": ["{{adminUrl}}"], "path": ["api", "admin", "health"] } } },
+        { "name": "Dashboard Stats", "request": { "method": "GET", "url": { "raw": "{{adminUrl}}/api/admin/dashboard/stats", "host": ["{{adminUrl}}"], "path": ["api", "admin", "dashboard", "stats"] } } },
+        { "name": "List Users", "request": { "method": "GET", "url": { "raw": "{{adminUrl}}/api/admin/users", "host": ["{{adminUrl}}"], "path": ["api", "admin", "users"] } } }
+      ]
+    }
+  ]
+}
