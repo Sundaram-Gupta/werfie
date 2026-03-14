@@ -3,8 +3,8 @@ module.exports = {
         {
             name: 'auth-service',
             cwd: './apps/backend/auth-service-js',
-            script: 'server.js',
-            interpreter: 'node',
+            script: 'node',
+            args: ['server.js'],
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -19,7 +19,7 @@ module.exports = {
                 NODE_ENV: 'development',
                 PORT: 3001,
                 USER_SERVICE_PORT: 3002,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret",
                 NEXTAUTH_SECRET: "dev-secret"
             },
@@ -27,7 +27,7 @@ module.exports = {
                 NODE_ENV: 'production',
                 PORT: 3001,
                 USER_SERVICE_PORT: 3002,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret",
                 NEXTAUTH_SECRET: "dev-secret"
             }
@@ -105,7 +105,8 @@ module.exports = {
                 PORT: 3003,
                 DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
                 JWT_SECRET: "dev-secret",
-                KAFKA_BROKER: "localhost:9093"
+                KAFKA_BROKER: "localhost:9093",
+                KAFKAJS_NO_PARTITIONER_WARNING: "1"
             },
             env_production: {
                 NODE_ENV: 'production',
@@ -117,8 +118,7 @@ module.exports = {
         {
             name: 'timeline-service',
             cwd: './apps/services/timeline',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3004'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -144,8 +144,7 @@ module.exports = {
         {
             name: 'notification-service',
             cwd: './apps/services/notification',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3005'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -159,7 +158,8 @@ module.exports = {
                 NODE_ENV: 'development',
                 PORT: 3005,
                 DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
-                KAFKA_BROKER: "localhost:9092"
+                KAFKA_BROKER: "localhost:9092",
+                KAFKAJS_NO_PARTITIONER_WARNING: "1"
             },
             env_production: {
                 NODE_ENV: 'production',
@@ -171,8 +171,7 @@ module.exports = {
         {
             name: 'search-service',
             cwd: './apps/services/search',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3006'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -186,7 +185,8 @@ module.exports = {
                 NODE_ENV: 'development',
                 PORT: 3006,
                 ELASTICSEARCH_URL: "http://localhost:9200",
-                KAFKA_BROKER: "localhost:9092"
+                KAFKA_BROKER: "localhost:9092",
+                KAFKAJS_NO_PARTITIONER_WARNING: "1"
             },
             env_production: {
                 NODE_ENV: 'production',
@@ -214,7 +214,8 @@ module.exports = {
                 PORT: 3019,
                 DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
                 JWT_SECRET: "dev-secret",
-                KAFKA_BROKER: "localhost:9092"
+                KAFKA_BROKER: "localhost:9092",
+                KAFKAJS_NO_PARTITIONER_WARNING: "1"
             },
             env_production: {
                 NODE_ENV: 'production',
@@ -256,8 +257,7 @@ module.exports = {
         {
             name: 'analytics-service',
             cwd: './apps/services/analytics',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3009'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -283,8 +283,7 @@ module.exports = {
         {
             name: 'moderation-service',
             cwd: './apps/services/moderation',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3010'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -310,8 +309,7 @@ module.exports = {
         {
             name: 'settings-service',
             cwd: './apps/services/settings',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3011'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -375,8 +373,7 @@ module.exports = {
         {
             name: 'admin-backend',
             cwd: './adminBackend',
-            script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3012'],
+            script: 'scripts/run-next-dev.cjs',
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,

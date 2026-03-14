@@ -57,6 +57,42 @@ app.post('/apply', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /tiers: List creator's subscription tiers with subscriber counts
+app.get('/tiers', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const profile = await prisma.monetizationProfile.findUnique({
+            where: { userId },
+            include: {
+                tiers: { where: { isActive: true }, orderBy: { price: 'asc' } }
+            }
+        });
+        if (!profile) return res.json([]);
+
+        const tiersWithCounts = await Promise.all(profile.tiers.map(async (tier) => {
+            const subscribers = await prisma.subscription.count({
+                where: { tierId: tier.id, status: 'active' }
+            });
+            let perks = [];
+            try {
+                perks = tier.perks ? JSON.parse(tier.perks || '[]') : [];
+            } catch {}
+            return {
+                id: tier.id,
+                name: tier.name,
+                price: tier.price,
+                description: tier.description,
+                perks,
+                subscribers
+            };
+        }));
+        res.json(tiersWithCounts);
+    } catch (error) {
+        console.error('Tiers error:', error);
+        res.status(500).json({ error: 'Failed to fetch tiers' });
+    }
+});
+
 // POST /tiers: Add subscription tier
 app.post('/tiers', authenticateToken, async (req, res) => {
     try {
@@ -72,7 +108,7 @@ app.post('/tiers', authenticateToken, async (req, res) => {
                 name,
                 price: parseFloat(price),
                 description,
-                perks: JSON.stringify(perks),
+                perks: perks ? JSON.stringify(perks) : null,
                 isActive: true
             }
         });
@@ -82,20 +118,109 @@ app.post('/tiers', authenticateToken, async (req, res) => {
     }
 });
 
-// GET /stats: Fetch revenue stats
+// PUT /tiers/:id: Update subscription tier
+app.put('/tiers/:id', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { id } = req.params;
+        const { name, price, description, perks, isActive } = req.body;
+
+        const profile = await prisma.monetizationProfile.findUnique({ where: { userId } });
+        if (!profile) return res.status(404).json({ error: 'Monetization profile not found' });
+
+        const tier = await prisma.subscriptionTier.findFirst({
+            where: { id, monetizationProfileId: profile.id }
+        });
+        if (!tier) return res.status(404).json({ error: 'Tier not found' });
+
+        const updateData = {};
+        if (name !== undefined) updateData.name = name;
+        if (price !== undefined) updateData.price = parseFloat(price);
+        if (description !== undefined) updateData.description = description;
+        if (perks !== undefined) updateData.perks = perks ? JSON.stringify(perks) : null;
+        if (isActive !== undefined) updateData.isActive = !!isActive;
+
+        const updated = await prisma.subscriptionTier.update({
+            where: { id },
+            data: updateData
+        });
+        res.json(updated);
+    } catch (error) {
+        console.error('Update tier error:', error);
+        res.status(500).json({ error: 'Failed to update tier' });
+    }
+});
+
+// GET /stats: Fetch real revenue stats from subscriptions and transactions
 app.get('/stats', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
-        const profile = await prisma.monetizationProfile.findUnique({ where: { userId } });
+        const profile = await prisma.monetizationProfile.findUnique({
+            where: { userId },
+            include: { tiers: true }
+        });
 
-        // Mock data for MVP analytics
+        if (!profile) {
+            return res.json({
+                balance: 0,
+                lifetimeEarnings: 0,
+                activeSubscribers: 0,
+                monthlyRevenue: 0,
+                tipsReceived: 0,
+                tiersWithCounts: []
+            });
+        }
+
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const [activeSubscribers, monthlyTransactions, tipsTransactions, tierCounts] = await Promise.all([
+            prisma.subscription.count({
+                where: {
+                    tier: { monetizationProfileId: profile.id },
+                    status: 'active'
+                }
+            }),
+            prisma.transaction.aggregate({
+                where: {
+                    monetizationProfileId: profile.id,
+                    type: 'subscription_payment',
+                    status: 'completed',
+                    createdAt: { gte: startOfMonth }
+                },
+                _sum: { amount: true }
+            }),
+            prisma.transaction.aggregate({
+                where: {
+                    monetizationProfileId: profile.id,
+                    type: 'tip',
+                    status: 'completed'
+                },
+                _sum: { amount: true }
+            }),
+            Promise.all((profile.tiers || []).map(async (tier) => ({
+                id: tier.id,
+                name: tier.name,
+                price: tier.price,
+                subscribers: await prisma.subscription.count({
+                    where: { tierId: tier.id, status: 'active' }
+                })
+            })))
+        ]);
+
+        const monthlyRevenue = Number(monthlyTransactions._sum?.amount || 0);
+        const tipsReceived = Number(tipsTransactions._sum?.amount || 0);
+
         res.json({
-            balance: profile?.balance || 0,
-            lifetimeEarnings: profile?.lifetimeEarnings || 0,
-            activeSubscribers: 124, // Mock
-            monthlyRevenue: 1250.50 // Mock
+            balance: Number(profile.balance || 0),
+            lifetimeEarnings: Number(profile.lifetimeEarnings || 0),
+            activeSubscribers,
+            monthlyRevenue,
+            tipsReceived,
+            tiersWithCounts: tierCounts
         });
     } catch (error) {
+        console.error('Monetization stats error:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
@@ -157,13 +282,17 @@ app.get('/transactions', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
         const profile = await prisma.monetizationProfile.findUnique({ where: { userId } });
 
-        const transactions = await prisma.transaction.findMany({
-            where: {
+        const whereClause = profile
+            ? {
                 OR: [
-                    { monetizationProfileId: profile?.id },
+                    { monetizationProfileId: profile.id },
                     { subscription: { subscriberId: userId } }
                 ]
-            },
+            }
+            : { subscription: { subscriberId: userId } };
+
+        const transactions = await prisma.transaction.findMany({
+            where: whereClause,
             include: {
                 subscription: {
                     include: { tier: true }

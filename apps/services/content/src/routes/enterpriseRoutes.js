@@ -35,11 +35,10 @@ router.get('/signals', async (req, res) => {
 // Configure a new Alert Rule
 router.post('/alerts/create', async (req, res) => {
     try {
-        // Expect req.user from auth middleware (mocking for now with public endpoint if needed)
-        // Production should enforce auth token verification
-        const { userId, categories, regions, severityThreshold, impactThreshold, keywords, deliveryMethod } = req.body;
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'Unauthorized: authentication required' });
 
-        if (!userId) return res.status(400).json({ error: 'userId is required' });
+        const { categories, regions, severityThreshold, impactThreshold, keywords, deliveryMethod } = req.body;
 
         const rule = await prisma.enterpriseAlertRule.create({
             data: {
@@ -62,8 +61,8 @@ router.post('/alerts/create', async (req, res) => {
 // List Rules for the current User
 router.get('/alerts/list', async (req, res) => {
     try {
-        const userId = req.query.userId;
-        if (!userId) return res.status(400).json({ error: 'userId query param required' });
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'Unauthorized: authentication required' });
 
         const rules = await prisma.enterpriseAlertRule.findMany({
             where: { userId },

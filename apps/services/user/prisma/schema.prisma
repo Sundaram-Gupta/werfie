@@ -44,6 +44,7 @@ model User {
   retweets               Retweet[]
   hostedSpaces           Space[]
   subscriptions          Subscription[]
+  userSettings           UserSettings?
   verificationRequests   VerificationRequest[]
 }
 
@@ -128,12 +129,25 @@ model Profile {
   location  String?
   website   String?
   birthdate DateTime?
+  gender    String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   verified  Boolean?  @default(false)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([handle])
+}
+
+model UserSettings {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  settings  String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Post {

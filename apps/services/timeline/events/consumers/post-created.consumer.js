@@ -16,5 +16,9 @@ export async function startPostCreatedConsumer() {
         }
     })
 
-    await consumer.start()
+    try {
+        await consumer.start()
+    } catch (err) {
+        console.warn('⚠️ Kafka consumer unavailable. Timeline will work; fan-out disabled. Run Kafka or set KAFKA_BROKER.')
+    }
 }

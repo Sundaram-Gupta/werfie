@@ -12,6 +12,7 @@ export const API_BASE_URL = getApiBase()
 // Create axios instance
 const api = axios.create({
     baseURL: API_BASE_URL,
+    timeout: 30000, // 30s - prevents infinite buffering if backend is slow/unreachable
     headers: {
         'Content-Type': 'application/json',
     },

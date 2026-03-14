@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Building, History, ArrowRight, Wallet, CreditCard, Loader2, Plus, Check } from "lucide-react"
+import { Building, History, Wallet, CreditCard, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import api from "@/lib/api"
+import { monetizationService } from "@/services/api"
 
 export default function Payouts() {
     const [profile, setProfile] = useState(null)
+    const [transactions, setTransactions] = useState([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -23,16 +23,17 @@ export default function Payouts() {
 
     useEffect(() => {
         fetchProfile()
+        fetchTransactions()
     }, [])
 
     const fetchProfile = async () => {
         try {
-            const res = await api.get('/api/monetization/profile')
-            setProfile(res.data)
-            if (res.data.payoutMethod) {
-                setPayoutMethod(res.data.payoutMethod)
+            const data = await monetizationService.getProfile()
+            setProfile(data)
+            if (data?.payoutMethod) {
+                setPayoutMethod(data.payoutMethod)
                 try {
-                    setDetails(JSON.parse(res.data.payoutDetails))
+                    if (data.payoutDetails) setDetails(typeof data.payoutDetails === 'object' ? data.payoutDetails : JSON.parse(data.payoutDetails))
                 } catch (e) {}
             }
         } catch (error) {
@@ -43,13 +44,19 @@ export default function Payouts() {
         }
     }
 
+    const fetchTransactions = async () => {
+        try {
+            const data = await monetizationService.getTransactions({ limit: 50 })
+            setTransactions(Array.isArray(data) ? data : [])
+        } catch (err) {
+            console.error('Failed to fetch transactions:', err)
+        }
+    }
+
     const handleSave = async () => {
         setIsSaving(true)
         try {
-            await api.put('/api/monetization/payout-method', {
-                method: payoutMethod,
-                details: details
-            })
+            await monetizationService.updatePayoutMethod(payoutMethod, details)
             toast.success("Payout method updated successfully")
             setIsModalOpen(false)
             fetchProfile()
@@ -223,18 +230,31 @@ export default function Payouts() {
                 </div>
             </div>
 
-            {/* History */}
+            {/* Transaction History */}
             <div className="bg-zinc-900/50 border border-border/50 rounded-xl overflow-hidden">
                 <div className="p-4 border-b border-border/50 flex items-center gap-2">
                     <History className="w-4 h-4 text-muted-foreground" />
-                    <h3 className="font-bold">Withdrawal History</h3>
+                    <h3 className="font-bold">Transaction History</h3>
                 </div>
                 <div className="divide-y divide-border/50 text-sm">
-                    {/* Placeholder for real transaction history */}
-                    <div className="p-10 text-center space-y-2">
-                        <History className="w-10 h-10 text-muted-foreground mx-auto opacity-20" />
-                        <p className="text-muted-foreground">No withdrawal history found</p>
-                    </div>
+                    {transactions.length === 0 ? (
+                        <div className="p-10 text-center space-y-2">
+                            <History className="w-10 h-10 text-muted-foreground mx-auto opacity-20" />
+                            <p className="text-muted-foreground">No transactions yet</p>
+                        </div>
+                    ) : (
+                        transactions.slice(0, 20).map((tx) => (
+                            <div key={tx.id} className="p-4 flex justify-between items-center">
+                                <div>
+                                    <span className="font-medium capitalize">{tx.type?.replace(/_/g, ' ')}</span>
+                                    <p className="text-xs text-muted-foreground">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : ''}</p>
+                                </div>
+                                <span className={`font-bold ${tx.status === 'completed' ? 'text-green-500' : ''}`}>
+                                    {tx.type === 'payout' ? '-' : '+'}${Number(tx.amount || 0).toFixed(2)}
+                                </span>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>

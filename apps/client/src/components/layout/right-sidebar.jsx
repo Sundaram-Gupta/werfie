@@ -1,7 +1,7 @@
 import { Search, TrendingUp, BadgeCheck, MoreHorizontal } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useNavigate } from "react-router-dom"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { userService, searchService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
@@ -71,9 +71,8 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
                 await userService.followUser(user.id)
                 setIsFollowing(true)
             }
-            // Call the callback to refresh the suggestions list
             if (onFollowChange) {
-                onFollowChange()
+                onFollowChange(user.id)
             }
         } catch (error) {
             console.error('Follow/unfollow error:', error)
@@ -101,7 +100,10 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
                 </div>
             </div>
             <button
+                type="button"
                 onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
                     handleFollow(e)
                 }}
                 disabled={loading}
@@ -123,22 +125,36 @@ export function RightSidebar() {
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
 
-    const fetchSuggestions = async () => {
+    const fetchSuggestions = useCallback(async () => {
+        if (!currentUser?.id) {
+            setLoading(false)
+            return
+        }
         try {
-            const data = await userService.getSuggestions(10)
-            const list = Array.isArray(data) ? data : []
-            const filteredData = list.filter(user => user.id !== currentUser?.id)
+            const [suggestionsData, followingData] = await Promise.all([
+                userService.getSuggestions(15),
+                userService.getFollowing(currentUser.id, { limit: 100 })
+            ])
+            const list = Array.isArray(suggestionsData) ? suggestionsData : (suggestionsData?.data && Array.isArray(suggestionsData.data) ? suggestionsData.data : [])
+            const following = Array.isArray(followingData) ? followingData : (followingData?.data && Array.isArray(followingData.data) ? followingData.data : [])
+            const followingIds = new Set(following.map(u => u.id))
+            const filteredData = list.filter(user => user && user.id !== currentUser.id && !followingIds.has(user.id))
             setSuggestions(filteredData)
         } catch (error) {
             console.error("Failed to load suggestions", error)
         } finally {
             setLoading(false)
         }
-    }
+    }, [currentUser?.id])
 
     useEffect(() => {
         fetchSuggestions()
-    }, [])
+    }, [fetchSuggestions])
+
+    useEffect(() => {
+        window.addEventListener('follow-state-changed', fetchSuggestions)
+        return () => window.removeEventListener('follow-state-changed', fetchSuggestions)
+    }, [fetchSuggestions])
 
     const handleSearch = (e) => {
         if (e.key === 'Enter') {
@@ -187,7 +203,11 @@ export function RightSidebar() {
                                 key={user.id}
                                 user={user}
                                 navigate={navigate}
-                                onFollowChange={fetchSuggestions}
+                                onFollowChange={(userId) => {
+                                    setSuggestions(prev => prev.filter(u => u.id !== userId))
+                                    window.dispatchEvent(new CustomEvent('follow-state-changed', { detail: { userId, didFollow: true } }))
+                                    fetchSuggestions()
+                                }}
                             />
                         ))
                     )}

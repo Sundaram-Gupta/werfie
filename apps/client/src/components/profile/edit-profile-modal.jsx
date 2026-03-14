@@ -32,6 +32,8 @@ export function EditProfileModal({ user, onUpdate, children }) {
         website: user.profile?.website || "",
         banner: user.profile?.banner || user.banner || "",
         avatar: user.profile?.avatar || user.avatar || "",
+        gender: user.profile?.gender || "",
+        birthdate: user.profile?.birthdate ? new Date(user.profile.birthdate).toISOString().slice(0, 10) : "",
     })
 
     const handleChange = (e) => {
@@ -212,6 +214,40 @@ export function EditProfileModal({ user, onUpdate, children }) {
                                     onChange={handleChange}
                                     className="block w-full bg-transparent border-0 p-0 text-white focus:ring-0 text-[17px] leading-6 placeholder:text-zinc-600"
                                     maxLength={100}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 relative">
+                            <div className="group border border-zinc-500/50 rounded focus-within:border-primary focus-within:ring-1 focus-within:ring-primary px-3 py-1 bg-transparent transition-colors">
+                                <Label htmlFor="gender" className="text-zinc-500 text-[13px] group-focus-within:text-primary">Gender</Label>
+                                <select
+                                    id="gender"
+                                    name="gender"
+                                    value={formData.gender}
+                                    onChange={handleChange}
+                                    className="block w-full bg-transparent border-0 p-0 text-white focus:ring-0 text-[17px] leading-6 text-foreground appearance-none cursor-pointer"
+                                >
+                                    <option value="" className="bg-zinc-900 text-white">Select gender</option>
+                                    <option value="male" className="bg-zinc-900 text-white">Male</option>
+                                    <option value="female" className="bg-zinc-900 text-white">Female</option>
+                                    <option value="non_binary" className="bg-zinc-900 text-white">Non-binary</option>
+                                    <option value="other" className="bg-zinc-900 text-white">Other</option>
+                                    <option value="prefer_not_to_say" className="bg-zinc-900 text-white">Prefer not to say</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 relative">
+                            <div className="group border border-zinc-500/50 rounded focus-within:border-primary focus-within:ring-1 focus-within:ring-primary px-3 py-1 bg-transparent transition-colors">
+                                <Label htmlFor="birthdate" className="text-zinc-500 text-[13px] group-focus-within:text-primary">Birth date</Label>
+                                <input
+                                    id="birthdate"
+                                    name="birthdate"
+                                    type="date"
+                                    value={formData.birthdate}
+                                    onChange={handleChange}
+                                    className="block w-full bg-transparent border-0 p-0 text-white focus:ring-0 text-[17px] leading-6 placeholder:text-zinc-600 [color-scheme:dark]"
                                 />
                             </div>
                         </div>

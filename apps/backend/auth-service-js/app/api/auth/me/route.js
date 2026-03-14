@@ -24,7 +24,8 @@ export async function GET(request) {
         try {
             rows = await prisma.$queryRaw`
                 SELECT u.id, u.email, u."createdAt", u."updatedAt",
-                       p.id as "profileId", p.name, p.handle, p.bio, p.avatar, p.banner, p.verified
+                       p.id as "profileId", p.name, p.handle, p.bio, p.avatar, p.banner, p.verified,
+                       p.location, p.website, p."birthdate", p.gender
                 FROM "User" u
                 LEFT JOIN "Profile" p ON p."userId" = u.id
                 WHERE u.id = ${payload.sub}
@@ -57,7 +58,11 @@ export async function GET(request) {
                 bio: row.bio,
                 avatar: row.avatar,
                 banner: row.banner,
-                verified: row.verified
+                verified: row.verified,
+                location: row.location,
+                website: row.website,
+                birthdate: row.birthdate,
+                gender: row.gender
             } : null
         }
 

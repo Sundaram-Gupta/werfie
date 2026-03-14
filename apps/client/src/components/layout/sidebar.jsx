@@ -42,7 +42,7 @@ export function Sidebar() {
         { icon: Bell, label: t('nav.notifications'), path: "/notifications" },
         { icon: Brain, label: t('nav.werfie_ai'), path: "/werfie-ai", gradient: true },
         { icon: Users, label: t('nav.follow'), path: "/follow" },
-        { icon: Bookmark, label: "Bookmark", path: "/bookmarks" },
+        { icon: Bookmark, label: t('nav.bookmark'), path: "/bookmarks" },
         { icon: Mail, filledIcon: MailFilledIcon, label: t('nav.chat'), path: "/chat", filledActive: true },
         ...((user?.profile?.verified || user?.institutionalProfile?.isVerified) && (user?.institutionType || user?.institutionalProfile) ? [{ icon: Megaphone, label: "Official Announcements", path: "/announcements" }] : []),
         { icon: Globe, label: "World Leaders", path: "/world-leaders" },

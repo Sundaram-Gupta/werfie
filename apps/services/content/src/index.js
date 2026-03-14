@@ -18,7 +18,7 @@ app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id']
 }));
 app.use(require('./middleware/api-response'));
 
@@ -460,6 +460,24 @@ app.get('/count', authenticateToken, async (req, res) => {
     }
 });
 
+// Get posts for audience insights (hashtag extraction - Creator Studio)
+app.get('/for-audience-insights', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'] || req.user?.userId || req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized', posts: [] });
+        const where = { userId, ...publishedPostFilter() };
+        const posts = await prisma.post.findMany({
+            where,
+            take: 100,
+            select: { content: true, _count: { select: { likes: true, retweets: true, replies: true } } }
+        });
+        res.json({ posts });
+    } catch (err) {
+        console.error('[ContentService] For-audience-insights error:', err);
+        res.status(500).json({ error: 'Failed', posts: [] });
+    }
+});
+
 // Get engagement stats for a user (Creator Studio - likes, replies, retweets)
 app.get('/engagement-stats', authenticateToken, async (req, res) => {
     try {
@@ -563,6 +581,7 @@ app.get('/explore', async (req, res) => {
 // Get Communities
 app.get('/communities', async (req, res) => {
     try {
+        const currentUserId = req.headers['x-user-id'] || null;
         const communities = await prisma.community.findMany({
             include: {
                 members: {
@@ -586,7 +605,11 @@ app.get('/communities', async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
 
-        // Transform to match frontend expectations
+        const memberIdsByCommunity = new Map();
+        communities.forEach(c => {
+            memberIdsByCommunity.set(c.id, new Set(c.members.map(m => m.userId)));
+        });
+
         const transformedCommunities = communities.map(community => ({
             id: community.id,
             name: community.name,
@@ -594,8 +617,8 @@ app.get('/communities', async (req, res) => {
             avatar: community.avatar,
             banner: community.banner,
             membersCount: community.membersCount,
-            isJoined: false, // TODO: Check if current user is a member
-            rules: [],
+            isJoined: currentUserId ? memberIdsByCommunity.get(community.id)?.has(currentUserId) : false,
+            rules: Array.isArray(community.rules) ? community.rules : (community.rules ? [community.rules] : []),
             moderators: community.moderators.map(mod => ({
                 name: mod.user.profile?.name || mod.user.email,
                 handle: mod.user.profile?.handle || mod.user.email.split('@')[0],
@@ -613,6 +636,141 @@ app.get('/communities', async (req, res) => {
     } catch (error) {
         console.error('Communities Error:', error);
         res.status(500).json({ error: 'Failed to fetch communities' });
+    }
+});
+
+// Get single community detail
+app.get('/communities/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const currentUserId = req.headers['x-user-id'] || null;
+        const community = await prisma.community.findUnique({
+            where: { id },
+            include: {
+                members: {
+                    include: {
+                        user: { include: { profile: true } }
+                    },
+                    orderBy: { joinedAt: 'desc' },
+                    take: 50
+                },
+                moderators: {
+                    include: {
+                        user: { include: { profile: true } }
+                    }
+                },
+                posts: {
+                    include: {
+                        post: {
+                            include: {
+                                user: { include: { profile: true } },
+                                media: true,
+                                _count: { select: { likes: true, replies: true, retweets: true } }
+                            }
+                        }
+                    },
+                    orderBy: { post: { createdAt: 'desc' } },
+                    take: 50
+                }
+            }
+        });
+        if (!community) {
+            return res.status(404).json({ error: 'Community not found' });
+        }
+        const isJoined = currentUserId ? community.members.some(m => m.userId === currentUserId) : false;
+        const rules = Array.isArray(community.rules) ? community.rules : (community.rules ? [community.rules] : []);
+        res.json({
+            id: community.id,
+            name: community.name,
+            description: community.description,
+            avatar: community.avatar,
+            banner: community.banner,
+            membersCount: community.membersCount,
+            isJoined,
+            rules,
+            moderators: community.moderators.map(mod => ({
+                name: mod.user.profile?.name || mod.user.email,
+                handle: mod.user.profile?.handle || mod.user.email.split('@')[0],
+                avatar: mod.user.profile?.avatar
+            })),
+            members: community.members.map(member => ({
+                name: member.user.profile?.name || member.user.email,
+                handle: member.user.profile?.handle || member.user.email.split('@')[0],
+                avatar: member.user.profile?.avatar
+            })),
+            posts: community.posts.map(cp => ({
+                ...cp.post,
+                user: cp.post.user,
+                _count: cp.post._count
+            }))
+        });
+    } catch (error) {
+        console.error('Community detail error:', error);
+        res.status(500).json({ error: 'Failed to fetch community' });
+    }
+});
+
+// Join community
+app.post('/communities/:id/join', async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const { id } = req.params;
+        const community = await prisma.community.findUnique({ where: { id } });
+        if (!community) return res.status(404).json({ error: 'Community not found' });
+        await prisma.communityMember.upsert({
+            where: {
+                userId_communityId: { userId, communityId: id }
+            },
+            create: { userId, communityId: id },
+            update: {}
+        });
+        res.json({ status: true, message: 'Joined community', isJoined: true });
+    } catch (error) {
+        console.error('Join community error:', error);
+        res.status(500).json({ error: 'Failed to join community' });
+    }
+});
+
+// Leave community
+app.post('/communities/:id/leave', async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const { id } = req.params;
+        await prisma.communityMember.deleteMany({
+            where: { userId, communityId: id }
+        });
+        res.json({ status: true, message: 'Left community', isJoined: false });
+    } catch (error) {
+        console.error('Leave community error:', error);
+        res.status(500).json({ error: 'Failed to leave community' });
+    }
+});
+
+// Get community members
+app.get('/communities/:id/members', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { limit = 50, offset = 0 } = req.query;
+        const community = await prisma.community.findUnique({ where: { id } });
+        if (!community) return res.status(404).json({ error: 'Community not found' });
+        const members = await prisma.communityMember.findMany({
+            where: { communityId: id },
+            include: { user: { include: { profile: true } } },
+            take: parseInt(limit) || 50,
+            skip: parseInt(offset) || 0,
+            orderBy: { joinedAt: 'desc' }
+        });
+        res.json(members.map(m => ({
+            name: m.user.profile?.name || m.user.email,
+            handle: m.user.profile?.handle || m.user.email.split('@')[0],
+            avatar: m.user.profile?.avatar,
+            joinedAt: m.joinedAt
+        })));
+    } catch (error) {
+        console.error('Community members error:', error);
+        res.status(500).json({ error: 'Failed to fetch members' });
     }
 });
 

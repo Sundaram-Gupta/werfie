@@ -1,12 +1,9 @@
-import axios from 'axios';
-
-// Assuming standard env mapping for content service where enterprise logic was built
-const ENTERPRISE_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003';
+import api from '@/lib/api';
 
 export const getDashboardMetrics = async () => {
     try {
-        const response = await axios.get(`${ENTERPRISE_SERVICE_URL}/api/enterprise/metrics/overview`);
-        return response.data;
+        const { data } = await api.get('/api/enterprise/metrics/overview');
+        return data;
     } catch (error) {
         console.error("Error fetching enterprise metrics:", error);
         throw error;
@@ -15,8 +12,8 @@ export const getDashboardMetrics = async () => {
 
 export const getMarketSignals = async () => {
     try {
-        const response = await axios.get(`${ENTERPRISE_SERVICE_URL}/api/enterprise/signals`);
-        return response.data.signals || [];
+        const { data } = await api.get('/api/enterprise/signals');
+        return data?.signals || [];
     } catch (error) {
         console.error("Error fetching market signals:", error);
         throw error;
@@ -25,31 +22,34 @@ export const getMarketSignals = async () => {
 
 export const createAlertRule = async (ruleData) => {
     try {
-        // Need to pass userId in real scenario. 
-        // Mocking for now from local storage or simply letting backend handle if unrestricted in demo
-        const userId = 'demo-user-123';
-        const response = await axios.post(`${ENTERPRISE_SERVICE_URL}/api/enterprise/alerts/create`, { ...ruleData, userId });
-        return response.data;
+        const { data } = await api.post('/api/enterprise/alerts/create', ruleData);
+        return data;
     } catch (error) {
         console.error("Error creating alert rule:", error);
         throw error;
     }
 };
 
-export const getAlertRules = async (userId = 'demo-user-123') => {
+export const getAlertRules = async () => {
     try {
-        const response = await axios.get(`${ENTERPRISE_SERVICE_URL}/api/enterprise/alerts/list?userId=${userId}`);
-        return response.data.rules || [];
+        const { data } = await api.get('/api/enterprise/alerts/list');
+        return data?.rules || [];
     } catch (error) {
         console.error("Error fetching alert rules:", error);
         throw error;
     }
 };
 
+const getApiBase = () => import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 export const exportToCSV = () => {
-    window.open(`${ENTERPRISE_SERVICE_URL}/api/enterprise/export/csv`, '_blank');
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const url = `${getApiBase()}/api/enterprise/export/csv`;
+    window.open(token ? `${url}?token=${encodeURIComponent(token)}` : url, '_blank');
 };
 
 export const exportToJSON = () => {
-    window.open(`${ENTERPRISE_SERVICE_URL}/api/enterprise/export/json`, '_blank');
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const url = `${getApiBase()}/api/enterprise/export/json`;
+    window.open(token ? `${url}?token=${encodeURIComponent(token)}` : url, '_blank');
 };

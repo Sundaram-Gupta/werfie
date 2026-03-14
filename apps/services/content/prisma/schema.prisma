@@ -407,6 +407,7 @@ model Community {
   avatar        String?
   banner        String?
   membersCount  String   // Stored as string like "125K"
+  rules         Json?    // Array of rule strings
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   

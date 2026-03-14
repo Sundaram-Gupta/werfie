@@ -25,7 +25,10 @@
         "be_first_to_post": "Soyez le premier à publier quelque chose !",
         "everyone_can_reply": "Tout le monde peut répondre",
         "uploading": "Téléchargement...",
-        "posting": "Publication..."
+        "posting": "Publication...",
+        "posted": "Publié !",
+        "scheduled": "Publication programmée",
+        "media_attached": "Médias joints"
     },
     "time": {
         "s": "s",
@@ -73,9 +76,18 @@
         "no_trends": "Aucune tendance trouvée",
         "no_suggestions": "Aucune suggestion"
     },
+    "bookmarks": {
+        "title": "Signets",
+        "subtitle": "Publications enregistrées",
+        "empty_title": "Pas encore de signets",
+        "empty_subtitle": "Enregistrez des publications en appuyant sur l'icône signet."
+    },
     "common": {
         "following": "Abonné",
-        "loading": "Chargement..."
+        "loading": "Chargement...",
+        "cancel": "Annuler",
+        "add": "Ajouter",
+        "error": "Erreur"
     },
     "explore": {
         "tabs": {
@@ -125,6 +137,7 @@
         "posts_count": "publications",
         "edit_profile": "Modifier le profil",
         "joined": "A rejoint",
+        "birthdate": "Date de naissance",
         "following_count": "Abonnements",
         "followers_count": "Abonnés",
         "message_user": "Message @{{handle}}",

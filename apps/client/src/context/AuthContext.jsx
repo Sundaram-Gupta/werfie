@@ -11,17 +11,23 @@ export function AuthProvider({ children }) {
 
     // Check if user is logged in on mount
     useEffect(() => {
+        const AUTH_CHECK_TIMEOUT_MS = 10000 // 10s - don't hang forever if backend unreachable
+
         const checkAuth = async () => {
             if (authService.isAuthenticated()) {
                 try {
-                    const userData = await authService.getCurrentUser()
+                    const userData = await Promise.race([
+                        authService.getCurrentUser(),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('Auth check timeout')), AUTH_CHECK_TIMEOUT_MS)
+                        ),
+                    ])
                     setUser(userData)
-                    if (userData.preferredLanguage) {
+                    if (userData?.preferredLanguage) {
                         i18n.changeLanguage(userData.preferredLanguage)
                     }
                 } catch (error) {
                     console.error('Auth check failed:', error)
-                    // Clear invalid tokens
                     authService.logout()
                 }
             }

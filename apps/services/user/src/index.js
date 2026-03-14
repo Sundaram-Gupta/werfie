@@ -25,6 +25,162 @@ app.use((req, res, next) => {
     next();
 });
 
+const DEFAULT_SETTINGS = {
+    theme: 'system',
+    language: 'en',
+    notifications: { email: true, push: true, sms: false, mutedFilters: {} },
+    privacy: {
+        protectPosts: false,
+        protectVideos: false,
+        photoTaggingEnabled: true,
+        taggingPermission: 'anyone',
+    },
+    display: { darkMode: true },
+};
+
+// Settings - DB-backed per-user, requires x-user-id from gateway
+app.get('/api/settings', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+        return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
+    }
+    try {
+        const row = await prisma.userSettings.findUnique({ where: { userId } });
+        const data = row?.settings ? { ...DEFAULT_SETTINGS, ...JSON.parse(row.settings) } : { ...DEFAULT_SETTINGS };
+        res.json({ status: true, message: 'Settings fetched', data });
+    } catch (err) {
+        console.error('[User Service] GET /api/settings error:', err);
+        res.status(500).json({ status: false, message: 'Failed to fetch settings', data: null });
+    }
+});
+
+app.put('/api/settings', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+        return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
+    }
+    try {
+        const body = req.body || {};
+        const row = await prisma.userSettings.findUnique({ where: { userId } });
+        const existing = row?.settings ? JSON.parse(row.settings) : {};
+        const merged = { ...DEFAULT_SETTINGS, ...existing };
+        if (body.theme !== undefined) merged.theme = body.theme;
+        if (body.language !== undefined) merged.language = body.language;
+        if (body.notifications) {
+            merged.notifications = {
+                ...merged.notifications,
+                ...(body.notifications.email !== undefined && { email: body.notifications.email }),
+                ...(body.notifications.push !== undefined && { push: body.notifications.push }),
+                ...(body.notifications.sms !== undefined && { sms: body.notifications.sms }),
+                ...(body.notifications.mutedFilters !== undefined && { mutedFilters: body.notifications.mutedFilters }),
+            };
+        }
+        if (body.display) {
+            merged.display = { ...merged.display, ...body.display };
+        }
+        if (body.privacy) {
+            merged.privacy = {
+                ...merged.privacy,
+                ...(body.privacy.protectPosts !== undefined && { protectPosts: body.privacy.protectPosts }),
+                ...(body.privacy.protectVideos !== undefined && { protectVideos: body.privacy.protectVideos }),
+                ...(body.privacy.photoTaggingEnabled !== undefined && { photoTaggingEnabled: body.privacy.photoTaggingEnabled }),
+                ...(body.privacy.taggingPermission !== undefined && { taggingPermission: body.privacy.taggingPermission }),
+            };
+        }
+        await prisma.userSettings.upsert({
+            where: { userId },
+            create: { userId, settings: JSON.stringify(merged) },
+            update: { settings: JSON.stringify(merged) },
+        });
+        res.json({ status: true, message: 'Settings updated', data: merged });
+    } catch (err) {
+        console.error('[User Service] PUT /api/settings error:', err);
+        res.status(500).json({ status: false, message: 'Failed to update settings', data: null });
+    }
+});
+
+// Suggestions - match BEFORE :id routes so /api/users/suggestions is not treated as :id=suggestions
+app.get('/api/users/suggestions', async (req, res) => {
+    const { limit = 3 } = req.query;
+    let currentUserId = null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            currentUserId = decoded.sub || decoded.id || decoded.userId;
+        } catch (e) {}
+    }
+    try {
+        let excludeIds = [];
+        if (currentUserId) {
+            excludeIds.push(currentUserId);
+            const following = await prisma.follow.findMany({
+                where: { followerId: currentUserId },
+                select: { followingId: true }
+            });
+            excludeIds.push(...following.map(f => f.followingId));
+        }
+        const users = await prisma.user.findMany({
+            where: { id: { notIn: excludeIds } },
+            take: Math.min(parseInt(limit) || 50, 50),
+            orderBy: { createdAt: 'desc' },
+            include: { profile: true }
+        });
+        const safeUsers = users.map(user => {
+            const { passwordHash, ...safe } = user;
+            return safe;
+        });
+        res.json(safeUsers);
+    } catch (error) {
+        console.error('Suggestions Error:', error);
+        res.status(500).json({ error: 'Failed to fetch suggestions' });
+    }
+});
+
+// Creator Studio / Analytics routes - match BEFORE rewrite so direct fetches from analytics work
+app.get('/api/users/:id/follower-growth', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const [total, newLast30] = await Promise.all([
+            prisma.follow.count({ where: { followingId: id } }),
+            prisma.follow.count({ where: { followingId: id, createdAt: { gte: thirtyDaysAgo } } })
+        ]);
+        res.json({ total, newLast30, netGrowth: newLast30 });
+    } catch (error) {
+        console.error('Follower growth error:', error);
+        res.status(500).json({ total: 0, newLast30: 0, netGrowth: 0 });
+    }
+});
+
+app.get('/api/users/:id/followers', async (req, res) => {
+    const { id } = req.params;
+    const { limit = 20, offset = 0 } = req.query;
+    try {
+        const followers = await prisma.follow.findMany({
+            where: { followingId: id },
+            include: {
+                follower: {
+                    include: { profile: true }
+                }
+            },
+            take: parseInt(limit) || 500,
+            skip: parseInt(offset) || 0,
+            orderBy: { createdAt: 'desc' }
+        });
+        const users = followers.map(f => {
+            const { passwordHash, ...safeUser } = f.follower;
+            return safeUser;
+        });
+        res.json(users);
+    } catch (error) {
+        console.error('Get Followers Error:', error);
+        res.status(500).json({ error: 'Failed to get followers' });
+    }
+});
+
 // Rewrite Middleware
 app.use((req, res, next) => {
     if (req.url.startsWith('/api/users')) {
@@ -80,7 +236,21 @@ app.get('/profile', authenticateToken, async (req, res) => {
             }
         });
         if (!user) return res.status(404).json({ error: 'User not found' });
-        res.json(user);
+        // Ensure profile includes location, website, birthdate, gender in response
+        const { passwordHash, ...safeUser } = user;
+        safeUser.profile = safeUser.profile ? {
+            ...safeUser.profile,
+            location: safeUser.profile.location ?? null,
+            website: safeUser.profile.website ?? null,
+            birthdate: safeUser.profile.birthdate ?? null,
+            gender: safeUser.profile.gender ?? null,
+        } : {
+            location: null,
+            website: null,
+            birthdate: null,
+            gender: null,
+        };
+        res.json(safeUser);
     } catch (error) {
         console.error('Profile Error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -180,6 +350,23 @@ app.get('/:id/followers-count', async (req, res) => {
     } catch (error) {
         console.error('Followers count error:', error);
         res.status(500).json({ error: 'Failed to get count', count: 0 });
+    }
+});
+
+// Get follower growth stats (Creator Studio / Audience Insights)
+app.get('/:id/follower-growth', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const [total, newLast30] = await Promise.all([
+            prisma.follow.count({ where: { followingId: id } }),
+            prisma.follow.count({ where: { followingId: id, createdAt: { gte: thirtyDaysAgo } } })
+        ]);
+        res.json({ total, newLast30, netGrowth: newLast30 });
+    } catch (error) {
+        console.error('Follower growth error:', error);
+        res.status(500).json({ total: 0, newLast30: 0, netGrowth: 0 });
     }
 });
 
@@ -405,7 +592,7 @@ app.put('/:id', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const { name, bio, location, website, avatar, banner, preferredLanguage } = req.body;
+    const { name, bio, location, website, avatar, banner, preferredLanguage, gender, birthdate } = req.body;
 
     try {
         if (preferredLanguage) {
@@ -422,6 +609,8 @@ app.put('/:id', authenticateToken, async (req, res) => {
         if (website !== undefined) updateData.website = website;
         if (avatar !== undefined) updateData.avatar = avatar;
         if (banner !== undefined) updateData.banner = banner;
+        if (gender !== undefined) updateData.gender = gender || null;
+        if (birthdate !== undefined) updateData.birthdate = birthdate ? new Date(birthdate) : null;
 
         const updatedProfile = await prisma.profile.upsert({
             where: { userId: req.params.id },

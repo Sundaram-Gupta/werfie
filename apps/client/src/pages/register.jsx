@@ -54,7 +54,18 @@ export default function Register() {
             navigate('/')
         } catch (error) {
             console.error('Registration failed:', error)
-            const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Registration failed. Please try again.'
+            const isTimeout = error.code === 'ECONNABORTED' || (error.message || '').toLowerCase().includes('timeout')
+            const isNetworkError = !error.response && (error.code === 'ERR_NETWORK' || error.message === 'Network Error')
+            const data = error.response?.data
+            const msg = data?.message ?? data?.error ?? error.message
+            let errorMsg = msg
+            if (isTimeout) {
+                errorMsg = 'Request timed out. The server may be slow or unreachable. Please check your connection and try again.'
+            } else if (isNetworkError) {
+                errorMsg = 'Cannot reach server. Ensure the backend is running and try again.'
+            } else if (!msg) {
+                errorMsg = 'Registration failed. Please try again.'
+            }
             setServerError(errorMsg)
         } finally {
             setLoading(false)

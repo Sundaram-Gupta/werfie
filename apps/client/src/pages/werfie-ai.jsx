@@ -17,10 +17,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Send, Sparkles, Zap, Brain } from "lucide-react"
+import { Send, Sparkles, Brain } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
+import { werfieAiService } from "@/services/api"
 
 /**
  * Sample conversation prompts for quick start
@@ -62,56 +63,44 @@ export default function WerfieAI() {
 
     /**
      * Handles sending a message to the AI
-     * 
-     * Process:
-     * 1. Validates input is not empty
-     * 2. Adds user message to conversation
-     * 3. Clears input field
-     * 4. Shows typing indicator
-     * 5. Simulates AI response after 1.5s delay
-     * 
-     * TODO: Replace setTimeout with actual API call to AI service
-     * Expected API response format: { content: string, timestamp?: string }
+     * Uses AI Worker API (Llama 3 via Gemini-compatible schema)
      */
-    const handleSendMessage = () => {
-        // Validate input
+    const handleSendMessage = async () => {
         if (!inputMessage.trim()) return
 
-        // Create user message object
         const userMessage = {
             id: messages.length + 1,
             role: "user",
-            content: inputMessage,
+            content: inputMessage.trim(),
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
 
-        // Add user message to conversation
-        setMessages([...messages, userMessage])
+        setMessages(prev => [...prev, userMessage])
         setInputMessage("")
         setIsTyping(true)
 
-        // Simulate AI response (replace with actual API call)
-        setTimeout(() => {
-            const responses = {
-                en: `I understand you're asking about "${inputMessage}". This is a demo response.`,
-                hi: `मैं समझता हूँ कि आप "${inputMessage}" के बारे में पूछ रहे हैं। यह एक डेमो उत्तर है।`,
-                es: `Entiendo que preguntas sobre "${inputMessage}". Esta es una respuesta de demostración.`,
-                fr: `Je comprends que vous posez des questions sur "${inputMessage}". Ceci est une réponse de démonstration.`,
-                de: `Ich verstehe, dass Sie nach "${inputMessage}" fragen. Dies ist eine Demo-Antwort.`
-            };
-
-            const lang = i18n.language || 'en';
-            const content = responses[lang] || responses['en'];
-
+        try {
+            const content = await werfieAiService.chat(userMessage.content)
             const aiResponse = {
                 id: messages.length + 2,
                 role: "assistant",
-                content: content,
+                content,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }
             setMessages(prev => [...prev, aiResponse])
+        } catch (err) {
+            const fallbackContent = err?.message?.includes('API key')
+                ? "AI is not configured. Add VITE_AI_WORKER_API_KEY to your .env file."
+                : `Sorry, something went wrong: ${err?.message || 'Unknown error'}`
+            setMessages(prev => [...prev, {
+                id: messages.length + 2,
+                role: "assistant",
+                content: fallbackContent,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }])
+        } finally {
             setIsTyping(false)
-        }, 1500)
+        }
     }
 
     return (

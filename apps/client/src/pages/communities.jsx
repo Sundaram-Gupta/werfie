@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { searchService } from "@/services/api"
+import { toast } from "sonner"
 import { Search, Settings, ArrowLeft, UsersRound } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -24,8 +25,30 @@ export default function Communities() {
         fetchCommunities()
     }, [])
 
+    const [joinLoading, setJoinLoading] = useState(null)
     const joinedCommunities = communities.filter(c => c.isJoined)
     const discoverCommunities = communities
+
+    const handleJoinToggle = async (e, community) => {
+        e.stopPropagation()
+        if (joinLoading) return
+        setJoinLoading(community.id)
+        const prev = community.isJoined
+        try {
+            if (prev) {
+                await searchService.leaveCommunity(community.id)
+                toast.success("Left community")
+            } else {
+                await searchService.joinCommunity(community.id)
+                toast.success("Joined community")
+            }
+            setCommunities(cs => cs.map(c => c.id === community.id ? { ...c, isJoined: !prev } : c))
+        } catch (err) {
+            toast.error(err.response?.data?.error || "Failed to update")
+        } finally {
+            setJoinLoading(null)
+        }
+    }
 
     return (
         <div>
@@ -93,8 +116,13 @@ export default function Communities() {
                                                 <div className="font-bold text-[15px] hover:underline">{community.name}</div>
                                                 <div className="text-[13px] text-muted-foreground">{community.membersCount} members</div>
                                             </div>
-                                            <Button variant={community.isJoined ? "outline" : "secondary"} className="rounded-full font-bold h-8 px-4 text-[14px]">
-                                                {community.isJoined ? "Joined" : "Join"}
+                                            <Button
+                                                variant={community.isJoined ? "outline" : "secondary"}
+                                                className="rounded-full font-bold h-8 px-4 text-[14px]"
+                                                onClick={(e) => handleJoinToggle(e, community)}
+                                                disabled={joinLoading === community.id}
+                                            >
+                                                {joinLoading === community.id ? "..." : (community.isJoined ? "Joined" : "Join")}
                                             </Button>
                                         </div>
                                         <p className="text-[15px] text-muted-foreground mt-1 line-clamp-2 leading-5">

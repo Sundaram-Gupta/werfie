@@ -1,9 +1,10 @@
-// Shared Kafka utility
+// Shared Kafka utility - graceful when Kafka unavailable
 import { Kafka, logLevel } from 'kafkajs'
 
+const kafkaBroker = process.env.KAFKA_BROKER || 'localhost:9092'
 const kafka = new Kafka({
-    clientId: process.env.SERVICE_NAME || 'timeline-service',
-    brokers: [process.env.KAFKA_BROKER || 'kafka:9092'],
+    clientId: process.env.SERVICE_NAME || 'messaging-service',
+    brokers: [kafkaBroker],
     logLevel: logLevel.ERROR,
     retry: {
         retries: 5,
@@ -16,34 +17,42 @@ export class KafkaProducer {
     constructor() {
         this.producer = kafka.producer()
         this.isConnected = false
+        this.isDisabled = false
     }
 
     async connect() {
-        if (!this.isConnected) {
+        if (this.isDisabled || this.isConnected) return
+        try {
             await this.producer.connect()
             this.isConnected = true
             console.log('✅ Kafka Producer connected')
+        } catch (err) {
+            console.warn('⚠️ Kafka unavailable. Events disabled. Run Kafka or set KAFKA_BROKER.')
+            this.isDisabled = true
         }
     }
 
     async send(topic, message) {
-        await this.connect()
-
-        const event = {
-            eventType: topic,
-            timestamp: new Date().toISOString(),
-            data: message
+        if (this.isDisabled) return
+        try {
+            await this.connect()
+            if (this.isDisabled) return
+            const event = {
+                eventType: topic,
+                timestamp: new Date().toISOString(),
+                data: message
+            }
+            await this.producer.send({
+                topic,
+                messages: [{ key: message.userId || message.id, value: JSON.stringify(event) }]
+            })
+            console.log(`📤 Event sent: ${topic}`, message)
+        } catch (err) {
+            if (err?.name === 'KafkaJSConnectionError' || err?.name === 'KafkaJSNonRetriableError') {
+                this.isDisabled = true
+                this.isConnected = false
+            }
         }
-
-        await this.producer.send({
-            topic,
-            messages: [{
-                key: message.userId || message.id,
-                value: JSON.stringify(event)
-            }]
-        })
-
-        console.log(`📤 Event sent: ${topic}`, message)
     }
 
     async disconnect() {

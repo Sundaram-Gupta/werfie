@@ -1,6 +1,8 @@
-import { DollarSign, Users, CreditCard, TrendingUp, ArrowUpRight, Lock, Gift } from "lucide-react"
+import { useState, useEffect } from "react"
+import { DollarSign, Users, CreditCard, TrendingUp, ArrowUpRight, Lock, Gift, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { monetizationService } from "@/services/api"
 
 function MetricCard({ title, value, change, icon: Icon }) {
     return (
@@ -9,10 +11,12 @@ function MetricCard({ title, value, change, icon: Icon }) {
                 <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-muted-foreground group-hover:bg-green-500/10 group-hover:text-green-500 transition-colors">
                     {Icon && <Icon className="w-4 h-4" />}
                 </div>
-                <Badge variant="outline" className="bg-transparent border-0 text-green-500 flex items-center gap-1">
-                    <ArrowUpRight className="w-3 h-3" />
-                    {change}
-                </Badge>
+                {change && (
+                    <Badge variant="outline" className="bg-transparent border-0 text-green-500 flex items-center gap-1">
+                        <ArrowUpRight className="w-3 h-3" />
+                        {change}
+                    </Badge>
+                )}
             </div>
             <div className="text-sm text-muted-foreground mb-1">{title}</div>
             <div className="text-2xl font-bold">{value}</div>
@@ -21,6 +25,38 @@ function MetricCard({ title, value, change, icon: Icon }) {
 }
 
 export default function MonetizationOverview() {
+    const [stats, setStats] = useState(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const data = await monetizationService.getStats()
+                setStats(data)
+            } catch (err) {
+                console.error('Failed to load monetization stats:', err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchStats()
+    }, [])
+
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="w-8 h-8 animate-spin text-green-500" />
+                <p className="text-muted-foreground">Loading monetization data...</p>
+            </div>
+        )
+    }
+
+    const totalRev = (stats?.lifetimeEarnings ?? 0) + (stats?.tipsReceived ?? 0)
+    const balance = stats?.balance ?? 0
+    const subscribers = stats?.activeSubscribers ?? 0
+    const tips = stats?.tipsReceived ?? 0
+    const monthlyRev = stats?.monthlyRevenue ?? 0
+
     return (
         <div className="space-y-6">
             <div>
@@ -30,10 +66,10 @@ export default function MonetizationOverview() {
 
             {/* Key Metrics */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard title="Total Revenue" value="$4,280.00" change="12.5%" icon={DollarSign} />
-                <MetricCard title="Active Subscribers" value="142" change="5.2%" icon={Users} />
-                <MetricCard title="Tips Received" value="$350.00" change="8.1%" icon={Gift} />
-                <MetricCard title="Pending Payout" value="$850.00" change="Ready" icon={CreditCard} />
+                <MetricCard title="Total Revenue" value={`$${totalRev.toFixed(2)}`} change={monthlyRev > 0 ? "This month" : null} icon={DollarSign} />
+                <MetricCard title="Active Subscribers" value={String(subscribers)} icon={Users} />
+                <MetricCard title="Tips Received" value={`$${tips.toFixed(2)}`} icon={Gift} />
+                <MetricCard title="Available Balance" value={`$${balance.toFixed(2)}`} change={balance > 0 ? "Ready" : null} icon={CreditCard} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

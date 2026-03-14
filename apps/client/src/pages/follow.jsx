@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { BadgeCheck, Loader2 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { userService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
@@ -14,22 +14,29 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
 
+    useEffect(() => {
+        setIsFollowing(initialFollowing)
+    }, [initialFollowing])
+
     const handleFollowClick = async (e) => {
+        e.preventDefault()
         e.stopPropagation()
         if (loading) return
 
         setLoading(true)
+        const wasFollowing = isFollowing
         try {
-            if (isFollowing) {
+            if (wasFollowing) {
                 await userService.unfollowUser(user.id)
                 setIsFollowing(false)
             } else {
                 await userService.followUser(user.id)
                 setIsFollowing(true)
             }
-            if (onFollowChange) onFollowChange()
+            if (onFollowChange) onFollowChange(user.id, !wasFollowing, user)
         } catch (error) {
             console.error('Follow/unfollow error:', error)
+            setIsFollowing(wasFollowing)
         } finally {
             setLoading(false)
         }
@@ -57,6 +64,7 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
 
             {allowFollow ? (
                 <Button
+                    type="button"
                     variant={isFollowing ? "outline" : "default"}
                     className={`rounded-full font-bold px-4 h-8 text-sm ${isFollowing
                         ? "bg-transparent border-border text-white hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/50"
@@ -90,41 +98,58 @@ export default function Follow() {
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async (silent = false) => {
         if (!currentUser?.id) return
 
         try {
-            setLoading(true)
+            if (!silent) setLoading(true)
 
-            // Fetch users the current user is following
             const followingData = await userService.getFollowing(currentUser.id, { limit: 50 })
-            setFollowing(Array.isArray(followingData) ? followingData : [])
+            const followingList = Array.isArray(followingData) ? followingData : (followingData?.data && Array.isArray(followingData.data) ? followingData.data : [])
+            setFollowing(followingList)
 
-            // Fetch followers
             const followersData = await userService.getFollowers(currentUser.id, { limit: 50 })
-            setFollowers(
-                Array.isArray(followersData)
-                    ? followersData
-                    : Array.isArray(followersData?.users)
-                        ? followersData.users
+            const followersList = Array.isArray(followersData)
+                ? followersData
+                : Array.isArray(followersData?.users)
+                    ? followersData.users
+                    : Array.isArray(followersData?.data)
+                        ? followersData.data
                         : []
-            )
+            setFollowers(followersList)
 
-            // Fetch suggested users (users not currently followed)
-            const allSuggestions = await userService.getSuggestions(50)
-            const followingIds = new Set((Array.isArray(followingData) ? followingData : []).map(u => u.id))
-            const filtered = allSuggestions.filter(u => u.id !== currentUser.id && !followingIds.has(u.id))
+            const allSuggestionsRaw = await userService.getSuggestions(50)
+            const allSuggestions = Array.isArray(allSuggestionsRaw) ? allSuggestionsRaw : (allSuggestionsRaw?.data && Array.isArray(allSuggestionsRaw.data) ? allSuggestionsRaw.data : [])
+            const followingIds = new Set(followingList.map(u => u.id))
+            const filtered = allSuggestions.filter(u => u && u.id !== currentUser.id && !followingIds.has(u.id))
             setSuggestions(filtered.slice(0, 12))
         } catch (error) {
             console.error('Failed to load follow data:', error)
         } finally {
-            setLoading(false)
+            if (!silent) setLoading(false)
         }
+    }, [currentUser?.id])
+
+    const handleFollowChange = (userId, didFollow, userObj) => {
+        if (didFollow && userObj) {
+            setFollowing(prev => prev.some(u => u.id === userId) ? prev : [userObj, ...prev])
+            setSuggestions(prev => prev.filter(u => u.id !== userId))
+        } else if (!didFollow) {
+            setFollowing(prev => prev.filter(u => u.id !== userId))
+        }
+        window.dispatchEvent(new CustomEvent('follow-state-changed', { detail: { userId, didFollow } }))
+        setTimeout(() => fetchData(true), 0)
     }
 
     useEffect(() => {
         fetchData()
-    }, [currentUser?.id])
+    }, [fetchData])
+
+    useEffect(() => {
+        const onFollowStateChanged = () => fetchData(true)
+        window.addEventListener('follow-state-changed', onFollowStateChanged)
+        return () => window.removeEventListener('follow-state-changed', onFollowStateChanged)
+    }, [fetchData])
 
     return (
         <div>
@@ -188,7 +213,7 @@ export default function Follow() {
                                             user={user}
                                             initialFollowing={true}
                                             allowFollow={true}
-                                            onFollowChange={fetchData}
+                                            onFollowChange={handleFollowChange}
                                         />
                                     ))}
                                 </div>
@@ -208,8 +233,9 @@ export default function Follow() {
                                         <FollowCard
                                             key={user.id}
                                             user={user}
+                                            initialFollowing={false}
                                             allowFollow={true}
-                                            onFollowChange={fetchData}
+                                            onFollowChange={handleFollowChange}
                                         />
                                     ))}
                                 </div>
@@ -234,7 +260,7 @@ export default function Follow() {
                                             user={user}
                                             initialFollowing={followingIds.has(user.id)}
                                             allowFollow={true}
-                                            onFollowChange={fetchData}
+                                            onFollowChange={handleFollowChange}
                                         />
                                     )
                                 })}
@@ -259,7 +285,7 @@ export default function Follow() {
                                             user={user}
                                             initialFollowing={followingIds.has(user.id)}
                                             allowFollow={true}
-                                            onFollowChange={fetchData}
+                                            onFollowChange={handleFollowChange}
                                         />
                                     )
                                 })}

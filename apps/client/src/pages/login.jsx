@@ -32,12 +32,19 @@ export default function Login() {
             navigate('/')
         } catch (error) {
             console.error('Login failed:', error)
+            const isTimeout = error.code === 'ECONNABORTED' || (error.message || '').includes('timeout')
             const isNetworkError = !error.response && (error.code === 'ERR_NETWORK' || error.message === 'Network Error')
             const data = error.response?.data
             const msg = data?.message ?? data?.error ?? error.message
-            setServerError(isNetworkError
-                ? 'Cannot reach server. Ensure the backend is running (pm2 list) and port 3001 is reachable from this host.'
-                : (msg || 'Login failed. Please try again.'))
+            let displayMsg = msg
+            if (isTimeout) {
+                displayMsg = 'Request timed out. The backend may be slow or PostgreSQL may not be running. Check: pm2 logs auth-service'
+            } else if (isNetworkError) {
+                displayMsg = 'Cannot reach server. Ensure the backend is running (pm2 list) and port 3001 is reachable.'
+            } else if (!msg) {
+                displayMsg = 'Login failed. Please try again.'
+            }
+            setServerError(displayMsg)
         } finally {
             setLoading(false)
         }

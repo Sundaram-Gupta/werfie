@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 
 import BusinessDashboard from "./BusinessDashboard"
 import BusinessProfile from "./BusinessProfile"
+import BusinessSettings from "./BusinessSettings"
 import TeamManagement from "./TeamManagement"
 
 export default function BusinessLayout() {
@@ -31,7 +32,7 @@ export default function BusinessLayout() {
             case "dashboard": return <BusinessDashboard />
             case "profile": return <BusinessProfile />
             case "team": return <TeamManagement />
-            case "settings": return <div className="p-10 text-center text-muted-foreground">Settings Coming Soon</div>
+            case "settings": return <BusinessSettings onSwitchTab={setActiveTab} />
             default: return <BusinessDashboard />
         }
     }

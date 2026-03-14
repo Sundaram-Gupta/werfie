@@ -15,7 +15,7 @@ export const authService = {
             name,
             handle: rawHandle,
             preferredLanguage,
-        })
+        }, { timeout: 15000 })
 
         // Normalizer extracts payload; fallback for non-standard responses
         const payload = data?.data ?? data
@@ -31,7 +31,7 @@ export const authService = {
         const { data } = await api.post('/api/auth/login', {
             email,
             password,
-        })
+        }, { timeout: 15000 })
 
         const payload = data?.data ?? data
         console.log('[Frontend Login] Successfully logged in. Institutional ID:', payload.institutionalProfile?.id || 'None');
@@ -412,6 +412,24 @@ export const searchService = {
         return data
     },
 
+    // Get single community detail
+    getCommunity: async (id) => {
+        const { data } = await api.get(`/api/communities/${id}`)
+        return data
+    },
+
+    // Join community
+    joinCommunity: async (id) => {
+        const { data } = await api.post(`/api/communities/${id}/join`)
+        return data
+    },
+
+    // Leave community
+    leaveCommunity: async (id) => {
+        const { data } = await api.post(`/api/communities/${id}/leave`)
+        return data
+    },
+
     // Get Spaces
     getSpaces: async () => {
         const { data } = await api.get('/api/spaces')
@@ -529,6 +547,15 @@ export const analyticsService = {
     getCreatorStats: async () => {
         const { data } = await api.get('/api/creator-studio/stats')
         return data?.data ?? data
+    },
+    getAudienceInsights: async (userId) => {
+        const config = {}
+        if (userId) {
+            config.headers = { 'X-User-Id': userId }
+            config.params = { userId }
+        }
+        const { data } = await api.get('/api/creator-studio/audience-insights', config)
+        return data?.data ?? data ?? {}
     }
 }
 
@@ -582,21 +609,41 @@ export const businessService = {
 
 // Monetization Services
 export const monetizationService = {
-    getRevenueStats: async () => {
-        // Mock API call
-        return { totalRev: 4280.00, subscribers: 142 }
+    getStats: async () => {
+        const { data } = await api.get('/api/monetization/stats')
+        return data?.data ?? data ?? {}
     },
-    getSubscribers: async () => {
-        // Mock API call
-        return []
+    getProfile: async () => {
+        const { data } = await api.get('/api/monetization/profile')
+        return data?.data ?? data ?? null
     },
-    updateTier: async (tierId, data) => {
-        // Mock API call
-        return { success: true }
+    getTiers: async () => {
+        const { data } = await api.get('/api/monetization/tiers')
+        return (Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [])
     },
-    getPayouts: async () => {
-        // Mock API call
-        return []
+    getTransactions: async (params = {}) => {
+        const { data } = await api.get('/api/monetization/transactions', { params })
+        return (Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [])
+    },
+    apply: async () => {
+        const { data } = await api.post('/api/monetization/apply')
+        return data?.data ?? data
+    },
+    createTier: async (tierData) => {
+        const { data } = await api.post('/api/monetization/tiers', tierData)
+        return data?.data ?? data
+    },
+    updateTier: async (tierId, tierData) => {
+        const { data } = await api.put(`/api/monetization/tiers/${tierId}`, tierData)
+        return data?.data ?? data
+    },
+    updatePayoutMethod: async (method, details) => {
+        const { data } = await api.put('/api/monetization/payout-method', { method, details })
+        return data?.data ?? data
+    },
+    subscribe: async (creatorId, tierId) => {
+        const { data } = await api.post('/api/monetization/subscribe', { creatorId, tierId })
+        return data?.data ?? data
     }
 }
 
@@ -693,5 +740,24 @@ export const announcementService = {
     generateSummary: async (content) => {
         const { data: response } = await api.post('/api/announcements/generate-summary', { content })
         return response
+    }
+}
+
+// Werfie AI - uses backend proxy /api/ai/chat (avoids CORS)
+export const werfieAiService = {
+    chat: async (text) => {
+        const base = import.meta.env.VITE_API_URL || ''
+        const url = base ? `${base.replace(/\/$/, '')}/ai/chat` : '/api/ai/chat'
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ text })
+        })
+        const json = await response.json().catch(() => ({}))
+        if (!response.ok) {
+            throw new Error(json?.message || `AI request failed: ${response.status}`)
+        }
+        return json?.data?.text ?? json?.text ?? 'No response from AI.'
     }
 }

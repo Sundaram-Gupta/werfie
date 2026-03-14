@@ -19,6 +19,13 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, _res) => {
+            if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
+              console.warn('[vite] proxy error:', err.message)
+            }
+          })
+        },
       },
       '/uploads': {
         target: 'http://localhost:3001',
@@ -28,6 +35,13 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, _res) => {
+            if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
+              console.warn('[vite] proxy error:', err.message)
+            }
+          })
+        },
       },
     }
   }

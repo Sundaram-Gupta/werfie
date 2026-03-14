@@ -1,7 +1,7 @@
 
 import { useParams, Link } from "react-router-dom"
-import { useEffect } from "react"
-import { BarChart, Video, Calendar, Users, ArrowLeft, Heart, Repeat2, MessageCircle, Share, Bookmark, Upload, X, Feather, BadgeCheck, Loader2 } from "lucide-react"
+import { useEffect, useCallback } from "react"
+import { BarChart, Video, Calendar, Users, ArrowLeft, Heart, Repeat2, MessageCircle, Share, Bookmark, Upload, X, Feather, BadgeCheck, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
@@ -609,67 +609,257 @@ export function ScheduledPosts() {
 }
 
 export function AudienceInsights() {
+    const { user } = useAuth()
+    const [loading, setLoading] = useState(true)
+    const [data, setData] = useState({
+        topInterests: [],
+        gender: { male: 0, female: 0, other: 0 },
+        topLocations: [],
+        ageGroups: {},
+        followerGrowth: { newFollowers: 0, unfollows: 0, netGrowth: 0 },
+        activeTime: { bestHour: 20, bestDay: 'Friday' },
+        engagementRate: 0,
+        deviceUsage: { mobile: 0, desktop: 0, tablet: 0 },
+        languages: [],
+        totalFollowers: 0
+    })
+    const [apiError, setApiError] = useState(false)
+    const [refreshing, setRefreshing] = useState(false)
+
+    const fetchInsights = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true)
+        else setRefreshing(true)
+        setApiError(false)
+        try {
+            const userId = user?.id
+            const res = await analyticsService.getAudienceInsights(userId)
+            if (res) setData((prev) => ({ ...prev, ...res }))
+        } catch (err) {
+            console.error('Audience insights error:', err)
+            setApiError(true)
+        } finally {
+            setLoading(false)
+            setRefreshing(false)
+        }
+    }, [user?.id])
+
+    useEffect(() => {
+        fetchInsights()
+    }, [fetchInsights])
+
+    const topInterests = data.topInterests || []
+    const topLocations = data.topLocations || []
+    const gender = data.gender || { male: 0, female: 0, other: 0 }
+    const hasGenderData = (gender.male || gender.female || gender.other) > 0
+    const ageGroups = data.ageGroups || {}
+    const ageOrder = ['13-17', '18-24', '25-34', '35-44', '45+']
+
     return (
         <div>
             <PageHeader title="Audience Insights" description="Know your community" icon={Users} />
 
-            <div className="p-4 space-y-6">
-                {/* Top Interests */}
-                <div className="bg-black border border-border rounded-xl p-6">
-                    <h3 className="font-bold mb-4">Top Interests</h3>
-                    <div className="space-y-4">
-                        {[
-                            { label: "Technology", value: 85 },
-                            { label: "Web Development", value: 72 },
-                            { label: "Design", value: 64 },
-                            { label: "Startups", value: 58 },
-                            { label: "Crypto", value: 45 }
-                        ].map((item) => (
-                            <div key={item.label}>
-                                <div className="flex justify-between text-sm mb-1">
-                                    <span>{item.label}</span>
-                                    <span className="text-muted-foreground">{item.value}%</span>
-                                </div>
-                                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${item.value}%` }} />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+            {loading ? (
+                <div className="p-8 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
+            ) : !user ? (
+                <div className="p-8 text-center text-muted-foreground">
+                    <p>Please log in to view your audience insights.</p>
+                </div>
+            ) : apiError ? (
+                <div className="p-8 text-center text-muted-foreground space-y-4">
+                    <p>Unable to load audience insights. Please try again.</p>
+                    <Button variant="outline" onClick={() => fetchInsights()}>
+                        Retry
+                    </Button>
+                </div>
+            ) : (
+                <div className="p-4 space-y-6">
+                    <div className="flex justify-end -mt-2 mb-2">
+                        <Button variant="outline" size="sm" onClick={() => fetchInsights(true)} disabled={refreshing}>
+                            <RefreshCw className={`w-4 h-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                            Refresh data
+                        </Button>
+                    </div>
+                    {/* Follower Growth */}
                     <div className="bg-black border border-border rounded-xl p-6">
-                        <h3 className="font-bold mb-2">Gender</h3>
-                        <div className="flex items-end gap-2 h-32 mt-4">
-                            <div className="w-1/2 bg-blue-500/20 h-[65%] rounded-t relative group">
-                                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-bold">65%</div>
-                                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground">Male</div>
+                        <h3 className="font-bold mb-4">Follower Growth</h3>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <p className="text-2xl font-bold">{formatCount(data.totalFollowers ?? 0)}</p>
+                                <p className="text-xs text-muted-foreground">Total Followers</p>
                             </div>
-                            <div className="w-1/2 bg-pink-500/20 h-[35%] rounded-t relative group">
-                                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-bold">35%</div>
-                                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground">Female</div>
+                            <div>
+                                <p className="text-2xl font-bold text-green-500">+{data.followerGrowth?.newFollowers ?? 0}</p>
+                                <p className="text-xs text-muted-foreground">New (Last 30 days)</p>
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{data.followerGrowth?.netGrowth >= 0 ? '+' : ''}{data.followerGrowth?.netGrowth ?? 0}</p>
+                                <p className="text-xs text-muted-foreground">Net Growth</p>
                             </div>
                         </div>
                     </div>
 
+                    {/* Top Interests */}
                     <div className="bg-black border border-border rounded-xl p-6">
-                        <h3 className="font-bold mb-2">Top Locations</h3>
-                        <div className="space-y-3 mt-4">
-                            {[
-                                { country: "United States", pct: "42%" },
-                                { country: "India", pct: "18%" },
-                                { country: "United Kingdom", pct: "12%" }
-                            ].map((loc, i) => (
-                                <div key={i} className="flex justify-between text-sm border-b border-border/50 pb-2 last:border-0">
-                                    <span>{loc.country}</span>
-                                    <span className="font-bold text-muted-foreground">{loc.pct}</span>
+                        <h3 className="font-bold mb-4">Top Interests</h3>
+                        <p className="text-sm text-muted-foreground mb-4">Based on hashtags and engagement on your posts</p>
+                        {topInterests.length > 0 ? (
+                        <div className="space-y-4">
+                            {topInterests.map((item) => (
+                                <div key={item.label}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span>{item.label}</span>
+                                        <span className="text-muted-foreground">{item.value}%</span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, item.value)}%` }} />
+                                    </div>
                                 </div>
                             ))}
                         </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Post with hashtags to see audience interests.</p>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        {hasGenderData ? (
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-2">Gender</h3>
+                            <div className="flex items-end gap-2 h-32 mt-4">
+                                {(gender.male || 0) > 0 && (
+                                    <div className="flex-1 bg-blue-500/20 rounded-t relative group min-h-[20%]" style={{ height: `${Math.max(gender.male || 0, 5)}%` }}>
+                                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-bold">{gender.male || 0}%</div>
+                                        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap">Male</div>
+                                    </div>
+                                )}
+                                {(gender.female || 0) > 0 && (
+                                    <div className="flex-1 bg-pink-500/20 rounded-t relative group min-h-[20%]" style={{ height: `${Math.max(gender.female || 0, 5)}%` }}>
+                                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-bold">{gender.female || 0}%</div>
+                                        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap">Female</div>
+                                    </div>
+                                )}
+                                {(gender.other || 0) > 0 && (
+                                    <div className="flex-1 bg-purple-500/20 rounded-t relative group min-h-[20%]" style={{ height: `${Math.max(gender.other, 5)}%` }}>
+                                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-bold">{gender.other}%</div>
+                                        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap">Other</div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        ) : (
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-2">Gender</h3>
+                            <p className="text-sm text-muted-foreground mt-4">Gender data is not collected. Add optional gender to user profiles to see this.</p>
+                        </div>
+                        )}
+
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-2">Top Locations</h3>
+                            {topLocations.length > 0 ? (
+                            <div className="space-y-3 mt-4">
+                                {topLocations.map((loc, i) => (
+                                    <div key={i} className="flex justify-between text-sm border-b border-border/50 pb-2 last:border-0">
+                                        <span>{loc.country}</span>
+                                        <span className="font-bold text-muted-foreground">{typeof loc.pct === 'number' ? `${loc.pct}%` : loc.pct}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground mt-4">Follower locations will appear when your followers add their location.</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Age Distribution */}
+                    <div className="bg-black border border-border rounded-xl p-6">
+                        <h3 className="font-bold mb-4">Age Groups</h3>
+                        {Object.keys(ageGroups).length > 0 ? (
+                            <div className="flex items-end gap-3 h-32 mt-4">
+                                {ageOrder.filter((k) => ageGroups[k]).map((key) => {
+                                    const total = Object.values(ageGroups).reduce((a, b) => a + b, 0)
+                                    const pct = total > 0 ? Math.round((ageGroups[key] / total) * 100) : 0
+                                    return (
+                                        <div key={key} className="flex-1 flex flex-col items-center">
+                                            <div className="w-full bg-primary/30 rounded-t flex-1 flex items-end justify-center min-h-[24px]" style={{ height: `${Math.max(pct, 8)}%` }}>
+                                                <span className="text-xs font-bold mb-1">{pct}%</span>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground mt-2">{key}</span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Age distribution from your followers&apos; birthdates will appear here when available.</p>
+                        )}
+                    </div>
+
+                    {/* Best Time to Post & Engagement */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-2">Best Time to Post</h3>
+                            <p className="text-sm text-muted-foreground mt-2">
+                                Most active: <span className="font-bold text-foreground">{String(data.activeTime?.bestHour ?? 20).padStart(2,'0')}:00 – {String(Math.min(23, (data.activeTime?.bestHour ?? 20) + 3)).padStart(2,'0')}:00</span>
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Best day: <span className="font-bold text-foreground">{data.activeTime?.bestDay ?? 'Friday'}</span>
+                            </p>
+                        </div>
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-2">Engagement Rate</h3>
+                            <p className="text-2xl font-bold text-primary mt-2">{data.engagementRate ?? 0}%</p>
+                            <p className="text-xs text-muted-foreground mt-1">Average engagement on your posts</p>
+                        </div>
+                    </div>
+
+                    {/* Device Usage - only show when we have real data */}
+                    {(data.deviceUsage?.mobile || data.deviceUsage?.desktop || data.deviceUsage?.tablet) > 0 ? (
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-4">Device Usage</h3>
+                            <div className="space-y-3">
+                                {[
+                                    { label: 'Mobile', value: data.deviceUsage?.mobile ?? 0, color: 'bg-blue-500' },
+                                    { label: 'Desktop', value: data.deviceUsage?.desktop ?? 0, color: 'bg-green-500' },
+                                    { label: 'Tablet', value: data.deviceUsage?.tablet ?? 0, color: 'bg-purple-500' }
+                                ].filter((d) => d.value > 0).map((d) => (
+                                    <div key={d.label}>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span>{d.label}</span>
+                                            <span className="text-muted-foreground">{d.value}%</span>
+                                        </div>
+                                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                            <div className={`h-full ${d.color} rounded-full`} style={{ width: `${d.value}%` }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-black border border-border rounded-xl p-6">
+                            <h3 className="font-bold mb-2">Device Usage</h3>
+                            <p className="text-sm text-muted-foreground">Device usage data is not tracked.</p>
+                        </div>
+                    )}
+
+                    {/* Languages */}
+                    <div className="bg-black border border-border rounded-xl p-6">
+                        <h3 className="font-bold mb-4">Languages</h3>
+                        {data.languages?.length > 0 ? (
+                            <div className="space-y-2">
+                                {data.languages.map((l, i) => (
+                                    <div key={i} className="flex justify-between text-sm">
+                                        <span>{l.lang}</span>
+                                        <span className="text-muted-foreground">{l.pct}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Language preferences from your followers will appear here.</p>
+                        )}
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }

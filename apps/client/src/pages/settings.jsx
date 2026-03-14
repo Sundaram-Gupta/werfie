@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/AuthContext"
-import { authService, userService } from "@/services/api"
+import { authService, userService, settingsService } from "@/services/api"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useTranslation } from 'react-i18next'
 
@@ -28,7 +28,7 @@ export default function Settings() {
         }
     }
 
-    // Preferences State (persisted in localStorage)
+    // Preferences State (from API, fallback to localStorage when unauthenticated)
     const [notifications, setNotifications] = useState({
         push: true,
         email: true,
@@ -37,6 +37,7 @@ export default function Settings() {
     const [display, setDisplay] = useState({
         darkMode: true
     })
+    const [settingsLoading, setSettingsLoading] = useState(true)
 
     // Password Modal State
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
@@ -45,18 +46,33 @@ export default function Settings() {
     const [error, setError] = useState("")
     const [success, setSuccess] = useState("")
 
-    // Load saved settings on mount
+    // Load saved settings on mount (API first, fallback to localStorage)
     useEffect(() => {
-        const savedNotifs = localStorage.getItem("settings_notifications")
-        if (savedNotifs) setNotifications(JSON.parse(savedNotifs))
-
-        const savedDisplay = localStorage.getItem("settings_display")
-        if (savedDisplay) {
-            setDisplay(JSON.parse(savedDisplay))
-        } else {
-            // Default to dark
-            document.documentElement.classList.add('dark')
+        const loadSettings = async () => {
+            try {
+                const data = await settingsService.getSettings()
+                if (data?.notifications) {
+                    setNotifications(prev => ({
+                        push: data.notifications.push !== false,
+                        email: data.notifications.email !== false,
+                        sms: !!data.notifications.sms
+                    }))
+                }
+                if (data?.display?.darkMode !== undefined) {
+                    setDisplay({ darkMode: data.display.darkMode })
+                } else if (data?.theme === 'dark' || data?.theme === 'light') {
+                    setDisplay({ darkMode: data.theme === 'dark' })
+                }
+            } catch (err) {
+                const savedNotifs = localStorage.getItem("settings_notifications")
+                if (savedNotifs) setNotifications(JSON.parse(savedNotifs))
+                const savedDisplay = localStorage.getItem("settings_display")
+                if (savedDisplay) setDisplay(JSON.parse(savedDisplay))
+            } finally {
+                setSettingsLoading(false)
+            }
         }
+        loadSettings()
     }, [])
 
     // Apply Dark Mode effect
@@ -66,13 +82,28 @@ export default function Settings() {
         } else {
             document.documentElement.classList.remove('dark')
         }
-        localStorage.setItem("settings_display", JSON.stringify(display))
     }, [display])
 
-    const handleNotifChange = (key, value) => {
+    const handleNotifChange = async (key, value) => {
         const newNotifs = { ...notifications, [key]: value }
         setNotifications(newNotifs)
-        localStorage.setItem("settings_notifications", JSON.stringify(newNotifs))
+        try {
+            await settingsService.updateSettings({
+                notifications: { ...notifications, [key]: value }
+            })
+        } catch (err) {
+            setNotifications(notifications)
+        }
+    }
+
+    const handleDisplayChange = async (key, value) => {
+        const newDisplay = { ...display, [key]: value }
+        setDisplay(newDisplay)
+        try {
+            await settingsService.updateSettings({ display: newDisplay })
+        } catch (err) {
+            setDisplay(display)
+        }
     }
 
     const handleChangePassword = async (e) => {
@@ -190,7 +221,7 @@ export default function Settings() {
                         <div className="font-medium text-[15px]">{t('dark_mode')}</div>
                         <div className="text-[13px] text-muted-foreground">{t('settings_page.display_desc')}</div>
                     </div>
-                    <Switch checked={display.darkMode} onCheckedChange={(c) => setDisplay({ ...display, darkMode: c })} />
+                    <Switch checked={display.darkMode} onCheckedChange={(c) => handleDisplayChange('darkMode', c)} disabled={settingsLoading} />
                 </div>
 
                 <Separator className="my-2 opacity-50" />
@@ -202,19 +233,19 @@ export default function Settings() {
                         <div className="font-medium text-[15px]">{t('settings_page.notifications_push')}</div>
                         <div className="text-[13px] text-muted-foreground">{t('settings_page.notifications_push_desc')}</div>
                     </div>
-                    <Switch checked={notifications.push} onCheckedChange={(c) => handleNotifChange('push', c)} />
+                    <Switch checked={notifications.push} onCheckedChange={(c) => handleNotifChange('push', c)} disabled={settingsLoading} />
                 </div>
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 pr-4">
                         <div className="font-medium text-[15px]">{t('settings_page.notifications_email')}</div>
                     </div>
-                    <Switch checked={notifications.email} onCheckedChange={(c) => handleNotifChange('email', c)} />
+                    <Switch checked={notifications.email} onCheckedChange={(c) => handleNotifChange('email', c)} disabled={settingsLoading} />
                 </div>
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 pr-4">
                         <div className="font-medium text-[15px]">{t('settings_page.notifications_sms')}</div>
                     </div>
-                    <Switch checked={notifications.sms} onCheckedChange={(c) => handleNotifChange('sms', c)} />
+                    <Switch checked={notifications.sms} onCheckedChange={(c) => handleNotifChange('sms', c)} disabled={settingsLoading} />
                 </div>
 
                 <Separator className="my-2 opacity-50" />

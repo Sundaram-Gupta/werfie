@@ -25,7 +25,10 @@
         "be_first_to_post": "कुछ पोस्ट करने वाले पहले बनें!",
         "everyone_can_reply": "हर कोई जवाब दे सकता है",
         "uploading": "अपलोड हो रहा है...",
-        "posting": "पोस्ट किया जा रहा है..."
+        "posting": "पोस्ट किया जा रहा है...",
+        "posted": "पोस्ट किया गया!",
+        "scheduled": "पोस्ट शेड्यूल किया गया",
+        "media_attached": "मीडिया संलग्न"
     },
     "time": {
         "s": "से",
@@ -46,7 +49,8 @@
         "chat": "चैट",
         "profile": "प्रोफाइल",
         "more": "अधिक",
-        "post": "पोस्ट"
+        "post": "पोस्ट",
+        "bookmark": "बुकमार्क"
     },
     "more_menu": {
         "creator_studio": "क्रिएटर स्टूडियो",
@@ -73,9 +77,18 @@
         "no_trends": "कोई ट्रेंड नहीं मिला",
         "no_suggestions": "कोई सुझाव नहीं"
     },
+    "bookmarks": {
+        "title": "बुकमार्क",
+        "subtitle": "आपके द्वारा सहेजे गए पोस्ट",
+        "empty_title": "अभी तक कोई बुकमार्क नहीं",
+        "empty_subtitle": "किसी भी पोस्ट पर बुकमार्क आइकन टैप करके पोस्ट सेव करें।"
+    },
     "common": {
         "following": "फॉलो कर रहे हैं",
-        "loading": "लोड हो रहा है..."
+        "loading": "लोड हो रहा है...",
+        "cancel": "रद्द करें",
+        "add": "जोड़ें",
+        "error": "त्रुटि"
     },
     "explore": {
         "tabs": {
@@ -108,9 +121,13 @@
     "follow": {
         "title": "फॉलो करें",
         "subtitle": "लोग जिन्हें आप जान सकते हैं और खाते जिन्हें आप फॉलो करते हैं",
+        "section_verified_followers": "सत्यापित फॉलोअर्स",
         "section_following": "फॉलो कर रहे हैं",
+        "section_followers": "फॉलोअर्स",
         "section_suggested": "आपके लिए सुझाव",
         "empty_following": "आप अभी तक किसी को फॉलो नहीं कर रहे हैं",
+        "empty_followers": "अभी तक कोई फॉलोअर्स नहीं",
+        "empty_verified_followers": "अभी तक कोई सत्यापित फॉलोअर्स नहीं",
         "empty_suggestions": "कोई सुझाव उपलब्ध नहीं है"
     },
     "chat": {
@@ -125,6 +142,7 @@
         "posts_count": "पोस्ट",
         "edit_profile": "प्रोफाइल संपादित करें",
         "joined": "शामिल हुए",
+        "birthdate": "जन्म तिथि",
         "following_count": "फॉलो कर रहे हैं",
         "followers_count": "फॉलोअर्स",
         "message_user": "संदेश @{{handle}}",

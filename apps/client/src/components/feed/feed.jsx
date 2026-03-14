@@ -46,8 +46,8 @@ export function Feed({ tab = 'for-you' }) {
         if (tab === 'bookmarks') {
             return (
                 <div className="p-8 text-center text-muted-foreground">
-                    <p className="font-medium">{t('bookmarks.empty_title') || 'No bookmarks yet'}</p>
-                    <p className="text-sm mt-1">{t('bookmarks.empty_subtitle') || 'Save posts by tapping the bookmark icon on any post.'}</p>
+                    <p className="font-medium">{t('bookmarks.empty_title')}</p>
+                    <p className="text-sm mt-1">{t('bookmarks.empty_subtitle')}</p>
                 </div>
             )
         }

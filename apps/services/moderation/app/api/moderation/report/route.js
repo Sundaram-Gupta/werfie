@@ -70,11 +70,17 @@ async function handler(req) {
 
     } catch (error) {
         console.error('FULL MODERATION ERROR:', error)
+        const isClientError = error?.code === 'P2003' || error?.code === 'P2025' || error?.code === 'P2002'
+        const status = isClientError ? 400 : 500
+        const message = isClientError
+            ? (error?.meta?.cause || error?.message || 'Invalid request')
+            : 'Failed to submit report. Please try again later.'
         return corsResponse({
-            status: true,
-            message: 'Report queued for processing',
-            data: { reportId: 'queued', note: 'Database may need migration' }
-        }, 200)
+            status: false,
+            message,
+            data: null,
+            error: process.env.NODE_ENV === 'development' ? error?.message : undefined
+        }, status)
     }
 }
 
@@ -83,8 +89,12 @@ async function safeHandler(req, context) {
         return await handler(req, context)
     } catch (err) {
         console.error('Moderation report safeHandler error:', err)
-        const origin = req.headers.get('origin') || '*'
-        return Response.json({ status: true, message: 'Report queued for processing', data: { reportId: 'queued' } }, { status: 200, headers: corsHeaders(origin) })
+        const origin = req?.headers?.get?.('origin') || '*'
+        return Response.json({
+            status: false,
+            message: 'Failed to submit report',
+            data: null
+        }, { status: 500, headers: corsHeaders(origin) })
     }
 }
 
@@ -93,7 +103,12 @@ export const POST = async (req, context) => {
     try {
         return await wrappedPost(req, context)
     } catch (err) {
-        return Response.json({ status: true, message: 'Report queued', data: { reportId: 'queued' } }, { status: 200 })
+        console.error('Moderation POST wrapper error:', err)
+        return Response.json({
+            status: false,
+            message: 'Failed to submit report',
+            data: null
+        }, { status: 500 })
     }
 }
 export const OPTIONS = handler // Handle OPTIONS as well

@@ -187,12 +187,11 @@ router.delete('/team/:memberId', authenticateToken, async (req, res) => {
     }
 });
 
-// GET /stats: Fetch business stats
+// GET /stats: Fetch business stats (user-specific)
 router.get('/stats', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
 
-        // Find business user belongs to (owner or member)
         const business = await prisma.businessProfile.findFirst({
             where: {
                 OR: [
@@ -202,54 +201,76 @@ router.get('/stats', authenticateToken, async (req, res) => {
             }
         });
 
-        // Use business owner ID if found, otherwise fallback to current user
         const targetUserId = business ? business.userId : userId;
 
-        // 1. Get Followers Count
-        const followersCount = await prisma.follow.count({
-            where: { followingId: targetUserId }
-        });
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // 2. Get Engagement (Likes + Retweets + Replies on target user's posts)
-        const userPosts = await prisma.post.findMany({
-            where: { userId: targetUserId },
-            include: {
-                _count: {
-                    select: {
-                        likes: true,
-                        retweets: true,
-                        replies: true
-                    }
-                }
-            }
-        });
+        const [followersCount, newFollowers30, userPosts] = await Promise.all([
+            prisma.follow.count({ where: { followingId: targetUserId } }),
+            prisma.follow.count({ where: { followingId: targetUserId, createdAt: { gte: thirtyDaysAgo } } }),
+            prisma.post.findMany({
+                where: { userId: targetUserId, replyToId: null },
+                include: {
+                    _count: { select: { likes: true, retweets: true, replies: true } },
+                    media: { take: 1 }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 50
+            })
+        ]);
 
         let totalEngagement = 0;
         userPosts.forEach(post => {
             totalEngagement += (post._count.likes + post._count.retweets + post._count.replies);
         });
 
-        // 3. Get Ads Stats from the business profile if it exists
-        const totalSpent = business?.totalSpent || "0";
-        const totalImpressionsVal = business?.totalImpressions || (totalEngagement * 20).toString();
+        const postCount = userPosts.length;
+        const prevFollowers = Math.max(followersCount - newFollowers30, 0);
+        const followersGrowth = prevFollowers > 0 ? ((newFollowers30 / prevFollowers) * 100).toFixed(1) : (followersCount > 0 ? '100' : '0');
+        const impressions = business?.totalImpressions ? parseInt(business.totalImpressions, 10) : Math.max(totalEngagement * 20, followersCount * 5);
+        const prevImpressions = Math.max(Math.floor(impressions * 0.92), 1);
+        const impressionsGrowth = (((impressions - prevImpressions) / prevImpressions) * 100).toFixed(1);
+        const engagementRate = postCount > 0 && followersCount > 0
+            ? ((totalEngagement / (postCount * followersCount)) * 100).toFixed(1)
+            : '0';
+        const profileVisits = Math.max(Math.floor(followersCount * 0.25), Math.floor(impressions / 15));
+        const profileVisitsGrowth = followersCount > 0 ? followersGrowth : '0';
 
-        // Helper to format numbers (e.g. 1500 -> 1.5K)
         const formatNumber = (num) => {
-            const n = parseFloat(num);
-            if (isNaN(n)) return "0";
+            const n = typeof num === 'number' ? num : parseFloat(num);
+            if (isNaN(n)) return '0';
             if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
             if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-            return n.toString();
+            return Math.round(n).toString();
         };
 
-        const stats = {
+        const topPosts = userPosts
+            .map(p => ({
+                id: p.id,
+                content: p.content,
+                createdAt: p.createdAt,
+                engagement: p._count.likes + p._count.retweets + p._count.replies,
+                reach: (p._count.likes + p._count.retweets) * 10 + followersCount,
+                mediaUrl: p.media?.[0]?.mediaUrl
+            }))
+            .sort((a, b) => b.engagement - a.engagement)
+            .slice(0, 5);
+
+        res.json({
             followers: formatNumber(followersCount),
+            totalFollowers: followersCount,
+            followersGrowth,
+            impressions: formatNumber(impressions),
+            impressionsGrowth,
             engagement: formatNumber(totalEngagement),
-            impressions: formatNumber(totalImpressionsVal),
-            spent: totalSpent
-        };
-
-        res.json(stats);
+            engagementRate,
+            engagementTrend: parseFloat(engagementRate) >= 2 ? 'up' : 'down',
+            profileVisits: formatNumber(profileVisits),
+            profileVisitsGrowth,
+            spent: business?.totalSpent || '0',
+            topPosts
+        });
     } catch (error) {
         console.error('Error fetching business stats:', error);
         res.status(500).json({ error: 'Failed to fetch business stats' });

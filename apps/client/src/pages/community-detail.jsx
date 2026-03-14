@@ -1,19 +1,68 @@
 
 import { useParams, useNavigate } from "react-router-dom"
-import { COMMUNITIES_DATA } from "@/lib/dummy-data"
-import { ArrowLeft, MoreHorizontal, Search, Share } from "lucide-react"
+import { searchService } from "@/services/api"
+import { ArrowLeft, MoreHorizontal, Search, Share, Loader2 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PostCard } from "@/components/feed/post-card"
-import { useState } from "react"
-import { cn } from "@/lib/utils"
+import { useState, useEffect } from "react"
+import { toast } from "sonner"
 
 export default function CommunityDetail() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const community = COMMUNITIES_DATA.find(c => c.id === id)
-    const [isJoined, setIsJoined] = useState(community?.isJoined || false)
+    const [community, setCommunity] = useState(null)
+    const [loading, setLoading] = useState(true)
+    const [isJoined, setIsJoined] = useState(false)
+    const [joinLoading, setJoinLoading] = useState(false)
+
+    useEffect(() => {
+        const fetchCommunity = async () => {
+            if (!id) return
+            try {
+                const data = await searchService.getCommunity(id)
+                setCommunity(data)
+                setIsJoined(!!data?.isJoined)
+            } catch (err) {
+                console.error("Failed to load community", err)
+                toast.error("Failed to load community")
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchCommunity()
+    }, [id])
+
+    const handleJoinToggle = async () => {
+        if (!id || joinLoading) return
+        setJoinLoading(true)
+        const prev = isJoined
+        setIsJoined(!prev)
+        try {
+            if (prev) {
+                await searchService.leaveCommunity(id)
+                toast.success("Left community")
+            } else {
+                await searchService.joinCommunity(id)
+                toast.success("Joined community")
+            }
+            setCommunity(c => c ? { ...c, isJoined: !prev } : null)
+        } catch (err) {
+            setIsJoined(prev)
+            toast.error(err.response?.data?.error || "Failed to update")
+        } finally {
+            setJoinLoading(false)
+        }
+    }
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center min-h-[200px]">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
 
     if (!community) {
         return <div className="p-8 text-center">Community not found</div>
@@ -38,7 +87,7 @@ export default function CommunityDetail() {
 
             <div className="h-[200px] bg-zinc-800 w-full relative">
                 {community.banner && (
-                    <img src={community.banner} className="w-full h-full object-cover" />
+                    <img src={community.banner} className="w-full h-full object-cover" alt="" />
                 )}
             </div>
 
@@ -55,9 +104,10 @@ export default function CommunityDetail() {
                         <Button
                             variant={isJoined ? "outline" : "secondary"}
                             className="rounded-full font-bold w-[100px]"
-                            onClick={() => setIsJoined(!isJoined)}
+                            onClick={handleJoinToggle}
+                            disabled={joinLoading}
                         >
-                            {isJoined ? "Joined" : "Join"}
+                            {joinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isJoined ? "Joined" : "Join")}
                         </Button>
                     </div>
                 </div>
@@ -154,7 +204,7 @@ export default function CommunityDetail() {
                             community.rules.map((rule, idx) => (
                                 <div key={idx} className="p-4 border-b border-border/50 last:border-0">
                                     <div className="font-bold text-[15px] mb-1">Rule {idx + 1}</div>
-                                    <p className="text-muted-foreground text-[15px]">{rule}</p>
+                                    <p className="text-muted-foreground text-[15px]">{typeof rule === 'string' ? rule : String(rule)}</p>
                                 </div>
                             ))
                         ) : (

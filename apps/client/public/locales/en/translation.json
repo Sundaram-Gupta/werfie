@@ -51,7 +51,10 @@
         "time": "Time",
         "schedule_note": "Note: Scheduling requires backend support. Your post will be published immediately.",
         "poll_votes": "votes",
-        "poll_left": "left"
+        "poll_left": "left",
+        "posted": "Posted!",
+        "scheduled": "Post scheduled",
+        "media_attached": "Media attached"
     },
     "time": {
         "s": "s",
@@ -72,7 +75,8 @@
         "chat": "Chat",
         "profile": "Profile",
         "more": "More",
-        "post": "Post"
+        "post": "Post",
+        "bookmark": "Bookmarks"
     },
     "more_menu": {
         "creator_studio": "Creator Studio",
@@ -147,10 +151,17 @@
         "choose_conversation": "Choose from your existing conversations, or start a new one.",
         "new_chat": "New chat"
     },
+    "bookmarks": {
+        "title": "Bookmarks",
+        "subtitle": "Posts you saved",
+        "empty_title": "No bookmarks yet",
+        "empty_subtitle": "Save posts by tapping the bookmark icon on any post."
+    },
     "profile": {
         "posts_count": "posts",
         "edit_profile": "Edit profile",
         "joined": "Joined",
+        "birthdate": "Birth date",
         "following_count": "Following",
         "followers_count": "Followers",
         "message_user": "Message @{{handle}}",
@@ -168,7 +179,8 @@
         "following": "Following",
         "loading": "Loading...",
         "cancel": "Cancel",
-        "add": "Add"
+        "add": "Add",
+        "error": "Error"
     },
     "settings_page": {
         "username": "Username",

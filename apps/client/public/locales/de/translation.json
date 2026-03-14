@@ -25,7 +25,10 @@
         "be_first_to_post": "Sei der Erste, der etwas postet!",
         "everyone_can_reply": "Jeder kann antworten",
         "uploading": "Hochladen...",
-        "posting": "Posten..."
+        "posting": "Posten...",
+        "posted": "Gepostet!",
+        "scheduled": "Beitrag geplant",
+        "media_attached": "Medien angehängt"
     },
     "time": {
         "s": "s",
@@ -46,7 +49,8 @@
         "chat": "Nachrichten",
         "profile": "Profil",
         "more": "Mehr",
-        "post": "Posten"
+        "post": "Posten",
+        "bookmark": "Lesezeichen"
     },
     "more_menu": {
         "creator_studio": "Creator Studio",
@@ -73,9 +77,18 @@
         "no_trends": "Keine Trends gefunden",
         "no_suggestions": "Keine Vorschläge"
     },
+    "bookmarks": {
+        "title": "Lesezeichen",
+        "subtitle": "Gespeicherte Beiträge",
+        "empty_title": "Noch keine Lesezeichen",
+        "empty_subtitle": "Speichere Beiträge mit dem Lesezeichen-Symbol."
+    },
     "common": {
         "following": "Folge ich",
-        "loading": "Laden..."
+        "loading": "Laden...",
+        "cancel": "Abbrechen",
+        "add": "Hinzufügen",
+        "error": "Fehler"
     },
     "explore": {
         "tabs": {
@@ -125,6 +138,7 @@
         "posts_count": "Beiträge",
         "edit_profile": "Profil bearbeiten",
         "joined": "Beigetreten",
+        "birthdate": "Geburtsdatum",
         "following_count": "Folge ich",
         "followers_count": "Follower",
         "message_user": "Nachricht an @{{handle}}",

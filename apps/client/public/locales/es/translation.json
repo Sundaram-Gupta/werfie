@@ -25,7 +25,10 @@
         "be_first_to_post": "¡Sé el primero en publicar algo!",
         "everyone_can_reply": "Todos pueden responder",
         "uploading": "Subiendo...",
-        "posting": "Publicando..."
+        "posting": "Publicando...",
+        "posted": "¡Publicado!",
+        "scheduled": "Publicación programada",
+        "media_attached": "Medios adjuntos"
     },
     "time": {
         "s": "s",
@@ -46,7 +49,8 @@
         "chat": "Chat",
         "profile": "Perfil",
         "more": "Más",
-        "post": "Publicar"
+        "post": "Publicar",
+        "bookmark": "Marcadores"
     },
     "more_menu": {
         "creator_studio": "Creator Studio",
@@ -73,9 +77,18 @@
         "no_trends": "No se encontraron tendencias",
         "no_suggestions": "No hay sugerencias"
     },
+    "bookmarks": {
+        "title": "Marcadores",
+        "subtitle": "Publicaciones guardadas",
+        "empty_title": "Aún no hay marcadores",
+        "empty_subtitle": "Guarda publicaciones tocando el icono de marcador."
+    },
     "common": {
         "following": "Siguiendo",
-        "loading": "Cargando..."
+        "loading": "Cargando...",
+        "cancel": "Cancelar",
+        "add": "Añadir",
+        "error": "Error"
     },
     "explore": {
         "tabs": {
@@ -125,6 +138,7 @@
         "posts_count": "publicaciones",
         "edit_profile": "Editar perfil",
         "joined": "Se unió",
+        "birthdate": "Fecha de nacimiento",
         "following_count": "Siguiendo",
         "followers_count": "Seguidores",
         "message_user": "Mensaje @{{handle}}",

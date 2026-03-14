@@ -1,4 +1,4 @@
-import { ArrowLeft, MoreHorizontal, Calendar, Link as LinkIcon, MapPin, Mail, Loader2, MessageCircle, BadgeCheck } from "lucide-react"
+import { ArrowLeft, MoreHorizontal, Calendar, Link as LinkIcon, MapPin, Mail, Loader2, MessageCircle, BadgeCheck, User } from "lucide-react"
 import { toast } from "sonner"
 import { useNavigate, useParams } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,7 +19,7 @@ export default function Profile() {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const { userId } = useParams() // Get userId from URL
-    const { user: currentUser, updateUser } = useAuth()
+    const { user: currentUser, updateUser, loading: authLoading } = useAuth()
     const [profile, setProfile] = useState(null)
     const [posts, setPosts] = useState([])
     const [loading, setLoading] = useState(true)
@@ -114,8 +114,12 @@ export default function Profile() {
     useEffect(() => {
         if (profileUserId) {
             fetchProfile()
+        } else if (!authLoading) {
+            // Auth ready but no profile to show: /profile with no param and no currentUser.id
+            setLoading(false)
+            setError("Unable to load profile")
         }
-    }, [profileUserId]) // Refetch when userId changes
+    }, [profileUserId, authLoading])
 
     const handleProfileUpdate = (updatedProfile) => {
         console.log('ProfilePage: handleProfileUpdate called with', updatedProfile)
@@ -138,7 +142,25 @@ export default function Profile() {
         return <div className="flex justify-center items-center h-screen"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
     }
 
-    if (!profile) return <div className="text-center p-10 text-red-500">Profile not found</div>
+    if (!profile) {
+        const handleRetry = () => {
+            if (profileUserId) {
+                setError(null)
+                setLoading(true)
+                fetchProfile()
+            }
+        }
+        return (
+            <div className="text-center p-10">
+                <p className="text-red-500 mb-4">{error || "Profile not found"}</p>
+                {profileUserId && (
+                    <Button variant="outline" onClick={handleRetry}>
+                        {t('common.retry', 'Retry')}
+                    </Button>
+                )}
+            </div>
+        )
+    }
 
     const { profile: userProfile, stats } = profile
     const name = userProfile?.name || profile.name || "User"
@@ -146,6 +168,8 @@ export default function Profile() {
     const bio = userProfile?.bio || ""
     const location = userProfile?.location || ""
     const website = userProfile?.website || ""
+    const gender = userProfile?.gender || ""
+    const birthdate = userProfile?.birthdate ? new Date(userProfile.birthdate) : null
 
     const joinDate = userProfile?.createdAt ? new Date(userProfile.createdAt) : new Date() 
     const avatar = userProfile?.avatar || "/websplash.png"
@@ -243,6 +267,18 @@ export default function Profile() {
                         <div className="flex items-center gap-1">
                             <LinkIcon className="w-[18px] h-[18px]" />
                             <a href={`https://${website}`} target="_blank" className="text-primary hover:underline">{website}</a>
+                        </div>
+                    )}
+                    {gender && (
+                        <div className="flex items-center gap-1">
+                            <User className="w-[18px] h-[18px]" />
+                            <span>{gender.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+                        </div>
+                    )}
+                    {birthdate && (
+                        <div className="flex items-center gap-1">
+                            <Calendar className="w-[18px] h-[18px]" />
+                            <span>{t('profile.birthdate', 'Birth date')}: {birthdate.toLocaleDateString()}</span>
                         </div>
                     )}
                     <div className="flex items-center gap-1">

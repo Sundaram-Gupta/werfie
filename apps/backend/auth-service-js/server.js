@@ -13,8 +13,8 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = 3001;
 
-// Service targets - use env vars for flexibility, fallback to defaults
-const USER_SERVICE_TARGET = process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 3002}`;
+// Service targets - use env vars for flexibility, fallback to defaults (no trailing slash)
+const USER_SERVICE_TARGET = (process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 3002}`).replace(/\/+$/, '');
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -55,12 +55,53 @@ mainServer.use(cors({
     origin: true, // Reflects the request origin, functionality equivalent to allow all but with credentials support
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id']
 }));
+
+// Skip body parsing for /api/auth/* – Next.js API routes need the raw stream
+mainServer.use((req, res, next) => {
+    if (req.url && req.url.startsWith('/api/auth')) {
+        return next();
+    }
+    express.json()(req, res, next);
+});
 
 // Health check - always 200 when gateway is up (before proxy/catch-all)
 mainServer.get('/api/health', (req, res) => {
     res.status(200).json({ status: true, message: 'Gateway healthy', data: { service: 'gateway', timestamp: new Date().toISOString() } });
+});
+
+// Werfie AI proxy - avoids CORS by calling AI Worker from server
+const AI_WORKER_URL = process.env.AI_WORKER_URL || process.env.VITE_AI_WORKER_URL || 'https://ai-worker.mohit-sharma-150.workers.dev';
+const AI_WORKER_API_KEY = process.env.AI_WORKER_API_KEY || process.env.VITE_AI_WORKER_API_KEY || '';
+mainServer.post('/api/ai/chat', async (req, res) => {
+    if (!AI_WORKER_API_KEY) {
+        return res.status(500).json({ status: false, message: 'AI is not configured', data: null });
+    }
+    const text = req.body?.text || '';
+    if (!text) {
+        return res.status(400).json({ status: false, message: 'Missing text', data: null });
+    }
+    try {
+        const r = await fetch(AI_WORKER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': AI_WORKER_API_KEY,
+            },
+            body: JSON.stringify({ contents: [{ parts: [{ text }] }] })
+        });
+        if (!r.ok) {
+            const err = await r.text();
+            return res.status(502).json({ status: false, message: err || 'AI request failed', data: null });
+        }
+        const data = await r.json();
+        const result = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from AI.';
+        res.json({ status: true, message: 'Success', data: { text: result } });
+    } catch (e) {
+        console.error('[Gateway] AI proxy error:', e);
+        res.status(502).json({ status: false, message: e?.message || 'Failed to reach AI service', data: null });
+    }
 });
 
 // Logging middleware
@@ -233,13 +274,23 @@ mainServer.all('/api/creator-studio*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3009' });
 });
 
-// 4. Other Microservices Catch-all (timeline/notifications have explicit routes above)
+// Monetization (port 3014) - requires auth for stats/profile/tiers
+mainServer.all('/api/monetization*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3014' });
+});
+
+// Settings (user service) - DB-backed per-user settings, requires auth
+mainServer.all('/api/settings*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
+});
+
+// 4. Other Microservices Catch-all (monetization, settings have explicit routes above)
 const microservices = [
     { path: '/api/search', port: 3006 },
     { path: '/api/analytics', port: 3009 },
     { path: '/api/moderation', port: 3010 },
-    { path: '/api/settings', port: 3011 },
-    { path: '/api/monetization', port: 3014 },
 ];
 
 microservices.forEach(svc => {
