@@ -36,6 +36,7 @@ export async function PATCH(
 
     } catch (error: any) {
         console.error('Update Role Error:', error);
+        if (error?.code === 'P2025') return apiError('User not found', 404);
         return apiError('Failed to update user role', 500);
     }
 }

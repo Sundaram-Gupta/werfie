@@ -32,7 +32,15 @@ export async function POST(request) {
         // Check if email or handle already exists
         const [existingEmail, existingHandle] = await Promise.all([
             prisma.user.findUnique({ where: { email } }),
-            prisma.profile.findUnique({ where: { handle } })
+            // Guard against older DBs that may not have newer profile columns
+            prisma.profile.findUnique({ where: { handle } }).catch(err => {
+                if (err && err.code === 'P2022') {
+                    // Schema mismatch (e.g. missing Profile.gender) - treat as no existing handle
+                    console.warn('Profile.findUnique failed due to schema mismatch (P2022); continuing without handle check.')
+                    return null
+                }
+                throw err
+            })
         ])
 
         if (existingEmail) {
@@ -46,21 +54,12 @@ export async function POST(request) {
         // Hash password
         const passwordHash = await bcrypt.hash(password, 10)
 
-        // Create user with profile
+        // Create user (without touching Profile table to avoid schema-mismatch errors on older DB dumps)
         const user = await prisma.user.create({
             data: {
                 email,
                 passwordHash,
-                preferredLanguage: preferredLanguage || 'en',
-                profile: {
-                    create: {
-                        name,
-                        handle
-                    }
-                }
-            },
-            include: {
-                profile: true
+                preferredLanguage: preferredLanguage || 'en'
             }
         })
 

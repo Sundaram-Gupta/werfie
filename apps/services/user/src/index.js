@@ -25,6 +25,8 @@ app.use((req, res, next) => {
     next();
 });
 
+const { PROFILE_SELECT } = require('./constants');
+
 const DEFAULT_SETTINGS = {
     theme: 'system',
     language: 'en',
@@ -37,6 +39,46 @@ const DEFAULT_SETTINGS = {
     },
     display: { darkMode: true },
 };
+
+/**
+ * Normalizes user object to ensure it has name and handle
+ */
+function normalizeUserRecord(user) {
+    if (!user) return null;
+    const { passwordHash, ...safeUser } = user;
+    
+    if (!safeUser.profile) {
+        const handle = safeUser.email ? safeUser.email.split('@')[0] : 'user';
+        safeUser.profile = {
+            name: 'User',
+            handle: handle,
+            bio: null,
+            avatar: null,
+            banner: null,
+            location: null,
+            website: null,
+            birthdate: null,
+            gender: null,
+            verified: false
+        };
+    } else {
+        // Ensure all expected fields exist on profile
+        safeUser.profile = {
+            ...safeUser.profile,
+            name: safeUser.profile.name || 'User',
+            handle: safeUser.profile.handle || (safeUser.email ? safeUser.email.split('@')[0] : 'user'),
+            verified: safeUser.profile.verified ?? false
+        };
+    }
+    
+    // Virtual fields for backward compatibility at root level
+    safeUser.name = safeUser.profile.name;
+    safeUser.handle = safeUser.profile.handle;
+    safeUser.avatar = safeUser.profile.avatar;
+    safeUser.verified = safeUser.profile.verified;
+    
+    return safeUser;
+}
 
 // Settings - DB-backed per-user, requires x-user-id from gateway
 app.get('/api/settings', async (req, res) => {
@@ -99,9 +141,11 @@ app.put('/api/settings', async (req, res) => {
     }
 });
 
-// Suggestions - match BEFORE :id routes so /api/users/suggestions is not treated as :id=suggestions
+// Suggestions - paginated (page, limit 50). Match BEFORE :id routes so /api/users/suggestions is not treated as :id=suggestions
 app.get('/api/users/suggestions', async (req, res) => {
-    const { limit = 3 } = req.query;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const skip = (page - 1) * limit;
     let currentUserId = null;
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -121,17 +165,23 @@ app.get('/api/users/suggestions', async (req, res) => {
             });
             excludeIds.push(...following.map(f => f.followingId));
         }
-        const users = await prisma.user.findMany({
-            where: { id: { notIn: excludeIds } },
-            take: Math.min(parseInt(limit) || 50, 50),
-            orderBy: { createdAt: 'desc' },
-            include: { profile: true }
+        const where = excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {};
+        const [users, total] = await Promise.all([
+            prisma.user.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+                include: { profile: { select: PROFILE_SELECT } }
+            }),
+            prisma.user.count({ where })
+        ]);
+        const safeUsers = users.map(normalizeUserRecord);
+        const totalPages = Math.ceil(total / limit);
+        res.json({
+            users: safeUsers,
+            pagination: { total, page, totalPages, limit }
         });
-        const safeUsers = users.map(user => {
-            const { passwordHash, ...safe } = user;
-            return safe;
-        });
-        res.json(safeUsers);
     } catch (error) {
         console.error('Suggestions Error:', error);
         res.status(500).json({ error: 'Failed to fetch suggestions' });
@@ -159,17 +209,30 @@ app.get('/api/users/:id/followers', async (req, res) => {
     const { id } = req.params;
     const { limit = 20, offset = 0 } = req.query;
     try {
-        const followers = await prisma.follow.findMany({
-            where: { followingId: id },
-            include: {
-                follower: {
-                    include: { profile: true }
-                }
-            },
-            take: parseInt(limit) || 500,
-            skip: parseInt(offset) || 0,
-            orderBy: { createdAt: 'desc' }
-        });
+        let followers;
+        try {
+            followers = await prisma.follow.findMany({
+                where: { followingId: id },
+                include: {
+                    follower: {
+                        include: { profile: { select: PROFILE_SELECT } }
+                    }
+                },
+                take: parseInt(limit) || 500,
+                skip: parseInt(offset) || 0,
+                orderBy: { createdAt: 'desc' }
+            });
+        } catch (err) {
+            if (err?.code === 'P2022') {
+                followers = await prisma.follow.findMany({
+                    where: { followingId: id },
+                    include: { follower: { include: { profile: true } } },
+                    take: parseInt(limit) || 500,
+                    skip: parseInt(offset) || 0,
+                    orderBy: { createdAt: 'desc' }
+                });
+            } else throw err;
+        }
         const users = followers.map(f => {
             const { passwordHash, ...safeUser } = f.follower;
             return safeUser;
@@ -231,26 +294,11 @@ app.get('/profile', authenticateToken, async (req, res) => {
         const user = await prisma.user.findUnique({
             where: { id: req.user.userId },
             include: {
-                profile: true,
+                profile: { select: PROFILE_SELECT },
                 institutionalProfile: true
             }
         });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        // Ensure profile includes location, website, birthdate, gender in response
-        const { passwordHash, ...safeUser } = user;
-        safeUser.profile = safeUser.profile ? {
-            ...safeUser.profile,
-            location: safeUser.profile.location ?? null,
-            website: safeUser.profile.website ?? null,
-            birthdate: safeUser.profile.birthdate ?? null,
-            gender: safeUser.profile.gender ?? null,
-        } : {
-            location: null,
-            website: null,
-            birthdate: null,
-            gender: null,
-        };
-        res.json(safeUser);
+        res.json(normalizeUserRecord(user));
     } catch (error) {
         console.error('Profile Error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -263,15 +311,12 @@ app.get('/profile/:id', async (req, res) => {
         const user = await prisma.user.findUnique({
             where: { id: req.params.id },
             include: {
-                profile: true,
+                profile: { select: PROFILE_SELECT },
                 institutionalProfile: true
             }
         });
         if (!user) return res.status(404).json({ error: 'User not found' });
-
-        // Return safe user data
-        const { passwordHash, ...safeUser } = user;
-        res.json(safeUser);
+        res.json(normalizeUserRecord(user));
     } catch (error) {
         console.error('Profile by ID Error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -380,7 +425,7 @@ app.get('/:id/followers', async (req, res) => {
             where: { followingId: id },
             include: {
                 follower: {
-                    include: { profile: true }
+                    include: { profile: { select: PROFILE_SELECT } }
                 }
             },
             take: parseInt(limit),
@@ -410,7 +455,7 @@ app.get('/:id/following', async (req, res) => {
             where: { followerId: id },
             include: {
                 following: {
-                    include: { profile: true }
+                    include: { profile: { select: PROFILE_SELECT } }
                 }
             },
             take: parseInt(limit),
@@ -461,14 +506,30 @@ app.get('/suggestions', async (req, res) => {
             excludeIds.push(...following.map(f => f.followingId));
         }
 
-        const users = await prisma.user.findMany({
-            where: {
-                id: { notIn: excludeIds }
-            },
-            take: parseInt(limit),
-            orderBy: { createdAt: 'desc' },
-            include: { profile: true }
-        });
+        let users = [];
+        try {
+            users = await prisma.user.findMany({
+                where: {
+                    id: { notIn: excludeIds }
+                },
+                take: parseInt(limit),
+                orderBy: { createdAt: 'desc' },
+                include: { profile: { select: PROFILE_SELECT } }
+            });
+        } catch (err) {
+            // Handle schema mismatch gracefully (e.g. Profile.gender missing)
+            if (err && err.code === 'P2022') {
+                users = await prisma.user.findMany({
+                    where: {
+                        id: { notIn: excludeIds }
+                    },
+                    take: parseInt(limit),
+                    orderBy: { createdAt: 'desc' }
+                });
+            } else {
+                throw err;
+            }
+        }
 
         const safeUsers = users.map(user => {
             const { passwordHash, ...safe } = user;
@@ -491,18 +552,34 @@ app.get('/search', async (req, res) => {
     }
 
     try {
-        const users = await prisma.user.findMany({
-            where: {
-                profile: {
-                    OR: [
-                        { name: { contains: q, mode: 'insensitive' } },
-                        { handle: { contains: q, mode: 'insensitive' } }
-                    ]
-                }
-            },
-            include: { profile: true },
-            take: parseInt(limit)
-        });
+        let users = [];
+        try {
+            users = await prisma.user.findMany({
+                where: {
+                    profile: {
+                        OR: [
+                            { name: { contains: q, mode: 'insensitive' } },
+                            { handle: { contains: q, mode: 'insensitive' } }
+                        ]
+                    }
+                },
+                include: { profile: { select: PROFILE_SELECT } },
+                take: parseInt(limit)
+            });
+        } catch (err) {
+            // If profile-based search fails due to schema mismatch (e.g. Profile.gender missing), fall back to email search
+            if (err && err.code === 'P2022') {
+                users = await prisma.user.findMany({
+                    where: {
+                        email: { contains: q, mode: 'insensitive' }
+                    },
+                    include: { profile: { select: PROFILE_SELECT } },
+                    take: parseInt(limit)
+                });
+            } else {
+                throw err;
+            }
+        }
 
         const safeUsers = users.map(user => {
             const { passwordHash, ...safe } = user;
@@ -533,22 +610,30 @@ app.get('/', async (req, res) => {
     }
 
     try {
-        const users = await prisma.user.findMany({
-            where: {
-                id: { in: userIds }
-            },
-            include: {
-                profile: true
+        let users = [];
+        try {
+            users = await prisma.user.findMany({
+                where: {
+                    id: { in: userIds }
+                },
+                include: {
+                    profile: { select: PROFILE_SELECT }
+                }
+            });
+        } catch (err) {
+            // Handle schema mismatch gracefully (e.g. Profile.gender missing in older DB)
+            if (err && err.code === 'P2022') {
+                users = await prisma.user.findMany({
+                    where: {
+                        id: { in: userIds }
+                    }
+                });
+            } else {
+                throw err;
             }
-        });
+        }
 
-        // Sanitize
-        const safeUsers = users.map(user => {
-            const { passwordHash, ...safe } = user;
-            return safe;
-        });
-
-        res.json(safeUsers);
+        res.json(users.map(normalizeUserRecord));
     } catch (error) {
         console.error('Bulk Fetch Error:', error?.message || error, error?.stack);
         res.status(500).json({
@@ -561,21 +646,35 @@ app.get('/', async (req, res) => {
 // Get User by ID
 app.get('/:id', async (req, res) => {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: req.params.id },
-            include: {
-                profile: true,
-                _count: {
-                    select: { followers: true, following: true, posts: true }
+        let user = null;
+        try {
+            user = await prisma.user.findUnique({
+                where: { id: req.params.id },
+                include: {
+                    profile: { select: PROFILE_SELECT },
+                    _count: {
+                        select: { followers: true, following: true, posts: true }
+                    }
                 }
+            });
+        } catch (err) {
+            // Handle schema mismatch gracefully (e.g. Profile.gender missing)
+            if (err && err.code === 'P2022') {
+                user = await prisma.user.findUnique({
+                    where: { id: req.params.id },
+                    include: {
+                        _count: {
+                            select: { followers: true, following: true, posts: true }
+                        }
+                    }
+                });
+            } else {
+                throw err;
             }
-        });
+        }
 
         if (!user) return res.status(404).json({ error: 'User not found' });
-
-        // Sanitize
-        const { passwordHash, ...safeUser } = user;
-        res.json(safeUser);
+        res.json(normalizeUserRecord(user));
     } catch (error) {
         console.error('Get User Error:', error);
         res.status(500).json({ error: 'Server error' });

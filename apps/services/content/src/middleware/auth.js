@@ -37,4 +37,35 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// Optional auth: set req.user when token present, but never return 401 (for public GET /api/posts)
+const optionalAuthenticateToken = (req, res, next) => {
+    if (req.headers['x-verified-gateway'] === 'true' && req.headers['x-user-id']) {
+        req.user = {
+            userId: req.headers['x-user-id'],
+            id: req.headers['x-user-id'],
+            email: req.headers['x-user-email'] || ''
+        };
+        return next();
+    }
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) {
+        if (req.headers['x-user-id']) {
+            req.user = { userId: req.headers['x-user-id'], id: req.headers['x-user-id'] };
+        } else {
+            req.user = null;
+        }
+        return next();
+    }
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            req.user = null;
+            return next();
+        }
+        req.user = { ...user, userId: user.sub || user.id || user.userId, id: user.sub || user.id || user.userId };
+        next();
+    });
+};
+
 module.exports = authenticateToken;
+module.exports.optionalAuthenticateToken = optionalAuthenticateToken;

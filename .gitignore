@@ -52,6 +52,12 @@ public/uploads/
 *.sqlite
 *.sqlite3
 
+# SQL / DB dumps (often multi-GB; GitHub max 100MB per file)
+xclone_db_dump*.sql
+*_db_dump*.sql
+db_werfiedb*/
+**/db_werfiedb*/
+
 # Prisma
 prisma/migrations/
 

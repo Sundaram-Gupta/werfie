@@ -7,8 +7,9 @@ import { Activity, AlertTriangle, TrendingUp, Download, Eye, Globe } from 'lucid
 import { getDashboardMetrics, getMarketSignals, exportToCSV, exportToJSON } from '../services/enterprise.api';
 import AlertRuleBuilder from '../components/enterprise/AlertRuleBuilder';
 import { io } from 'socket.io-client';
+import { getContentServiceUrl } from '@/lib/api';
 
-const ENTERPRISE_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003';
+const ENTERPRISE_SERVICE_URL = getContentServiceUrl();
 
 export default function EnterpriseDashboard() {
     const [metrics, setMetrics] = useState(null);

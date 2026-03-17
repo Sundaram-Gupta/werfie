@@ -31,7 +31,12 @@ export async function GET() {
  */
 export async function PUT(request) {
     try {
-        const body = await request.json().catch(() => ({}));
+        let body;
+        try {
+            body = await request.json();
+        } catch {
+            return Response.json({ status: false, message: 'Invalid JSON body', data: null }, { status: 400 });
+        }
         const theme = body.theme ?? DEFAULT_SETTINGS.theme;
         const language = body.language ?? DEFAULT_SETTINGS.language;
         const mutedFilters = body.notifications?.mutedFilters ?? {};

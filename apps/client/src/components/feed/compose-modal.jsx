@@ -114,7 +114,8 @@ export function ComposeModal({ children }) {
         }
     }
 
-    const userName = user?.profile?.name || user?.name || 'User'
+    const userHandle = user?.profile?.handle || user?.handle || user?.email?.split('@')[0] || 'user'
+    const userName = user?.profile?.name || user?.name || (userHandle ? userHandle.charAt(0).toUpperCase() + userHandle.slice(1) : 'User')
     const userAvatar = user?.profile?.avatar || user?.avatar || '/websplash.png'
 
     return (

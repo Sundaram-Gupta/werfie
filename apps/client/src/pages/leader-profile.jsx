@@ -3,9 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ArrowLeft, BadgeCheck, Globe, TrendingUp, Radio } from 'lucide-react';
 import { AnnouncementFeedCard } from '../components/feed/announcement-feed-card';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const CONTENT_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003';
+import { getApiBase } from '@/lib/api';
 
 export default function LeaderProfilePage() {
     const { id } = useParams();
@@ -18,11 +16,12 @@ export default function LeaderProfilePage() {
         const fetchLeaderData = async () => {
             try {
                 // Fetch Leader details from User Service
-                const leaderRes = await axios.get(`${API_URL}/api/users/leaders/${id}`);
+                const base = getApiBase();
+                const leaderRes = await axios.get(`${base}/api/users/leaders/${id}`);
                 setLeader(leaderRes.data);
 
                 // Fetch Leader Posts from Content Service
-                const postsRes = await axios.get(`${CONTENT_SERVICE_URL}/feed/leaders/${id}/posts`);
+                const postsRes = await axios.get(`${base}/api/feed/leaders/${id}/posts`);
                 setPosts(postsRes.data);
             } catch (error) {
                 console.error("Failed to fetch leader profile:", error);

@@ -71,9 +71,11 @@ export const authService = {
         localStorage.removeItem('user')
     },
 
-    getFeed: async () => {
-        // Use the posts-prefixed path to ensure we hit the content service via gateway proxy
-        const { data } = await api.get('/api/posts/timeline/home')
+    getFeed: async (params = {}) => {
+        const { limit = 30, cursor, random } = params
+        const { data } = await api.get('/api/posts/timeline/home', {
+            params: { limit, ...(cursor ? { cursor } : {}), ...(random ? { random: 1 } : {}) }
+        })
         return data
     },
     changePassword: async (currentPassword, newPassword) => {
@@ -308,9 +310,10 @@ export const userService = {
         return data
     },
 
-    // Get suggestions
-    getSuggestions: async (limit = 3) => {
-        const { data } = await api.get('/api/users/suggestions', { params: { limit } })
+    // Get suggestions (paginated: page, limit; default limit 50)
+    getSuggestions: async (params = {}) => {
+        const { limit = 50, page = 1 } = params
+        const { data } = await api.get('/api/users/suggestions', { params: { limit, page } })
         return data
     },
 
@@ -394,9 +397,10 @@ export const searchService = {
     },
 
 
-    // Get Trends
-    getTrends: async () => {
-        const { data } = await api.get('/api/trends', { params: { limit: 20 } })
+    // Get Trends (spike-based hashtags from posts; optional region for "Trending in X")
+    getTrends: async (params = {}) => {
+        const { limit = 20, region } = params
+        const { data } = await api.get('/api/trends', { params: { limit, ...(region ? { region } : {}) } })
         return Array.isArray(data) ? data : []
     },
 
@@ -747,7 +751,7 @@ export const announcementService = {
 export const werfieAiService = {
     chat: async (text) => {
         const base = import.meta.env.VITE_API_URL || ''
-        const url = base ? `${base.replace(/\/$/, '')}/ai/chat` : '/api/ai/chat'
+        const url = base ? `${base.replace(/\/$/, '')}/api/ai/chat` : '/api/ai/chat'
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

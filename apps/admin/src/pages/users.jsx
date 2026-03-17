@@ -28,11 +28,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { MoreHorizontal, Shield, Ban, CheckCircle, Search, Eye, Trash2, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, Shield, Ban, CheckCircle, Search, Eye, Trash2, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
+const PAGE_SIZE = 20;
 
 export default function UsersPage() {
     const [users, setUsers] = useState([]);
+    const [totalUsers, setTotalUsers] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
@@ -41,20 +46,27 @@ export default function UsersPage() {
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await userService.getUsers(1, 10, search);
+            const data = await userService.getUsers(currentPage, PAGE_SIZE, search);
             const usersList = Array.isArray(data) ? data : data?.users ?? data?.data ?? [];
             setUsers(usersList);
+            const pag = data?.pagination;
+            setTotalUsers(pag?.totalUsers ?? usersList.length);
+            setTotalPages(pag?.totalPages ?? 1);
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
-    }, [search]);
+    }, [currentPage, search]);
 
     useEffect(() => {
-        const timer = setTimeout(fetchUsers, 300);
+        const timer = setTimeout(fetchUsers, search ? 300 : 0);
         return () => clearTimeout(timer);
     }, [fetchUsers]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search]);
 
     useRefreshOnFocus(fetchUsers);
 
@@ -105,11 +117,29 @@ export default function UsersPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-                <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+                    {totalUsers !== null && (
+                        <p className="text-muted-foreground mt-1">
+                            Total users: <span className="font-semibold text-foreground">{totalUsers.toLocaleString()}</span>
+                            {search && (
+                                <span className="ml-2 text-sm">
+                                    (showing {users.length} match{users.length !== 1 ? 'es' : ''})
+                                </span>
+                            )}
+                        </p>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                        Page {currentPage} of {totalPages}
+                        {totalUsers != null && ` • ${totalUsers.toLocaleString()} total`}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                     Refresh
                 </Button>
+                </div>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -240,6 +270,54 @@ export default function UsersPage() {
                     </TableBody>
                 </Table>
             </div>
+
+            {(totalPages > 1 || (totalUsers != null && totalUsers > 0)) && (
+                <div className="flex items-center justify-between px-2">
+                    <p className="text-sm text-muted-foreground">
+                        {totalUsers > 0
+                            ? `Showing ${((currentPage - 1) * PAGE_SIZE) + 1}–${Math.min(currentPage * PAGE_SIZE, totalUsers)} of ${totalUsers.toLocaleString()} users`
+                            : `0 users`}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage <= 1 || loading}
+                        >
+                            <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                        </Button>
+                        <div className="flex items-center gap-1">
+                            {(() => {
+                                const maxButtons = 5;
+                                let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                                let end = Math.min(totalPages, start + maxButtons - 1);
+                                if (end - start + 1 < maxButtons) start = Math.max(1, end - maxButtons + 1);
+                                return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((page) => (
+                                    <Button
+                                        key={page}
+                                        variant={currentPage === page ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="w-9 h-9 p-0"
+                                        onClick={() => setCurrentPage(page)}
+                                        disabled={loading}
+                                    >
+                                        {page}
+                                    </Button>
+                                ));
+                            })()}
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage >= totalPages || loading}
+                        >
+                            Next <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent className="sm:max-w-[425px]">

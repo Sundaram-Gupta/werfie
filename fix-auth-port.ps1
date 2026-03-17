@@ -7,9 +7,9 @@ if ($connections) {
     $pids = $connections | ForEach-Object {
         if ($_ -match '\s+(\d+)\s*$') { $matches[1] }
     } | Select-Object -Unique
-    foreach ($pid in $pids) {
-        Write-Host "Killing process $pid using port $port"
-        taskkill /PID $pid /F 2>$null
+    foreach ($processId in $pids) {
+        Write-Host "Killing process $processId using port $port"
+        taskkill /PID $processId /F 2>$null
     }
     Write-Host "Port $port freed. Run: pm2 restart auth-service"
 } else {

@@ -1,14 +1,28 @@
 import api from '@/lib/axios';
 
-export const getPosts = async (filter = 'all') => {
+/** Get total post count only (uncapped, for display e.g. 103.5K). Returns real total from DB. */
+export const getPostsCount = async () => {
+    try {
+        const response = await api.get('/admin/posts/count');
+        const data = response?.data;
+        const raw = data?.totalPosts ?? data?.total ?? (typeof data === 'number' ? data : null);
+        const n = raw != null ? Number(raw) : NaN;
+        return Number.isFinite(n) ? n : 0;
+    } catch (error) {
+        console.error('Error fetching posts count:', error);
+        return 0;
+    }
+};
+
+export const getPosts = async (filter = 'all', page = 1, limit = 20) => {
     try {
         const response = await api.get('/admin/posts', {
-            params: { filter }
+            params: { filter, page, limit }
         });
         return response.data;
     } catch (error) {
         console.error('Error fetching posts:', error);
-        return [];
+        return { posts: [], pagination: { totalPosts: 0, currentPage: 1, totalPages: 0, limit } };
     }
 };
 

@@ -21,11 +21,11 @@ console.log('[MessagingService] Starting server in parallel with Next.js prepara
 const expressApp = express()
 const httpServer = createServer()
 
-// 1. CORS Middleware - Global
+// 1. CORS Middleware - Global (allow gateway + client for Swagger & app)
 const corsOptions = {
-    origin: 'http://localhost:5173',
+    origin: ['http://localhost:5173', 'http://localhost:3001', 'http://127.0.0.1:3001'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token', 'x-user-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token', 'x-user-id', 'x-verified-gateway', 'x-user-email'],
     credentials: true,
     optionsSuccessStatus: 200
 }
@@ -64,20 +64,47 @@ httpServer.on('request', (req, res) => {
     expressApp(req, res);
 });
 
-// 5. Start Server
-httpServer.listen(port, '127.0.0.1', (err) => {
-    if (err) {
-        console.error('[MessagingService] Failed to listen:', err.message)
-        return
-    }
-    console.log(`> Messaging Service listening on http://127.0.0.1:${port}`)
+// 5. Start Server (retry on EADDRINUSE so PM2 restarts don't fail)
+const MAX_LISTEN_RETRIES = 5
+const LISTEN_RETRY_MS = 3000
+let listenRetries = 0
 
-    // Prepare app in background
-    console.log('[MessagingService] Preparing Next.js in background...')
-    nextApp.prepare().then(() => {
-        isAppPrepared = true
-        console.log('[MessagingService] Next.js prepared.')
-    }).catch(err => {
-        console.error('[MessagingService] Next.js preparation FAILED:', err.message)
+function startListening() {
+    httpServer.once('error', (err) => {
+        if (err.code === 'EADDRINUSE' && listenRetries < MAX_LISTEN_RETRIES) {
+            listenRetries++
+            console.warn(`[MessagingService] Port ${port} in use, retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`)
+            httpServer.close(() => setTimeout(startListening, LISTEN_RETRY_MS))
+            return
+        }
+        console.error(`[MessagingService] Port ${port} in use or error:`, err.message)
+        process.exit(1)
     })
-})
+
+    httpServer.listen(port, '0.0.0.0', (err) => {
+        if (err) {
+            if (err.code === 'EADDRINUSE' && listenRetries < MAX_LISTEN_RETRIES) {
+                listenRetries++
+                console.warn(`[MessagingService] Port ${port} in use, retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`)
+                setTimeout(startListening, LISTEN_RETRY_MS)
+                return
+            }
+            console.error('[MessagingService] Failed to listen:', err.message)
+            process.exit(1)
+            return
+        }
+        httpServer.removeAllListeners('error')
+        console.log(`> Messaging Service listening on http://127.0.0.1:${port}`)
+
+        // Prepare app in background
+        console.log('[MessagingService] Preparing Next.js in background...')
+        nextApp.prepare().then(() => {
+            isAppPrepared = true
+            console.log('[MessagingService] Next.js prepared.')
+        }).catch(e => {
+            console.error('[MessagingService] Next.js preparation FAILED:', e.message)
+        })
+    })
+}
+
+startListening()

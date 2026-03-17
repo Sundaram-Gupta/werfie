@@ -38,6 +38,8 @@ export async function PATCH(
 
     } catch (error: any) {
         console.error('Update Verification Error:', error);
+        if (error?.code === 'P2025') return apiError('User not found', 404);
+        if (error?.code === 'P2022') return apiError('Profile schema mismatch - verification not supported', 500);
         return apiError('Failed to update user verification status', 500);
     }
 }

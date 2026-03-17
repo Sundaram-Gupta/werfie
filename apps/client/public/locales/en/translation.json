@@ -7,8 +7,8 @@
     "account": "Account",
     "privacy_safety": "Privacy and Safety",
     "display": "Display",
-    "notifications": "Notifications",
     "data_usage": "Data Usage",
+
     "dark_mode": "Dark mode",
     "feed": {
         "title": "Home",
@@ -128,7 +128,8 @@
             "repost": "reposted your post",
             "follow": "followed you",
             "reply": "replied to your post",
-            "mention": "mentioned you"
+            "mention": "mentioned you",
+            "unknown_user": "Unknown user"
         }
     },
     "follow": {

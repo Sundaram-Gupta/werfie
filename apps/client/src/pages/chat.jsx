@@ -23,10 +23,11 @@ import {
 
 const normalizeUser = (user) => {
     if (!user) return null;
+    const emailPrefix = user.email ? user.email.split('@')[0] : 'user';
     return {
         id: user.id || user._id,
-        name: user.name || user.profile?.name || 'Unknown',
-        handle: user.handle || user.username || user.profile?.handle || 'unknown',
+        name: user.name || user.profile?.name || emailPrefix || 'Unknown',
+        handle: user.handle || user.username || user.profile?.handle || emailPrefix || 'unknown',
         avatar: user.avatar || user.profile?.avatar,
         verified: user.verified || user.profile?.verified,
         createdAt: user.createdAt || user.profile?.createdAt
@@ -147,10 +148,13 @@ export default function Chat() {
             })
 
             const enriched = list.map(c => {
+                if (!c.participants) return null
                 const otherParticipant = c.participants.find(p => p.userId !== currentUserId)
-                const otherUser = userMap[otherParticipant?.userId] || { id: 'unknown', name: 'Unknown', handle: 'unknown' }
-                const raw = c.lastMessage?.content || (c.lastMessage?.mediaUrl ? "Sent an attachment" : "")
-                const lastMessageFromMe = c.lastMessage?.senderId === currentUserId
+                const otherUser = (otherParticipant && userMap[otherParticipant.userId]) || { id: 'unknown', name: 'Unknown', handle: 'unknown' }
+                
+                const lastMsg = c.lastMessage || {}
+                const raw = lastMsg.content || (lastMsg.mediaUrl ? "Sent an attachment" : "")
+                const lastMessageFromMe = lastMsg.senderId === currentUserId
 
                 return {
                     id: c.id,
@@ -160,7 +164,7 @@ export default function Chat() {
                     timestamp: formatRelativeTime(c.lastMessageAt || c.updatedAt),
                     unread: false // logic for unread count pending
                 }
-            })
+            }).filter(Boolean)
 
             setConversations(enriched)
         } catch (error) {
@@ -251,6 +255,7 @@ export default function Chat() {
             const newConv = await messagingService.getConversation(conversationId)
 
             // Normalize for frontend
+            if (!newConv.participants) return
             const otherParticipant = newConv.participants.find(p => p.userId !== currentUser.id)
             // Ideally we need user details here. 
             // If participant has no user detail in response (depends on backend include), we fetch user.
@@ -261,11 +266,12 @@ export default function Chat() {
                 if (users.length > 0) userData = normalizeUser(users[0])
             }
 
+            const lastMsg = newConv.lastMessage || {}
             const chatObj = {
                 id: newConv.id,
                 user: userData,
-                lastMessage: newConv.lastMessage?.content || "New Message",
-                lastMessageFromMe: newConv.lastMessage?.senderId === currentUser?.id,
+                lastMessage: lastMsg.content || (lastMsg.mediaUrl ? "Sent an attachment" : "New Message"),
+                lastMessageFromMe: lastMsg.senderId === currentUser?.id,
                 timestamp: formatRelativeTime(newConv.lastMessageAt || newConv.updatedAt),
                 unread: true
             }

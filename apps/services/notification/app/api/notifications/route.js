@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NotificationService } from '@/services/notification.service'
 import { apiSuccess, apiError } from '@/lib/api-response'
 import jwt from 'jsonwebtoken'

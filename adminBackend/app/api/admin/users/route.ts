@@ -36,29 +36,55 @@ export async function GET(req: NextRequest) {
         }
 
         // Execute query
-        const [users, totalUsers] = await Promise.all([
-            prisma.user.findMany({
-                where: whereClause,
-                skip,
-                take: limit,
-                select: {
-                    id: true,
-                    email: true,
-                    role: true,
-                    status: true,
-                    createdAt: true,
-                    profile: {
-                        select: {
-                            name: true,
-                            handle: true,
-                            avatar: true
+        let users: any[];
+        let totalUsers: number;
+        try {
+            [users, totalUsers] = await Promise.all([
+                prisma.user.findMany({
+                    where: whereClause,
+                    skip,
+                    take: limit,
+                    select: {
+                        id: true,
+                        email: true,
+                        role: true,
+                        status: true,
+                        createdAt: true,
+                        profile: {
+                            select: {
+                                name: true,
+                                handle: true,
+                                avatar: true
+                            }
                         }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            }),
-            prisma.user.count({ where: whereClause })
-        ]);
+                    },
+                    orderBy: { createdAt: 'desc' }
+                }),
+                prisma.user.count({ where: whereClause })
+            ]);
+        } catch (profileErr: any) {
+            if (profileErr?.code === 'P2022') {
+                [users, totalUsers] = await Promise.all([
+                    prisma.user.findMany({
+                        where: whereClause,
+                        skip,
+                        take: limit,
+                        select: {
+                            id: true,
+                            email: true,
+                            role: true,
+                            status: true,
+                            createdAt: true
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    }),
+                    prisma.user.count({ where: whereClause })
+                ]);
+                users = users.map(u => ({ ...u, profile: null }));
+            } else {
+                throw profileErr;
+            }
+        }
 
         const totalPages = Math.ceil(totalUsers / limit);
 
@@ -74,6 +100,9 @@ export async function GET(req: NextRequest) {
 
     } catch (error: any) {
         console.error('Fetch Users Error:', error);
+        if (error?.code === 'P2021') {
+            return apiSuccess({ users: [], pagination: { totalUsers: 0, currentPage: 1, totalPages: 0, limit: 10 } }, 'Users (tables not migrated)');
+        }
         return apiError('Failed to fetch users', 500);
     }
 }

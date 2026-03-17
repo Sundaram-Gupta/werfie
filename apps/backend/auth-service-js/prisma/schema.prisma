@@ -137,6 +137,7 @@ model Profile {
   location    String?
   website     String?
   birthdate   DateTime?
+  gender      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   verified    Boolean  @default(false)

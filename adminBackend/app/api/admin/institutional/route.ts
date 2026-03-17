@@ -43,6 +43,9 @@ export async function GET(request: Request) {
         return apiSuccess(profiles, 'Institutional profiles fetched successfully');
     } catch (error: any) {
         console.error('[Institutional List] Error:', error);
-        return apiError('Internal server error', 500, { details: error.message });
+        if (error?.code === 'P2021' || error?.code === 'P2022') {
+            return apiSuccess([], 'Institutional profiles (tables not migrated)');
+        }
+        return apiError('Internal server error', 500, { details: error?.message });
     }
 }

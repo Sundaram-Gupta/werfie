@@ -18,5 +18,12 @@ export default defineConfig({
     host: true,
     port: 5175,
     allowedHosts: ['werfie.ai', 'localhost', '127.0.0.1', '.werfie.ai'],
+    proxy: {
+      // Proxy /api to admin-backend so same-origin requests avoid CORS
+      '/api': {
+        target: 'http://localhost:3012',
+        changeOrigin: true,
+      },
+    },
   },
 })

@@ -14,6 +14,7 @@ services:
       MYSQL_PASSWORD: werfie_dev
     ports:
       - "3306:3306"
+    command: ["mysqld", "--default-authentication-plugin=mysql_native_password"]
     volumes:
       - mysql_werfie_data:/var/lib/mysql
     healthcheck:

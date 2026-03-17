@@ -33,22 +33,26 @@ function TrendsList({ navigate }) {
 
     return (
         <div>
-            {list.slice(0, 5).map((trend, i) => (
-                <div
-                    key={trend.id || i}
-                    onClick={() => navigate(`/search?q=${encodeURIComponent(trend.name)}`)}
-                    className="cursor-pointer hover:bg-white/[0.03] px-4 py-3 transition relative"
-                >
-                    <div className="text-[13px] text-muted-foreground flex justify-between leading-4">
-                        <span>{trend.category || 'Trending'}</span>
-                        <button className="hover:bg-primary/20 hover:text-primary rounded-full p-1 -mr-2 transition">
-                            <MoreHorizontal className="w-4 h-4" />
-                        </button>
+            {list.slice(0, 5).map((trend, i) => {
+                const label = trend.topic ?? trend.name ?? '';
+                const count = trend.posts ?? trend.volume;
+                return (
+                    <div
+                        key={trend.id || i}
+                        onClick={() => navigate(`/search?q=${encodeURIComponent(label)}`)}
+                        className="cursor-pointer hover:bg-white/[0.03] px-4 py-3 transition relative"
+                    >
+                        <div className="text-[13px] text-muted-foreground flex justify-between leading-4">
+                            <span>{trend.category || 'Trending'}</span>
+                            <button className="hover:bg-primary/20 hover:text-primary rounded-full p-1 -mr-2 transition">
+                                <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <p className="font-bold text-[15px] mt-0.5" style={{ lineHeight: '20px' }}>{label}</p>
+                        {count != null && <p className="text-[13px] text-muted-foreground mt-0.5">{typeof count === 'number' ? `${count.toLocaleString()} posts` : count}</p>}
                     </div>
-                    <p className="font-bold text-[15px] mt-0.5" style={{ lineHeight: '20px' }}>{trend.name}</p>
-                    {trend.volume && <p className="text-[13px] text-muted-foreground mt-0.5">{trend.volume}</p>}
-                </div>
-            ))}
+                );
+            })}
         </div>
     )
 }
@@ -81,22 +85,25 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
         }
     }
 
+    const h = user?.profile?.handle || user?.handle || user?.email?.split('@')[0]
+    const displayName = user?.profile?.name || user?.name || (h ? h.charAt(0).toUpperCase() + h.slice(1) : 'User')
+
     return (
         <div
-            className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition min-w-0"
             onClick={() => navigate(`/profile/${user.id}`)}
         >
-            <div className="flex items-center gap-2">
-                <Avatar className="w-10 h-10 rounded-full border border-border/10">
+            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                <Avatar className="w-10 h-10 rounded-full border border-border/10 flex-shrink-0">
                     <AvatarImage src={getMediaUrl(user.profile?.avatar)} />
-                    <AvatarFallback>{user.profile?.name?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                    <AvatarFallback>{displayName[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col leading-5 min-w-0">
-                    <div className="flex items-center gap-1">
-                        <span className="font-bold hover:underline text-[15px] truncate">{user.profile?.name || 'User'}</span>
-                        {user.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                <div className="flex flex-col leading-5 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-1 min-w-0">
+                        <span className="font-bold hover:underline text-[15px] truncate min-w-0">{displayName}</span>
+                        {user.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10 flex-shrink-0" />}
                     </div>
-                    <span className="text-muted-foreground text-[15px] truncate">@{user.profile?.handle || 'user'}</span>
+                    <span className="text-muted-foreground text-[15px] truncate min-w-0">@{h || 'user'}</span>
                 </div>
             </div>
             <button
@@ -107,7 +114,7 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
                     handleFollow(e)
                 }}
                 disabled={loading}
-                className={`font-bold text-[14px] px-4 py-1.5 rounded-full transition ${isFollowing
+                className={`font-bold text-[14px] px-4 py-1.5 rounded-full transition flex-shrink-0 whitespace-nowrap ${isFollowing
                     ? 'bg-transparent border border-border text-foreground hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/50'
                     : 'bg-foreground text-background hover:opacity-90'
                     }`}
@@ -132,10 +139,10 @@ export function RightSidebar() {
         }
         try {
             const [suggestionsData, followingData] = await Promise.all([
-                userService.getSuggestions(15),
+                userService.getSuggestions({ limit: 15, page: 1 }),
                 userService.getFollowing(currentUser.id, { limit: 100 })
             ])
-            const list = Array.isArray(suggestionsData) ? suggestionsData : (suggestionsData?.data && Array.isArray(suggestionsData.data) ? suggestionsData.data : [])
+            const list = suggestionsData?.users ?? (Array.isArray(suggestionsData) ? suggestionsData : (suggestionsData?.data && Array.isArray(suggestionsData.data) ? suggestionsData.data : []))
             const following = Array.isArray(followingData) ? followingData : (followingData?.data && Array.isArray(followingData.data) ? followingData.data : [])
             const followingIds = new Set(following.map(u => u.id))
             const filteredData = list.filter(user => user && user.id !== currentUser.id && !followingIds.has(user.id))

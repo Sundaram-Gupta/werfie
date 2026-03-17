@@ -28,8 +28,9 @@ export async function PATCH(
         );
 
         return apiSuccess({ report: updatedReport }, 'Report updated successfully');
-    } catch (error) {
+    } catch (error: any) {
         console.error('Update Report Error:', error);
+        if (error?.code === 'P2025') return apiError('Report not found', 404);
         return apiError('Failed to update report', 500);
     }
 }

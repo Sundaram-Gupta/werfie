@@ -10,21 +10,20 @@ info:
     ## Quick test (always 200)
     **GET /api/health** - No auth. Returns 200 when gateway is up.
 
-    ## Auth Flow (to get 200 on protected endpoints)
-    1. Call **POST /api/auth/login** with `{"email":"user1@xclone.com","password":"password123"}`
-    2. Copy the `accessToken` from the response (from `data.accessToken`)
-    3. Click **Authorize** (lock icon, top right), paste ONLY the token (no "Bearer " prefix)
-    4. Protected endpoints (/api/auth/me, /api/auth/logout, /api/auth/change-password) will now return 200
+    ## ⚠️ Fix "Unauthorized" on Messaging / protected endpoints
+    1. Expand **POST /api/auth/login** and click **Try it out**
+    2. Use `{"email":"demo1@example.com","password":"Werfie@123"}` (or your user)
+    3. Click **Execute**, then copy the `accessToken` from `data.accessToken` in the response
+    4. Click **Authorize** (lock icon 🔒 at top right), paste the token (no "Bearer " prefix), click **Authorize**
+    5. Close the dialog. Now Messaging and other protected endpoints will return 200 instead of 401
 
     ## Proxied endpoints (Users, Posts, etc.)
     Endpoints like /api/users/*, /api/posts/* are proxied to microservices. Ensure those services are running (see ecosystem.config.js) or you may get 5xx.
   version: 1.0.0
 
 servers:
-  - url: /
-    description: Same origin (use this - no CORS)
   - url: http://localhost:3001
-    description: Client Gateway (Auth, Users, Posts, etc.)
+    description: Client Gateway (use this - Auth, Messaging, Users, etc.)
   - url: http://127.0.0.1:3001
     description: Client Gateway (127.0.0.1)
   - url: http://localhost:3019
@@ -33,6 +32,9 @@ servers:
     description: Admin Backend
 
 tags:
+  - name: Messaging
+    description: |
+      **401 Unauthorized?** Call POST /api/auth/login first, copy accessToken, then click **Authorize** (lock icon) and paste the token.
   - name: Ads
     description: |
       **All Ads endpoints require authentication.** If you get 401 Unauthorized:

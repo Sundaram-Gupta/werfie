@@ -10,18 +10,27 @@
   "scripts": {
     "pm2:start": "pm2 start ecosystem.config.js --env production",
     "pm2:dev": "pm2 start ecosystem.config.js",
+    "pm2:auth": "node scripts/start-auth-service.cjs",
     "pm2:stop": "pm2 stop all",
-    "pm2:restart": "pm2 restart all",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
     "pm2:delete": "pm2 delete all",
     "pm2:logs": "pm2 logs",
-    "pm2:monit": "pm2 monit"
+    "pm2:monit": "pm2 monit",
+    "seed:demo-users": "ts-node scripts/seed-demo-users.ts"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.3.0",
+    "@prisma/client": "^5.22.0",
     "axios": "^1.13.5",
+    "bcrypt": "^6.0.0",
     "pg": "^8.17.2"
   },
   "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^20",
     "pm2": "^6.0.14",
-    "prisma": "^5.22.0"
+    "prisma": "^5.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
   }
 }

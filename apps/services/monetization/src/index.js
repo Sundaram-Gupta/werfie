@@ -9,6 +9,16 @@ const PORT = process.env.PORT || 3014;
 
 const authenticateToken = require('./middleware/auth');
 
+// Map Prisma errors to appropriate HTTP status and message
+function handlePrismaError(error, defaults = { status: 500, message: 'Operation failed' }) {
+    const code = error?.code;
+    if (code === 'P2002') return { status: 409, message: 'Resource already exists', log: true };
+    if (code === 'P2025') return { status: 404, message: 'Record not found', log: true };
+    if (code === 'P2003') return { status: 400, message: 'Invalid reference (e.g. user or tier does not exist)', log: true };
+    if (code === 'P2021' || code === 'P2022') return { status: 500, message: 'Database schema mismatch', log: true };
+    return { status: defaults.status, message: defaults.message, log: true };
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(require('./middleware/api-response'));
@@ -37,7 +47,8 @@ app.get('/profile', authenticateToken, async (req, res) => {
         if (!profile) return res.status(200).json({ status: true, message: 'Monetization not enabled', data: null });
         res.json(profile);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch monetization profile' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to fetch monetization profile' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -53,7 +64,14 @@ app.post('/apply', authenticateToken, async (req, res) => {
         });
         res.status(201).json(profile);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to apply' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to apply' });
+        if (error?.code === 'P2002') {
+            return res.status(409).json({ error: 'Already applied for monetization' });
+        }
+        if (error?.code === 'P2003') {
+            return res.status(400).json({ error: 'Invalid user' });
+        }
+        res.status(status).json({ error: message });
     }
 });
 
@@ -88,8 +106,8 @@ app.get('/tiers', authenticateToken, async (req, res) => {
         }));
         res.json(tiersWithCounts);
     } catch (error) {
-        console.error('Tiers error:', error);
-        res.status(500).json({ error: 'Failed to fetch tiers' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to fetch tiers' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -114,7 +132,10 @@ app.post('/tiers', authenticateToken, async (req, res) => {
         });
         res.status(201).json(tier);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to create tier' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to create tier' });
+        if (error?.code === 'P2002') return res.status(409).json({ error: 'Tier with this name already exists' });
+        if (error?.code === 'P2003') return res.status(400).json({ error: 'Invalid monetization profile' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -146,8 +167,10 @@ app.put('/tiers/:id', authenticateToken, async (req, res) => {
         });
         res.json(updated);
     } catch (error) {
-        console.error('Update tier error:', error);
-        res.status(500).json({ error: 'Failed to update tier' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to update tier' });
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Tier not found' });
+        if (error?.code === 'P2003') return res.status(400).json({ error: 'Invalid reference' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -220,8 +243,8 @@ app.get('/stats', authenticateToken, async (req, res) => {
             tiersWithCounts: tierCounts
         });
     } catch (error) {
-        console.error('Monetization stats error:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to fetch stats' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -271,8 +294,10 @@ app.post('/subscribe', authenticateToken, async (req, res) => {
 
         res.status(201).json(subscription);
     } catch (error) {
-        console.error('Subscription Error:', error);
-        res.status(500).json({ error: 'Failed to subscribe' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to subscribe' });
+        if (error?.code === 'P2002') return res.status(409).json({ error: 'Already subscribed to this tier' });
+        if (error?.code === 'P2003' || error?.code === 'P2025') return res.status(400).json({ error: 'Invalid tier or user' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -302,8 +327,8 @@ app.get('/transactions', authenticateToken, async (req, res) => {
         });
         res.json(transactions);
     } catch (error) {
-        console.error('Transactions Error:', error);
-        res.status(500).json({ error: 'Failed to fetch transactions' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to fetch transactions' });
+        res.status(status).json({ error: message });
     }
 });
 
@@ -323,8 +348,9 @@ app.put('/payout-method', authenticateToken, async (req, res) => {
 
         res.json(profile);
     } catch (error) {
-        console.error('Payout Method Error:', error);
-        res.status(500).json({ error: 'Failed to update payout method' });
+        const { status, message } = handlePrismaError(error, { message: 'Failed to update payout method' });
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Monetization profile not found' });
+        res.status(status).json({ error: message });
     }
 });
 

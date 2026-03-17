@@ -96,15 +96,25 @@ app.get('/internal/admin/posts', async (req, res) => {
         res.json(posts);
     } catch (err) {
         console.error('[ContentService] Internal admin posts:', err);
-        res.status(500).json({ error: err.message });
+        if (err?.code === 'P2022') {
+            try {
+                const posts = await prisma.post.findMany({
+                    include: { user: true, media: true },
+                    orderBy: { createdAt: 'desc' }
+                });
+                return res.json(posts);
+            } catch (fallbackErr) {
+                console.error('[ContentService] Internal admin posts fallback:', fallbackErr);
+            }
+        }
+        res.status(500).json({ error: err?.message || 'Failed to fetch posts' });
     }
 });
 
-app.use('/lists', listsRoutes);
-app.use('/spaces', spacesRoutes);
-
 // Auth Middleware
-const authenticateToken = require('./middleware/auth');
+const authMiddleware = require('./middleware/auth');
+const authenticateToken = authMiddleware;
+const optionalAuthenticateToken = authMiddleware.optionalAuthenticateToken || authMiddleware;
 
 // Multer Config - ensure temp dir exists
 const tempDir = path.join(__dirname, '../temp');
@@ -517,38 +527,137 @@ app.get('/scheduled', authenticateToken, async (req, res) => {
     }
 })
 
-// Get Timeline (Basic) - only published posts (exclude future-scheduled)
+// Get Timeline - cursor-based pagination for fast initial load and "load more". Latest first.
 app.get('/timeline/home', authenticateToken, async (req, res) => {
     try {
         const currentUserId = req.user?.userId || req.user?.id;
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 30));
+        const random = String(req.query.random || '').toLowerCase() === '1' || String(req.query.random || '').toLowerCase() === 'true';
+        const cursor = req.query.cursor || null;
+        const where = publishedPostFilter();
+        const orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
+        const include = {
+            user: { include: { profile: true } },
+            media: true,
+            replyTo: { include: { user: { include: { profile: true } } } },
+            _count: { select: { replies: true, likes: true, retweets: true } },
+            bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } }
+        };
+
+        // Random feed mode: return a different set on each refresh (no cursor pagination)
+        if (random && !cursor) {
+            const idsRows = await prisma.$queryRaw`
+                SELECT "id"
+                FROM "Post"
+                WHERE ("scheduledAt" IS NULL OR "scheduledAt" <= NOW())
+                ORDER BY RANDOM()
+                LIMIT ${limit}
+            `;
+            const ids = (Array.isArray(idsRows) ? idsRows : []).map(r => r.id).filter(Boolean);
+            if (ids.length === 0) return res.json({ posts: [], nextCursor: null, hasMore: false });
+
+
+
+            const fetched = await prisma.post.findMany({
+                where: { id: { in: ids } },
+                include
+            });
+            const byId = new Map(fetched.map(p => [p.id, p]));
+            const posts = ids.map(id => byId.get(id)).filter(Boolean);
+            return res.json({ posts, nextCursor: null, hasMore: false });
+        }
+
         const posts = await prisma.post.findMany({
-            where: publishedPostFilter(),
-            take: 20,
-            orderBy: { createdAt: 'desc' },
-            include: {
-                user: { include: { profile: true } },
-                media: true,
-                replyTo: { include: { user: { include: { profile: true } } } },
-                _count: { select: { replies: true, likes: true, retweets: true } },
-                bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } }
-            }
+            where,
+            orderBy,
+            take: limit,
+            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+            include
         });
-        res.json({ posts });
+        const nextCursor = posts.length === limit ? posts[posts.length - 1].id : null;
+        res.json({ posts, nextCursor, hasMore: !!nextCursor });
     } catch (error) {
         console.error('Timeline Error:', error);
         res.status(500).json({ error: 'Failed to fetch timeline', details: error.message });
     }
 });
 
-// Get Trends
+// --- Spike-based Trending Hashtags (X-style) ---
+// Extracts hashtags from post content: #word (case-insensitive, normalized to lowercase)
+function extractHashtags(content) {
+    if (!content || typeof content !== 'string') return [];
+    const matches = content.match(/#[a-zA-Z0-9_]+/g) || [];
+    return [...new Set(matches.map(m => '#' + m.slice(1).toLowerCase()))];
+}
+
+// Get Trends – spike-based from real posts: sudden increase in usage, unique users, time-sensitive
 app.get('/trends', async (req, res) => {
-    console.log('GET /trends hit');
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const region = (req.query.region || req.query.location || 'India').trim() || 'India';
+    const categoryLabel = `Trending in ${region}`;
     try {
-        const trends = await prisma.trend.findMany({
-            orderBy: { posts: 'desc' },
-            take: 20
+        const now = new Date();
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const where = { ...publishedPostFilter(), createdAt: { gte: twentyFourHoursAgo } };
+
+        const posts = await prisma.post.findMany({
+            where,
+            select: { id: true, content: true, userId: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+            take: 10000
         });
-        res.json(trends);
+
+        const recentWindow = oneHourAgo.getTime();
+        const baselineStart = twentyFourHoursAgo.getTime();
+        const tagStats = new Map(); // tag -> { recentCount, baselineCount, recentUserIds: Set }
+
+        for (const post of posts) {
+            const tags = extractHashtags(post.content);
+            const ts = post.createdAt.getTime();
+            const inRecent = ts >= recentWindow;
+            const inBaseline = ts >= baselineStart && ts < recentWindow;
+
+            for (const tag of tags) {
+                if (!tag || tag === '#') continue;
+                let s = tagStats.get(tag);
+                if (!s) {
+                    s = { recentCount: 0, baselineCount: 0, recentUserIds: new Set() };
+                    tagStats.set(tag, s);
+                }
+                if (inRecent) {
+                    s.recentCount += 1;
+                    s.recentUserIds.add(post.userId);
+                } else if (inBaseline) {
+                    s.baselineCount += 1;
+                }
+            }
+        }
+
+        const scored = [];
+        for (const [topic, s] of tagStats) {
+            const baseline = Math.max(s.baselineCount, 1);
+            const uniqueUsers = s.recentUserIds.size;
+            const spikeScore = (s.recentCount * 2 + uniqueUsers) / baseline;
+            if (s.recentCount > 0) {
+                scored.push({
+                    topic,
+                    category: categoryLabel,
+                    posts: s.recentCount,
+                    uniqueUsers,
+                    spikeScore
+                });
+            }
+        }
+        scored.sort((a, b) => b.spikeScore - a.spikeScore);
+        const top = scored.slice(0, limit).map((item, i) => ({
+            id: `trend-${i}-${item.topic.replace('#', '')}`,
+            category: item.category,
+            topic: item.topic,
+            posts: item.posts
+        }));
+
+        res.json(top);
     } catch (error) {
         console.error('Trends Error:', error);
         res.status(500).json({ error: 'Failed to fetch trends' });
@@ -782,16 +891,12 @@ app.get('/communities/:id/members', async (req, res) => {
 // app.get('/:id', ...)
 
 
-// Get All Posts (Feed compatible)
-app.get('/', authenticateToken, async (req, res) => {
-    console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId}`);
+// Get All Posts (Feed compatible) - public when no auth; with auth includes bookmarks
+app.get('/', optionalAuthenticateToken, async (req, res) => {
+    console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId || 'anonymous'}`);
     try {
         const { userId, repliesOnly } = req.query;
-        const currentUserId = req.user?.userId || req.user?.id;
-
-        if (!currentUserId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
+        const currentUserId = req.user?.userId || req.user?.id || null;
 
         const where = { ...publishedPostFilter() };
         if (userId) where.userId = userId;
@@ -799,22 +904,31 @@ app.get('/', authenticateToken, async (req, res) => {
 
         console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, query: req.query });
 
+        const includeOpt = {
+            user: { include: { profile: true } },
+            media: true,
+            replyTo: { include: { user: { include: { profile: true } } } },
+            _count: { select: { replies: true, likes: true, retweets: true } }
+        };
+        if (currentUserId) {
+            includeOpt.bookmarks = { where: { userId: currentUserId }, select: { id: true } };
+        } else {
+            includeOpt.bookmarks = { where: { userId: '' }, select: { id: true } };
+        }
         const posts = await prisma.post.findMany({
             where,
             take: 20,
             orderBy: { createdAt: 'desc' },
-            include: {
-                user: { include: { profile: true } },
-                media: true,
-                replyTo: { include: { user: { include: { profile: true } } } },
-                _count: { select: { replies: true, likes: true, retweets: true } },
-                bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } }
-            }
+            include: includeOpt
         });
 
         res.json({ posts });
     } catch (error) {
         console.error('[ContentService] Feed Error:', error);
+        // Handle Prisma schema mismatch (e.g. missing Post.scheduledAt column) gracefully in dev
+        if (error && error.code === 'P2022') {
+            return res.json({ posts: [] });
+        }
         res.status(500).json({ error: 'Failed' });
     }
 });
@@ -1190,7 +1304,7 @@ app.get('/notifications', authenticateToken, async (req, res) => {
         }
 
         if (filter === 'verified') {
-            where.actor = { profile: { isVerified: true } };
+            where.actor = { profile: { verified: true } };
         }
 
         const notifications = await prisma.notification.findMany({
@@ -1199,12 +1313,36 @@ app.get('/notifications', authenticateToken, async (req, res) => {
                 actor: { include: { profile: true } },
                 post: true
             },
-            take: parseInt(limit),
-            skip: parseInt(offset),
+            take: parseInt(limit) || 20,
+            skip: parseInt(offset) || 0,
             orderBy: { createdAt: 'desc' }
         });
 
-        res.json(notifications);
+        // Normalize actors for frontend
+        const mapped = notifications.map(n => {
+            const actor = n.actor || {};
+            const profile = actor.profile || {};
+            const emailPrefix = (actor.email || '').split('@')[0] || 'user';
+            const handle = profile.handle || actor.handle || emailPrefix;
+            const name = profile.name || actor.name || handle.charAt(0).toUpperCase() + handle.slice(1);
+
+            return {
+                ...n,
+                actor: {
+                    ...actor,
+                    name,
+                    handle,
+                    profile: {
+                        ...profile,
+                        name,
+                        handle
+                    }
+                }
+            };
+        });
+
+        res.json(mapped);
+
     } catch (error) {
         console.error('Get Notifications Error:', error);
         res.status(500).json({ error: 'Failed to get notifications' });

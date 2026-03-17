@@ -6,15 +6,51 @@ import { useState, useEffect, useRef } from 'react'
 // Use '' for same-origin when unset (works via IP e.g. 192.168.1.37:5173 - Vite proxies /api)
 const API_URL = import.meta.env.VITE_API_URL || ''
 
+const FEED_PAGE_SIZE = 30
+
+function normalizeUser(u, defaultId) {
+    if (!u) return { id: defaultId, name: 'User', handle: 'user', email: null, profile: null };
+    const emailPrefix = (u.email || '').split('@')[0] || '';
+    const handle = u.profile?.handle || u.handle || emailPrefix || 'user';
+    const name = u.profile?.name || u.name || (handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : 'User');
+    return { ...u, name, handle, profile: u.profile || { name, handle, avatar: null } };
+}
+
+async function hydratePosts(fetchedPosts) {
+    const userIds = [...new Set(fetchedPosts.filter(item => !item.isOfficialAnnouncement && item.userId).map(item => item.userId))];
+    let userMap = {};
+    if (userIds.length > 0) {
+        try {
+            const users = await userService.getUsers(userIds);
+            (Array.isArray(users) ? users : []).forEach(user => { userMap[user.id] = user; });
+        } catch (err) {
+            console.warn('Failed to fetch user profiles for posts:', err?.response?.data?.details || err?.message);
+        }
+    }
+    return fetchedPosts.map(item => {
+        if (item.isOfficialAnnouncement) return item;
+        const bookmarks = Array.isArray(item.bookmarks) ? item.bookmarks : [];
+        const existing = item.user;
+        const fromMap = userMap[item.userId] || userMap[String(item.userId)];
+        const resolvedUser = normalizeUser(existing || fromMap || { id: item.userId }, item.userId);
+        return { ...item, bookmarks, user: resolvedUser };
+    });
+}
+
 export function usePosts(params = {}) {
     const { user: currentUser } = useAuth()
     const [posts, setPosts] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
+    const [nextCursor, setNextCursor] = useState(null)
+    const [hasMore, setHasMore] = useState(false)
+    const [loadingMore, setLoadingMore] = useState(false)
 
-    const fetchPosts = async () => {
+    const fetchPosts = async (silent = false) => {
         try {
-            setLoading(true)
+            if (!silent) setLoading(true)
+            setNextCursor(null)
+            setHasMore(false)
             let data;
             let announcementsData = [];
 
@@ -24,9 +60,9 @@ export function usePosts(params = {}) {
             } else if (params.tab === 'following') {
                 data = await postService.getFollowingPosts()
             } else if (params.tab === 'for-you') {
-                // Fetch posts and announcements concurrently as requested
                 const [postsRes, annRes] = await Promise.all([
-                    authService.getFeed(),
+                    // Randomize initial feed on every refresh/page load
+                    authService.getFeed({ limit: FEED_PAGE_SIZE, random: true }),
                     announcementService.getFeed().catch(e => {
                         console.error('Failed to fetch announcements feed:', e);
                         return [];
@@ -38,10 +74,14 @@ export function usePosts(params = {}) {
                 data = await postService.getPosts(params)
             }
             let fetchedPosts = [];
+            let next = null;
+            let more = false;
             if (Array.isArray(data)) {
                 fetchedPosts = data;
             } else if (data && Array.isArray(data.posts)) {
                 fetchedPosts = data.posts;
+                if (data.nextCursor != null) next = data.nextCursor;
+                if (data.hasMore != null) more = data.hasMore;
             }
 
             // For bookmarks tab, each post is already bookmarked (mark for UI)
@@ -55,56 +95,51 @@ export function usePosts(params = {}) {
                 isOfficialAnnouncement: true
             }));
             if (params.tab !== 'bookmarks') {
-                fetchedPosts = [...fetchedPosts, ...annotatedAnnouncements].sort((a, b) =>
-                    new Date(b.createdAt) - new Date(a.createdAt)
-                );
+                fetchedPosts = [...fetchedPosts, ...annotatedAnnouncements];
+                
+                // Only sort chronologically if NOT the random "For You" feed
+                if (params.tab !== 'for-you') {
+                    fetchedPosts.sort((a, b) =>
+                        new Date(b.createdAt) - new Date(a.createdAt)
+                    );
+                }
             } else {
                 fetchedPosts = [...fetchedPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             }
 
-            // Extract unique user IDs (excluding announcements; bookmarks tab may already have user)
-            const userIds = [...new Set(
-                fetchedPosts
-                    .filter(item => !item.isOfficialAnnouncement && item.userId)
-                    .map(item => item.userId)
-            )];
 
-            // Bulk fetch users (non-fatal: show posts with Unknown if fetch fails)
-            let userMap = {};
-            if (userIds.length > 0) {
-                try {
-                    const users = await userService.getUsers(userIds);
-                    (Array.isArray(users) ? users : []).forEach(user => {
-                        userMap[user.id] = user;
-                    });
-                } catch (err) {
-                    console.warn('Failed to fetch user profiles for posts, using fallbacks:', err?.response?.data?.details || err?.message);
-                }
-            }
-
-            // Hydrate posts (only if not an announcement); preserve bookmarks so filled icon shows on load/refresh
-            fetchedPosts = fetchedPosts.map(item => {
-                if (item.isOfficialAnnouncement) return item;
-                const bookmarks = Array.isArray(item.bookmarks) ? item.bookmarks : [];
-                return {
-                    ...item,
-                    bookmarks,
-                    user: userMap[item.userId] || {
-                        id: item.userId,
-                        name: 'Unknown',
-                        handle: 'unknown',
-                        profile: { name: 'Unknown', handle: 'unknown', avatar: null }
-                    }
-                };
-            });
+            fetchedPosts = await hydratePosts(fetchedPosts);
 
             setPosts(fetchedPosts)
+            if (params.tab === 'for-you') {
+                setNextCursor(next)
+                setHasMore(!!more)
+            }
             setError(null)
         } catch (err) {
             console.error('Error fetching posts:', err)
             setError(err.response?.data?.details || err.message)
         } finally {
-            setLoading(false)
+            if (!silent) setLoading(false)
+        }
+    }
+
+    const loadMore = async () => {
+        if (params.tab !== 'for-you' || !nextCursor || loadingMore || !hasMore) return
+        setLoadingMore(true)
+        try {
+            const data = await authService.getFeed({ limit: FEED_PAGE_SIZE, cursor: nextCursor })
+            const raw = data?.posts ?? (Array.isArray(data) ? data : [])
+            const hydrated = await hydratePosts(raw)
+            const next = data?.nextCursor ?? null
+            const more = !!data?.hasMore
+            setPosts(prev => [...prev, ...hydrated])
+            setNextCursor(next)
+            setHasMore(more)
+        } catch (err) {
+            console.error('Load more posts error:', err)
+        } finally {
+            setLoadingMore(false)
         }
     }
 
@@ -115,7 +150,7 @@ export function usePosts(params = {}) {
     const fetchRef = useRef(fetchPosts)
     fetchRef.current = fetchPosts
     useEffect(() => {
-        const onRefresh = () => fetchRef.current()
+        const onRefresh = () => fetchRef.current(true) // Silent refresh
         window.addEventListener('feed-refresh', onRefresh)
         return () => window.removeEventListener('feed-refresh', onRefresh)
     }, [])
@@ -123,7 +158,7 @@ export function usePosts(params = {}) {
     // WebSocket via gateway – scheduled posts appear when published (no polling, no page refresh)
     useEffect(() => {
         const socket = io(`${API_URL}/feed`, { path: '/ws/live', transports: ['polling', 'websocket'] })
-        socket.on('post_published', () => fetchRef.current())
+        socket.on('post_published', () => fetchRef.current(true)) // Silent refresh
         return () => socket.disconnect()
     }, [])
 
@@ -135,7 +170,7 @@ export function usePosts(params = {}) {
                 ...newPost,
                 user: currentUser || { id: newPost.userId, name: 'Me', handle: 'me' }
             }
-            setPosts([postWithUser, ...posts])
+            setPosts(prev => [postWithUser, ...prev])
             return newPost
         } catch (err) {
             console.error('Error creating post:', err)
@@ -262,6 +297,9 @@ export function usePosts(params = {}) {
         posts,
         loading,
         error,
+        loadMore,
+        hasMore,
+        loadingMore,
         createPost,
         likePost,
         unlikePost,

@@ -39,7 +39,12 @@ export const POST = withAuth(async (request) => {
             return apiError('User not authenticated', 401)
         }
 
-        const body = await request.json().catch(() => ({}))
+        let body
+        try {
+            body = await request.json()
+        } catch {
+            return apiError('Invalid JSON body', 400)
+        }
         const result = createConversationSchema.safeParse(body)
         if (!result.success) {
             return apiError('Validation failed', 400, { details: result.error.format() })

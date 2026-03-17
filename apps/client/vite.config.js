@@ -13,26 +13,34 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ['werfie.ai', 'localhost', '127.0.0.1', '.werfie.ai', '192.168.1.37'],
+    allowedHosts: true, // allow LAN IP access (e.g. 192.168.1.101:5173 from another desktop)
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
         ws: true,
+        secure: false,
         configure: (proxy) => {
-          proxy.on('error', (err, _req, _res) => {
+          proxy.on('error', (err, req, res) => {
             if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
               console.warn('[vite] proxy error:', err.message)
+            }
+            if (res && typeof res.writeHead === 'function' && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ status: false, message: 'Backend unreachable. Run on dev machine: pm2 list then pm2 start ecosystem.config.js --only auth-service' }))
+            } else if (res && typeof res.destroy === 'function') {
+              // It's a raw socket (i.e. WebSocket upgrade)
+              res.destroy()
             }
           })
         },
       },
       '/uploads': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
       '/feed': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
         ws: true,
         configure: (proxy) => {
@@ -42,6 +50,11 @@ export default defineConfig({
             }
           })
         },
+      },
+      '/ws': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: true,
+        ws: true,
       },
     }
   }

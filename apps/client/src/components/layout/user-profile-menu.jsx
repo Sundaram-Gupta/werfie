@@ -28,9 +28,9 @@ export function UserProfileMenu() {
         navigate('/login')
     }
 
-    // Get user info from stored user or auth context
-    const userName = user?.profile?.name || user?.name || 'User'
+    // Get user info from stored user or auth context; derive name from handle when profile is null
     const userHandle = user?.profile?.handle || user?.handle || user?.email?.split('@')[0] || 'user'
+    const userName = user?.profile?.name || user?.name || (userHandle ? userHandle.charAt(0).toUpperCase() + userHandle.slice(1) : 'User')
     const userAvatar = user?.profile?.avatar || user?.avatar || '/websplash.png'
 
     return (

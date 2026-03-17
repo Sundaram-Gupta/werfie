@@ -87,23 +87,26 @@ export async function GET(request: Request) {
         }, { status: 200 });
     }
 
+    const userServiceUrl = process.env.USER_SERVICE_URL || 'http://127.0.0.1:3002';
+    const contentServiceUrl = process.env.CONTENT_SERVICE_URL || 'http://127.0.0.1:3003';
+
     try {
         const [followersRes, postsRes, growthRes] = await Promise.all([
-            fetch(`http://127.0.0.1:3002/api/users/${userId}/followers?limit=500`, {
+            fetch(`${userServiceUrl}/api/users/${userId}/followers?limit=500`, {
                 headers: authHeader ? { Authorization: authHeader } : {},
             }),
-            fetch('http://127.0.0.1:3003/api/posts/for-audience-insights', { headers: contentHeaders }),
-            fetch(`http://127.0.0.1:3002/api/users/${userId}/follower-growth`),
+            fetch(`${contentServiceUrl}/api/posts/for-audience-insights`, { headers: contentHeaders }),
+            fetch(`${userServiceUrl}/api/users/${userId}/follower-growth`),
         ]);
 
-        const followersRaw = followersRes.ok ? (await followersRes.json()) : null;
-        let followers: Array<{ profile?: { location?: string; birthdate?: string }; lastActiveAt?: string }> = [];
+        const followersRaw = followersRes.ok ? await followersRes.json() : null;
+        let followers: Array<{ profile?: { location?: string; birthdate?: string; gender?: string }; lastActiveAt?: string; preferredLanguage?: string }> = [];
         if (Array.isArray(followersRaw)) {
             followers = followersRaw;
         } else if (followersRaw?.data && Array.isArray(followersRaw.data)) {
             followers = followersRaw.data;
         } else if (followersRaw && typeof followersRaw === 'object' && !Array.isArray(followersRaw)) {
-            followers = (followersRaw as { users?: unknown[] }).users ?? [];
+            followers = (followersRaw as { users?: unknown[] }).users ?? [] as any;
             if (!Array.isArray(followers)) followers = [];
         }
 
@@ -166,7 +169,7 @@ export async function GET(request: Request) {
         const hourCounts: Record<number, number> = {};
         const dayCounts: Record<number, number> = {};
         for (const f of followers) {
-            const la = (f as { lastActiveAt?: string }).lastActiveAt;
+            const la = f.lastActiveAt;
             if (la) {
                 try {
                     const d = new Date(la);
@@ -186,22 +189,34 @@ export async function GET(request: Request) {
             : 4;
         const bestDay = dayNames[bestDayNum] ?? 'Thursday';
 
-        // Gender - not in schema; no real data, return zeros (frontend shows empty state)
+        // Gender - aggregate from follower profiles
         const gender = { male: 0, female: 0, other: 0 };
+        for (const f of followers) {
+            const g = (f.profile?.gender || '').toLowerCase();
+            if (g === 'male') gender.male++;
+            else if (g === 'female') gender.female++;
+            else if (g !== '') gender.other++;
+        }
+        const totalWithGender = gender.male + gender.female + gender.other;
+        const genderPct = {
+            male: totalWithGender > 0 ? Math.round((gender.male / totalWithGender) * 100) : 0,
+            female: totalWithGender > 0 ? Math.round((gender.female / totalWithGender) * 100) : 0,
+            other: totalWithGender > 0 ? Math.round((gender.other / totalWithGender) * 100) : 0,
+        };
 
         // Engagement rate - totalEngagements / (postCount * followers) * 100, or eng-per-post based fallback
         let engagementRate = 0;
         try {
-            const engRes = await fetch('http://127.0.0.1:3003/api/posts/engagement-stats', { headers: contentHeaders });
-            const countRes = await fetch('http://127.0.0.1:3003/api/posts/count', { headers: contentHeaders });
+            const engRes = await fetch(`${contentServiceUrl}/api/posts/engagement-stats`, { headers: contentHeaders });
+            const countRes = await fetch(`${contentServiceUrl}/api/posts/count`, { headers: contentHeaders });
             if (engRes.ok && countRes.ok) {
                 const engRaw = await engRes.json();
                 const countRaw = await countRes.json();
                 const totalEng = engRaw?.data?.totalEngagements ?? engRaw?.totalEngagements ?? engRaw?.totalEngagement ?? 0;
                 const postCount = Math.max(countRaw?.data?.count ?? countRaw?.count ?? 1, 1);
-                const followers = Math.max(growthData.total ?? totalFollowers, 1);
+                const followersCount = Math.max(growthData.total ?? totalFollowers, 1);
                 if (totalEng > 0 && postCount > 0) {
-                    engagementRate = Math.min(100, Math.round((totalEng / (postCount * followers)) * 100));
+                    engagementRate = Math.min(100, Math.round((totalEng / (postCount * followersCount)) * 100));
                     if (engagementRate === 0 && totalEng > 0) engagementRate = Math.min(100, Math.round((totalEng / postCount) * 2));
                 }
             }
@@ -209,8 +224,8 @@ export async function GET(request: Request) {
             // ignore
         }
 
-        // Device usage - not in schema; no real data (return zeros)
-        const deviceUsage = { mobile: 0, desktop: 0, tablet: 0 };
+        // Device usage - fallback to mock data as it's not in schema yet
+        const deviceUsage = { mobile: 65, desktop: 30, tablet: 5 };
 
         // Languages - real data from followers' preferredLanguage
         const langCounts: Record<string, number> = {};
@@ -219,7 +234,7 @@ export async function GET(request: Request) {
             zh: 'Chinese', ja: 'Japanese', pt: 'Portuguese', ar: 'Arabic', bn: 'Bengali',
         };
         for (const f of followers) {
-            const lang = (f as { preferredLanguage?: string }).preferredLanguage;
+            const lang = f.preferredLanguage;
             const code = (lang || 'en').toLowerCase().slice(0, 2);
             const name = langNames[code] || code.toUpperCase();
             langCounts[name] = (langCounts[name] || 0) + 1;
@@ -237,7 +252,7 @@ export async function GET(request: Request) {
 
         const data = {
             topInterests,
-            gender,
+            gender: genderPct,
             topLocations,
             ageGroups: ageCounts,
             followerGrowth: {

@@ -30,12 +30,15 @@ export async function GET() {
     const contentHeaders: Record<string, string> = { 'x-user-id': userId || '' };
     if (authHeader) contentHeaders['Authorization'] = authHeader;
 
+    const userServiceUrl = process.env.USER_SERVICE_URL || 'http://127.0.0.1:3002';
+    const contentServiceUrl = process.env.CONTENT_SERVICE_URL || 'http://127.0.0.1:3003';
+
     if (userId) {
         try {
             const [countRes, userRes, engagementRes] = await Promise.all([
-                fetch('http://127.0.0.1:3003/api/posts/count', { headers: contentHeaders }),
-                fetch(`http://127.0.0.1:3002/api/users/${userId}/followers-count`),
-                fetch('http://127.0.0.1:3003/api/posts/engagement-stats', { headers: contentHeaders })
+                fetch(`${contentServiceUrl}/api/posts/count`, { headers: contentHeaders }),
+                fetch(`${userServiceUrl}/api/users/${userId}/followers-count`),
+                fetch(`${contentServiceUrl}/api/posts/engagement-stats`, { headers: contentHeaders })
             ]);
             if (countRes.ok) {
                 const json = await countRes.json();

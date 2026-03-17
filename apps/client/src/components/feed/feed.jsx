@@ -1,12 +1,30 @@
+import { useRef, useEffect } from "react"
 import { PostCard } from "./post-card"
 import { AnnouncementFeedCard } from "./announcement-feed-card"
 import { usePosts } from "@/hooks/usePosts"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 export function Feed({ tab = 'for-you' }) {
     const { t } = useTranslation()
-    const { posts, loading, error, likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost } = usePosts({ tab })
+    const { posts, loading, error, loadMore, hasMore, loadingMore, likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost } = usePosts({ tab })
+    const loadMoreTriggerRef = useRef(null)
+
+    // Infinite scroll: when user scrolls near bottom, load more posts (Intersection Observer)
+    useEffect(() => {
+        if (tab !== 'for-you' || !hasMore || loadingMore) return
+        const el = loadMoreTriggerRef.current
+        if (!el) return
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) loadMore()
+            },
+            { rootMargin: '200px', threshold: 0 }
+        )
+        observer.observe(el)
+        return () => observer.disconnect()
+    }, [tab, hasMore, loadingMore, loadMore])
 
     if (loading) {
         return (
@@ -79,6 +97,14 @@ export function Feed({ tab = 'for-you' }) {
                     />
                 )
             })}
+            {/* Sentinel for infinite scroll: when this enters viewport, loadMore() runs */}
+            {tab === 'for-you' && hasMore && (
+                <div ref={loadMoreTriggerRef} className="flex justify-center py-4 border-t border-border" aria-hidden>
+                    {loadingMore && (
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    )}
+                </div>
+            )}
         </div>
     )
 }

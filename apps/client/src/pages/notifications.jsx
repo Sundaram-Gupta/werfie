@@ -92,9 +92,10 @@ export default function Notifications() {
                                 </Avatar>
 
                                 <div className="text-[15px] leading-5">
-                                    <span className="font-bold">{notification.actor?.profile?.name || notification.actor?.name}</span>
+                                    <span className="font-bold">{notification.actor?.name || t('notifications.unknown_user')}</span>
                                     {notification.actor?.profile?.verified && <BadgeCheck className="inline-block w-4 h-4 text-blue-500 ml-1 mb-0.5 fill-blue-500/10" />}
                                     <span className="text-foreground ml-1">
+
                                         {notification.type === 'like' && t('notifications.types.like')}
                                         {notification.type === 'repost' && t('notifications.types.repost')}
                                         {notification.type === 'follow' && t('notifications.types.follow')}

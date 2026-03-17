@@ -12,6 +12,8 @@ const swaggerUi = require('swagger-ui-express');
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = 3001;
+// Bind to 0.0.0.0 so gateway (and Swagger) are reachable on WiFi IP (e.g. http://192.168.1.101:3001)
+const bindHost = process.env.HOST || process.env.BIND_HOST || '0.0.0.0';
 
 // Service targets - use env vars for flexibility, fallback to defaults (no trailing slash)
 const USER_SERVICE_TARGET = (process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 3002}`).replace(/\/+$/, '');
@@ -27,16 +29,29 @@ const proxy = httpProxy.createProxyServer({
 // Error handling for proxy
 proxy.on('error', (err, req, res) => {
     console.error(`[Gateway] Proxy Error [${req.url}]:`, err.message);
-    if (res && res.writeHead) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Proxy error', details: err.message, path: req.url }));
+    if (res && res.writeHead && !res.headersSent) {
+        const isConnRefused = err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
+        const status = isConnRefused ? 503 : 502;
+        const hint = isConnRefused && req.url?.includes('creator-studio')
+            ? ' Run: pm2 start ecosystem.config.js --only analytics-service'
+            : '';
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            status: false,
+            error: isConnRefused ? 'Service unavailable' : 'Proxy error',
+            message: err.message + hint,
+            path: req.url
+        }));
     }
 });
 
 proxy.on('proxyReq', (proxyReq, req, res, options) => {
+    // Explicitly forward Authorization so downstream services receive it
+    const auth = req.headers.authorization || req.headers.Authorization;
+    if (auth) proxyReq.setHeader('Authorization', auth);
     if (req._gatewayUser) {
         proxyReq.setHeader('x-verified-gateway', 'true');
-        proxyReq.setHeader('x-user-id', req._gatewayUser.userId);
+        proxyReq.setHeader('x-user-id', String(req._gatewayUser.userId));
         proxyReq.setHeader('x-user-email', req._gatewayUser.email || '');
     }
     const target = typeof options.target === 'string' ? options.target : (options.target?.href || '[Object Target]');
@@ -50,21 +65,24 @@ console.log('[Gateway] Starting Express server...');
 const mainServer = express();
 const httpServer = http.createServer(mainServer);
 
-// Global CORS Middleware
+// Global CORS Middleware - in dev, allow all origins to avoid CORS issues from other devices / tools
+function corsOrigin(origin, cb) {
+    // For local development we accept any origin so login/signup works from other desktops and tools.
+    // If you harden this for production, restrict to specific domains.
+    cb(null, true);
+}
+
 mainServer.use(cors({
-    origin: true, // Reflects the request origin, functionality equivalent to allow all but with credentials support
+    origin: corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id', 'X-Api-Version', 'X-CSRF-Token']
 }));
 
-// Skip body parsing for /api/auth/* – Next.js API routes need the raw stream
-mainServer.use((req, res, next) => {
-    if (req.url && req.url.startsWith('/api/auth')) {
-        return next();
-    }
-    express.json()(req, res, next);
-});
+// We removed the global express.json() middleware because it consumes the body stream,
+// which causes http-proxy to hang on JSON POST requests. Next.js API routes and proxied
+// requests both require the raw stream to remain intact.
+
 
 // Health check - always 200 when gateway is up (before proxy/catch-all)
 mainServer.get('/api/health', (req, res) => {
@@ -74,7 +92,7 @@ mainServer.get('/api/health', (req, res) => {
 // Werfie AI proxy - avoids CORS by calling AI Worker from server
 const AI_WORKER_URL = process.env.AI_WORKER_URL || process.env.VITE_AI_WORKER_URL || 'https://ai-worker.mohit-sharma-150.workers.dev';
 const AI_WORKER_API_KEY = process.env.AI_WORKER_API_KEY || process.env.VITE_AI_WORKER_API_KEY || '';
-mainServer.post('/api/ai/chat', async (req, res) => {
+mainServer.post('/api/ai/chat', express.json(), async (req, res) => {
     if (!AI_WORKER_API_KEY) {
         return res.status(500).json({ status: false, message: 'AI is not configured', data: null });
     }
@@ -125,8 +143,10 @@ if (fs.existsSync(swaggerPath)) {
             persistAuthorization: true,
             displayRequestDuration: true,
             tryItOutEnabled: true,
-            filter: true
-        }
+            filter: true,
+            persistAuth: true
+        },
+        customSiteTitle: 'Werfie API | Click Authorize after login to fix 401'
     }));
     console.log('[Gateway] Swagger UI at http://localhost:' + port + '/api-docs');
 } else {
@@ -146,10 +166,10 @@ function injectUserFromToken(req) {
             const decoded = jwt.verify(token, JWT_SECRET);
             const userId = decoded.sub || decoded.userId || decoded.id;
             if (userId) {
-                req._gatewayUser = { userId, email: decoded.email || '' };
+                req._gatewayUser = { userId: String(userId), email: decoded.email || '' };
                 req.headers['x-verified-gateway'] = 'true';
-                req.headers['x-user-id'] = userId;
-                req.headers['x-user-email'] = decoded.email || '';
+                req.headers['x-user-id'] = String(userId);
+                req.headers['x-user-email'] = (decoded.email || '').toString();
             }
         } catch (e) {
             // Verification failed - downstream may return 401
@@ -168,6 +188,11 @@ mainServer.all('/api/posts*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 mainServer.all('/api/explore*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+// Trends: spike-based hashtags from content service (not Next.js Trend table)
+mainServer.all('/api/trends*', (req, res) => {
     injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
@@ -286,6 +311,11 @@ mainServer.all('/api/settings*', (req, res) => {
     proxy.web(req, res, { target: USER_SERVICE_TARGET });
 });
 
+// 4a. Socket.io /ws/* (polling + upgrade) - proxy to content service for live feeds
+mainServer.all('/ws*', (req, res) => {
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
 // 4. Other Microservices Catch-all (monetization, settings have explicit routes above)
 const microservices = [
     { path: '/api/search', port: 3006 },
@@ -334,6 +364,9 @@ httpServer.on('upgrade', (req, socket, head) => {
         } else if (pathname.startsWith('/ws/debate-live')) {
             console.log('[Gateway] Proxying Debate WebSocket to Content Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
+        } else if (pathname.startsWith('/ws/world-leaders') || pathname.startsWith('/ws/live')) {
+            console.log('[Gateway] Proxying World Leaders/Live WebSocket to Content Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
         } else {
             console.warn(`[Gateway] No upgrade handler for ${pathname}`);
             socket.destroy();
@@ -344,31 +377,48 @@ httpServer.on('upgrade', (req, socket, head) => {
     }
 });
 
-// Handle listen errors (e.g. EADDRINUSE) so we don't crash-loop silently
+const MAX_LISTEN_RETRIES = 5;
+const LISTEN_RETRY_MS = 3000;
+let listenRetries = 0;
+
+function startListening() {
+    httpServer.listen(port, bindHost, (err) => {
+        if (err) {
+            if (err.code === 'EADDRINUSE' && listenRetries < MAX_LISTEN_RETRIES) {
+                listenRetries++;
+                console.warn(`[Gateway] Port ${port} in use, retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`);
+                setTimeout(startListening, LISTEN_RETRY_MS);
+                return;
+            }
+            console.error(`[Gateway] Failed to listen on port ${port}:`, err.message);
+            process.exit(1);
+            return;
+        }
+        console.log(`> Gateway (auth-service-js) listening on http://${hostname}:${port} (bound to ${bindHost}, reachable on LAN)`);
+
+        // Prepare Next.js in the background
+        console.log('[Gateway] Starting Next.js preparation in background...');
+        app.prepare().then(() => {
+            isAppPrepared = true;
+            console.log('[Gateway] Next.js app prepared and ready.');
+        }).catch(e => {
+            console.error('[Gateway] Next.js preparation FAILED:', e.message);
+        });
+    });
+}
+
+// Handle server errors. Do NOT exit on EADDRINUSE - startListening() retry will run from the listen callback.
 httpServer.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-        console.error(`[Gateway] Port ${port} is already in use. Free it with: netstat -ano | findstr :${port} then taskkill /PID <pid> /F`);
+        if (listenRetries < MAX_LISTEN_RETRIES) {
+            console.warn(`[Gateway] Port ${port} in use (error event); retry ${listenRetries}/${MAX_LISTEN_RETRIES} will run.`);
+            return;
+        }
+        console.error(`[Gateway] Port ${port} still in use after ${MAX_LISTEN_RETRIES} retries. Free it: netstat -ano | findstr :${port} then taskkill /PID <pid> /F`);
         process.exit(1);
     }
     console.error('[Gateway] Server error:', err.message);
     process.exit(1);
 });
 
-// Start listening immediately
-httpServer.listen(port, (err) => {
-    if (err) {
-        console.error(`[Gateway] Failed to listen on port ${port}:`, err.message);
-        process.exit(1);
-        return;
-    }
-    console.log(`> Gateway (auth-service-js) listening on http://${hostname}:${port}`);
-
-    // Prepare Next.js in the background
-    console.log('[Gateway] Starting Next.js preparation in background...');
-    app.prepare().then(() => {
-        isAppPrepared = true;
-        console.log('[Gateway] Next.js app prepared and ready.');
-    }).catch(err => {
-        console.error('[Gateway] Next.js preparation FAILED:', err.message);
-    });
-});
+startListening();

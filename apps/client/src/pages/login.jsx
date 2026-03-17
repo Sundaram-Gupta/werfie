@@ -40,7 +40,7 @@ export default function Login() {
             if (isTimeout) {
                 displayMsg = 'Request timed out. The backend may be slow or PostgreSQL may not be running. Check: pm2 logs auth-service'
             } else if (isNetworkError) {
-                displayMsg = 'Cannot reach server. Ensure the backend is running (pm2 list) and port 3001 is reachable.'
+                displayMsg = 'Cannot reach server. On the machine running the app: run "pm2 list" and ensure auth-service and client are online. If using another device, allow port 5173 in Windows Firewall.'
             } else if (!msg) {
                 displayMsg = 'Login failed. Please try again.'
             }

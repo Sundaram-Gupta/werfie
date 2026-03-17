@@ -75,7 +75,7 @@ router.get('/team', authenticateToken, async (req, res) => {
                 members: {
                     include: {
                         user: {
-                            include: { profile: true }
+                            include: { profile: { select: require('../constants').PROFILE_SELECT } }
                         }
                     }
                 }

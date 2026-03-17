@@ -27,7 +27,7 @@ export async function POST(request) {
 
         // Find user - raw query to avoid Prisma schema/DB mismatch
         console.log(`[Login] Looking up user: ${email}`);
-        const rows = await prisma.$queryRaw`SELECT id, email, "passwordHash" FROM "User" WHERE email = ${email} LIMIT 1`
+        const rows = await prisma.$queryRaw`SELECT id, email, "passwordHash" FROM "User" WHERE LOWER(email) = LOWER(${email}) LIMIT 1`
         const user = rows[0] || null
         let profile = null
         if (user) {

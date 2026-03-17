@@ -5,6 +5,7 @@ import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
 
 import { getMediaUrl } from "@/lib/utils"
+import { getApiBase } from "@/lib/api"
 import { PollDisplay } from "./poll-display"
 import { parsePollContent } from "@/lib/poll-utils"
 
@@ -24,14 +25,16 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
     }
 
     // Handle backend data structure
-    // Backend returns: { id, userId, content, createdAt, user: { id, profile: { name, handle } } }
-    // Frontend expects: { id, user: { name, handle, avatar }, content, timestamp, stats }
+    // Backend returns: { id, userId, content, createdAt, user: { id, email, profile: { name, handle } } }
+    // Fallback: use email prefix when profile is null (registration may not create Profile)
 
+    const emailPrefix = (post.user?.email || '').split('@')[0] || ''
+    const handle = post.user?.profile?.handle || post.user?.handle || emailPrefix || 'user'
     const user = {
         id: post.user?.id || post.userId,
         userId: post.user?.id || post.userId,
-        name: post.user?.profile?.name || post.user?.name || 'Unknown User',
-        handle: post.user?.profile?.handle || post.user?.handle || 'unknown',
+        name: post.user?.profile?.name || post.user?.name || (handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : 'User'),
+        handle,
         avatar: post.user?.profile?.avatar || post.user?.avatar || '/websplash.png',
         verified: post.user?.profile?.verified || post.user?.verified || false
     }
@@ -122,10 +125,10 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                             // Handle both R2 URLs (absolute) and local URLs (relative)
                             const mediaUrl = media.mediaUrl?.startsWith('http') 
                                 ? media.mediaUrl 
-                                : `${CONTENT_SERVICE_URL}${media.mediaUrl}`;
+                                : `${getMediaBase()}${media.mediaUrl}`;
                             const thumbnailUrl = media.thumbnailUrl?.startsWith('http')
                                 ? media.thumbnailUrl
-                                : media.thumbnailUrl ? `${CONTENT_SERVICE_URL}${media.thumbnailUrl}` : null;
+                                : media.thumbnailUrl ? `${getMediaBase()}${media.thumbnailUrl}` : null;
 
                             return (
                                 <div key={media.id || index} className="relative bg-black">

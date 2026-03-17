@@ -11,24 +11,21 @@ export function AuthProvider({ children }) {
 
     // Check if user is logged in on mount
     useEffect(() => {
-        const AUTH_CHECK_TIMEOUT_MS = 10000 // 10s - don't hang forever if backend unreachable
-
         const checkAuth = async () => {
             if (authService.isAuthenticated()) {
                 try {
-                    const userData = await Promise.race([
-                        authService.getCurrentUser(),
-                        new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error('Auth check timeout')), AUTH_CHECK_TIMEOUT_MS)
-                        ),
-                    ])
-                    setUser(userData)
-                    if (userData?.preferredLanguage) {
-                        i18n.changeLanguage(userData.preferredLanguage)
+                    const userData = await authService.getCurrentUser()
+                    if (userData) {
+                        setUser(userData)
+                        if (userData.preferredLanguage) {
+                            i18n.changeLanguage(userData.preferredLanguage)
+                        }
+                    } else {
+                        await authService.logout()
                     }
                 } catch (error) {
                     console.error('Auth check failed:', error)
-                    authService.logout()
+                    await authService.logout()
                 }
             }
             setLoading(false)
@@ -55,10 +52,9 @@ export function AuthProvider({ children }) {
     }
 
     const updateUser = (data) => {
-        console.log('AuthContext: updateUser called with', data)
         setUser(prev => {
             if (!prev) return data
-            const newState = {
+            return {
                 ...prev,
                 ...data,
                 profile: {
@@ -66,22 +62,14 @@ export function AuthProvider({ children }) {
                     ...(data.profile || {})
                 }
             }
-            console.log('AuthContext: New user state:', newState)
-            return newState
         })
     }
 
-    const value = {
-        user,
-        loading,
-        login,
-        register,
-        logout,
-        updateUser,
-        isAuthenticated: !!user,
-    }
-
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+    return (
+        <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
+            {children}
+        </AuthContext.Provider>
+    )
 }
 
 export function useAuth() {

@@ -1,7 +1,8 @@
 import axios from 'axios';
 
+// Use relative /api in dev (Vite proxies to admin-backend); full URL when VITE_API_URL is set
 const api = axios.create({
-    baseURL: (import.meta.env.VITE_API_URL || 'http://localhost:3012') + '/api', // Correctly point to /api endpoint
+    baseURL: (import.meta.env.VITE_API_URL || '') + '/api',
     headers: {
         'Content-Type': 'application/json',
     },

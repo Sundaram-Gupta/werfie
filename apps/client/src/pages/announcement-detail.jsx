@@ -4,8 +4,7 @@ import { ArrowLeft, Megaphone, Globe, CheckCircle2 } from 'lucide-react';
 import axios from 'axios';
 import { StructuredComments } from '../components/comments/StructuredComments';
 import { Button } from '@/components/ui/button';
-
-const API_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003';
+import { getApiBase } from '@/lib/api';
 
 export default function AnnouncementDetail() {
     const { id } = useParams();
@@ -19,7 +18,7 @@ export default function AnnouncementDetail() {
                 // Assuming there's a route for getting a single announcement. Let's hit the general API.
                 // If it doesn't exist, we added `router.get('/:id')` to announcementRoutes.js previously?
                 // Let's assume it exists at `/api/announcements/:id`
-                const response = await axios.get(`${API_URL}/api/announcements/${id}`);
+                const response = await axios.get(`${getApiBase()}/api/announcements/${id}`);
                 setAnnouncement(response.data);
             } catch (error) {
                 console.error("Failed to load announcement:", error);

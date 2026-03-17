@@ -14,14 +14,26 @@ export async function GET(
     try {
         const { id } = await params;
 
-        const user = await prisma.user.findUnique({
-            where: { id },
-            include: {
-                profile: true,
-                businessProfile: true,
-                // Add minimal stats logic if needed, usually count queries
+        let user: any;
+        try {
+            user = await prisma.user.findUnique({
+                where: { id },
+                include: {
+                    profile: true,
+                    businessProfile: true,
+                }
+            });
+        } catch (profileErr: any) {
+            if (profileErr?.code === 'P2022') {
+                user = await prisma.user.findUnique({
+                    where: { id },
+                    include: { businessProfile: true }
+                });
+                if (user) user.profile = null;
+            } else {
+                throw profileErr;
             }
-        });
+        }
 
         if (!user) {
             return apiError('User not found', 404);
@@ -32,6 +44,8 @@ export async function GET(
 
     } catch (error: any) {
         console.error('Get User Error:', error);
+        if (error?.code === 'P2025') return apiError('User not found', 404);
+        if (error?.code === 'P2021') return apiError('User table not found', 500);
         return apiError('Failed to fetch user', 500);
     }
 }
@@ -65,6 +79,7 @@ export async function DELETE(
 
     } catch (error: any) {
         console.error('Delete User Error:', error);
+        if (error?.code === 'P2025') return apiError('User not found', 404);
         return apiError('Failed to delete user', 500);
     }
 }

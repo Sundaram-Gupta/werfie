@@ -10,9 +10,9 @@ export const socketService = {
     connect: () => {
         const raw = localStorage.getItem('accessToken')
         const token = raw ? raw.trim().replace(/\s+/g, ' ') : null
-        if (!token) return
+        if (!token) return null
 
-        if (socket && socket.connected) return socket
+        if (socket) return socket // Return existing socket (even if connecting) to avoid duplicates
 
         socket = io(MESSAGING_URL, {
             path: '/api/messages/ws',
@@ -29,8 +29,8 @@ export const socketService = {
             console.log("🟢 Connected to Chat Socket", socket.id)
         })
 
-        socket.on("disconnect", () => {
-            console.log("🔴 Disconnected from Chat Socket")
+        socket.on("disconnect", (reason) => {
+            console.log("🔴 Disconnected from Chat Socket. Reason:", reason)
         })
 
         socket.on("connect_error", (err) => {

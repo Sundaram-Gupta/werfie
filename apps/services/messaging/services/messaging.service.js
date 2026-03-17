@@ -50,7 +50,6 @@ export class MessagingService {
         await prisma.conversation.update({
             where: { id: conversationId },
             data: {
-                lastMessageAt: new Date(),
                 lastMessageId: message.id
             }
         })
@@ -160,14 +159,24 @@ export class MessagingService {
                     }
                 },
                 orderBy: {
-                    lastMessageAt: 'desc'
+                    updatedAt: 'desc'
                 },
                 include: {
                     participants: true,
-                    lastMessage: true
+                    messages: {
+                        take: 1,
+                        orderBy: {
+                            createdAt: 'desc'
+                        }
+                    }
                 }
             })
-            return conversations
+            
+            // Map the latest message to 'lastMessage' for frontend compatibility
+            return conversations.map(conv => ({
+                ...conv,
+                lastMessage: conv.messages?.[0] || null
+            }))
         } catch (error) {
             console.error(`getConversations Error for userId ${userId}:`, error?.message || error)
             throw error
@@ -179,16 +188,27 @@ export class MessagingService {
             where: { id: conversationId },
             include: {
                 participants: true,
-                lastMessage: true
+                messages: {
+                    take: 1,
+                    orderBy: {
+                        createdAt: 'desc'
+                    }
+                }
             }
         })
 
         if (!conversation) return null
 
-        const isParticipant = conversation.participants.some(p => p.userId === userId)
+        // Map the latest message to 'lastMessage' for frontend compatibility
+        const result = {
+            ...conversation,
+            lastMessage: conversation.messages?.[0] || null
+        }
+
+        const isParticipant = result.participants.some(p => p.userId === userId)
         if (!isParticipant) throw new Error("Unauthorized to view this conversation")
 
-        return conversation
+        return result
     }
 
     static async getMessages(conversationId) {

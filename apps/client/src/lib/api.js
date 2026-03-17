@@ -1,12 +1,29 @@
 import axios from 'axios'
 
-// Use explicit origin when unset - ensures API works when accessing via IP (e.g. 192.168.1.37:5173)
-// Vite proxy forwards /api to gateway; window.location.origin matches page URL
-const getApiBase = () => {
+// Use same-origin when on LAN IP (e.g. 192.168.1.101:5173) to avoid CORS - Vite proxies /api -> gateway.
+// If VITE_API_URL is set and we're on localhost, use it. Otherwise use same-origin.
+export const getApiBase = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    const isLanOrRemote = host.startsWith('192.168.') || host.startsWith('10.') || (host.startsWith('172.') && /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host))
+    if (isLanOrRemote) return window.location.origin
+    if (!import.meta.env.VITE_API_URL) return window.location.origin
+  }
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
-  if (typeof window !== 'undefined') return window.location.origin
   return ''
 }
+
+// For direct service URLs (e.g. WebSockets) when on LAN - use host + service port
+export const getContentServiceUrl = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    if (host.startsWith('192.168.') || host.startsWith('10.') || (host.startsWith('172.') && /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host))) {
+      return `${window.location.protocol}//${host}:3003`
+    }
+  }
+  return import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003'
+}
+
 export const API_BASE_URL = getApiBase()
 
 // Create axios instance
@@ -52,7 +69,9 @@ api.interceptors.response.use(
         const originalRequest = error.config
 
         // If 401 or 403 (sometimes used for expired) and we haven't tried to refresh yet
-        if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
+        // skip for login route to avoid redundant refresh attempts on bad credentials
+        const isLoginRequest = originalRequest.url.includes('/api/auth/login')
+        if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry && !isLoginRequest) {
             originalRequest._retry = true
 
             try {

@@ -258,7 +258,11 @@ class AnnouncementService {
             });
             return items;
         } catch (err) {
-            console.error('[AnnouncementService] getFeed error:', err?.message);
+            console.error('[AnnouncementService] getFeed error:', err?.message || err);
+            // If the crisisId or other new columns are missing from the database, fall back to a safe empty feed
+            if (err && err.code === 'P2022') {
+                return [];
+            }
             try {
                 const rows = await prisma.$queryRaw`
                     SELECT * FROM "Announcement" WHERE status = ${status}

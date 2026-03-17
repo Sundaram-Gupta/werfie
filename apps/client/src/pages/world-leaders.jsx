@@ -3,10 +3,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { Globe, BadgeCheck, Radio, AlertTriangle } from 'lucide-react';
 import { AnnouncementFeedCard } from '../components/feed/announcement-feed-card';
-
-// Example environment variable mapping. Adjust based on real project config.
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const CONTENT_SERVICE_URL = import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003';
+import { getApiBase } from '@/lib/api';
 
 export default function WorldLeadersPage() {
     const [feed, setFeed] = useState([]);
@@ -25,14 +22,13 @@ export default function WorldLeadersPage() {
                 if (regionFilter) queryParams.append('region', regionFilter);
                 if (severityFilter) queryParams.append('severity', severityFilter);
                 
-                const feedRes = await axios.get(`${CONTENT_SERVICE_URL}/feed/world-leaders?${queryParams.toString()}`);
+                const base = getApiBase();
+                const feedRes = await axios.get(`${base}/api/feed/world-leaders?${queryParams.toString()}`);
                 const feedPayload = feedRes.data?.data ?? feedRes.data;
                 setFeed(Array.isArray(feedPayload) ? feedPayload : []);
 
                 // Fetch Featured Leaders (top 10 by priority)
-                // Assuming User Service exposes a list endpoint
-                const USER_SERVICE_URL = import.meta.env.VITE_USER_SERVICE_URL || 'http://localhost:3001';
-                const leadersRes = await axios.get(`${USER_SERVICE_URL}/api/users/leaders?limit=10`);
+                const leadersRes = await axios.get(`${base}/api/users/leaders?limit=10`);
                 const payload = leadersRes.data?.data ?? leadersRes.data;
                 if (Array.isArray(payload)) {
                     setFeaturedLeaders(payload);
@@ -49,7 +45,7 @@ export default function WorldLeadersPage() {
         fetchData();
 
         // Setup WebSocket connection
-        const socket = io(CONTENT_SERVICE_URL, { path: '/ws/world-leaders' });
+        const socket = io(getApiBase(), { path: '/ws/live' });
 
         socket.on('connect', () => {
             console.log('Connected to World Leaders Live Updates');

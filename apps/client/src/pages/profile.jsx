@@ -39,9 +39,9 @@ export default function Profile() {
             const userData = await userService.getUser(profileUserId)
             setProfile(userData)
 
-            // Set follower/following counts (backend returns them swapped)
-            setFollowerCount(userData._count?.following || 0)  // backend's 'following' is actually followers
-            setFollowingCount(userData._count?.followers || 0)  // backend's 'followers' is actually following
+            // Prisma: _count.following = people who follow this user; _count.followers = people this user follows
+            setFollowerCount(userData._count?.following ?? 0)
+            setFollowingCount(userData._count?.followers ?? 0)
 
 
             // Check if current user is following this profile (only if viewing someone else's profile)
@@ -287,18 +287,18 @@ export default function Profile() {
                     </div>
                 </div>
 
-                {/* Follower/Following Counts */}
+                {/* Follower/Following Counts - clickable only for own profile (links to /follow) */}
                 <div className="flex gap-4 text-[15px] mb-4">
                     <div
-                        className="hover:underline cursor-pointer"
-                        onClick={() => navigate('/follow')}
+                        className={currentUser?.id === profile.id ? "hover:underline cursor-pointer" : ""}
+                        onClick={() => currentUser?.id === profile.id && navigate('/follow?tab=following')}
                     >
                         <span className="font-bold text-foreground">{followingCount}</span>
                         <span className="text-muted-foreground"> {t('profile.following_count')}</span>
                     </div>
                     <div
-                        className="hover:underline cursor-pointer"
-                        onClick={() => navigate('/follow')}
+                        className={currentUser?.id === profile.id ? "hover:underline cursor-pointer" : ""}
+                        onClick={() => currentUser?.id === profile.id && navigate('/follow?tab=followers')}
                     >
                         <span className="font-bold text-foreground">{followerCount}</span>
                         <span className="text-muted-foreground"> {t('profile.followers_count')}</span>

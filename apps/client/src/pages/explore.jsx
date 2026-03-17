@@ -1,4 +1,3 @@
-import { EXPLORE_DATA } from "@/lib/dummy-data"
 import { Search, Settings } from "lucide-react"
 import { useState, useEffect } from "react"
 import { searchService } from "@/services/api"
@@ -7,21 +6,35 @@ import { MoreOptionsDropdown } from "@/components/feed/more-options-dropdown"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
+const DEFAULT_TRENDS = [
+    { id: "dummy-1", category: "Trending in India", topic: "#LPGCylinders", posts: 12800 },
+    { id: "dummy-2", category: "Trending in India", topic: "#Budget2026", posts: 45200 },
+    { id: "dummy-3", category: "Trending in India", topic: "#INDvPAK", posts: 98200 },
+    { id: "dummy-4", category: "Trending in India", topic: "#TechJobs", posts: 16300 },
+    { id: "dummy-5", category: "Trending in India", topic: "#RainAlert", posts: 7400 },
+]
+
 export default function Explore() {
     const { t } = useTranslation()
     const [activeTab, setActiveTab] = useState("foryou")
     const [trends, setTrends] = useState([])
+    const [trendsLoading, setTrendsLoading] = useState(true)
     const [exploreItems, setExploreItems] = useState([])
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
 
     useEffect(() => {
         const loadTrends = async () => {
+            setTrendsLoading(true)
             try {
-                const data = await searchService.getTrends()
-                setTrends(data)
+                const data = await searchService.getTrends({ limit: 20, region: 'India' })
+                const list = Array.isArray(data) ? data : []
+                setTrends(list.length > 0 ? list : DEFAULT_TRENDS)
             } catch (e) {
                 console.error(e)
+                setTrends(DEFAULT_TRENDS)
+            } finally {
+                setTrendsLoading(false)
             }
         }
         loadTrends()
@@ -106,21 +119,30 @@ export default function Explore() {
                     </div>
                 )}
 
-                {/* Trending List */}
-                {/* Trending List */}
+                {/* Trending hashtags (spike-based, location-aware) – X-style card */}
                 {(activeTab === "foryou" || activeTab === "trending") && (
                     <div className="divide-y divide-border/50 border-b border-border/50">
                         <h2 className="px-4 py-3 font-bold text-xl">{t('explore.trends_for_you')}</h2>
-                        {trends.length === 0 ? <div className="p-4 text-muted-foreground">{t('explore.no_trends')}</div> : trends.map((item) => (
-                            <div key={item.id} className="px-4 py-3 hover:bg-white/[0.03] transition cursor-pointer flex justify-between items-start" onClick={() => navigate(`/search?q=${encodeURIComponent(item.topic)}`)}>
-                                <div>
-                                    <div className="text-[13px] text-muted-foreground">{item.category}</div>
-                                    <div className="font-bold text-[15px] mt-0.5">{item.topic}</div>
-                                    <div className="text-[13px] text-muted-foreground mt-0.5">{item.posts?.toLocaleString()} posts</div>
+                        {trendsLoading ? (
+                            <div className="p-4 text-muted-foreground">{t('common.loading')}</div>
+                        ) : trends.length === 0 ? (
+                            <div className="p-4 text-muted-foreground">{t('explore.no_trends')}</div>
+                        ) : (
+                            trends.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="px-4 py-3 hover:bg-white/[0.03] transition cursor-pointer flex justify-between items-start"
+                                    onClick={() => navigate(`/search?q=${encodeURIComponent(item.topic)}`)}
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <div className="text-[13px] text-muted-foreground">{item.category}</div>
+                                        <div className="font-bold text-[15px] mt-0.5 text-foreground">{item.topic?.startsWith('#') ? item.topic : `#${item.topic}`}</div>
+                                        <div className="text-[13px] text-muted-foreground mt-0.5">{item.posts != null ? item.posts.toLocaleString() : 0} posts</div>
+                                    </div>
+                                    <MoreOptionsDropdown user={{ name: item.topic, handle: (item.topic || '').replace(/^#/, '').toLowerCase() }} />
                                 </div>
-                                <MoreOptionsDropdown user={{ name: item.topic, handle: item.topic.replace('#', '').toLowerCase() }} />
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 )}
 

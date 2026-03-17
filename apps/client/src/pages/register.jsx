@@ -62,7 +62,9 @@ export default function Register() {
             if (isTimeout) {
                 errorMsg = 'Request timed out. The server may be slow or unreachable. Please check your connection and try again.'
             } else if (isNetworkError) {
-                errorMsg = 'Cannot reach server. Ensure the backend is running and try again.'
+                errorMsg = 'Cannot reach server. On the machine running the app: run "pm2 list" and ensure auth-service and client are online. From another device: allow port 5173 in Windows Firewall.'
+            } else if (error.response?.status === 503) {
+                errorMsg = 'Backend unreachable. On the dev machine run: pm2 delete auth-service then pm2 start ecosystem.config.js --only auth-service'
             } else if (!msg) {
                 errorMsg = 'Registration failed. Please try again.'
             }
