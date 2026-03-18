@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next"
 
 
 
-export function Sidebar() {
+export function Sidebar({ forceCollapsed = false } = {}) {
     const location = useLocation()
     const { openLogin } = useAuthModal()
     const { user } = useAuth()
@@ -36,6 +36,24 @@ export function Sidebar() {
         setTheme(theme === "dark" ? "light" : "dark")
     }
 
+    const triggerHomeRefresh = (e) => {
+        // If we're already on Home, clicking Home should refresh the feed (no full reload).
+        if (location.pathname === "/") {
+            e?.preventDefault?.()
+            try {
+                window.dispatchEvent(new Event("feed-refresh"))
+            } catch {
+                // ignore
+            }
+            // UX: bring user to top like common social apps
+            try {
+                window.scrollTo({ top: 0, behavior: "smooth" })
+            } catch {
+                window.scrollTo(0, 0)
+            }
+        }
+    }
+
     const navItems = [
         { icon: Home, filledIcon: HomeFilledIcon, label: t('nav.home'), path: "/", filledActive: true },
         { icon: Search, label: t('nav.explore'), path: "/explore", outlineActive: true },
@@ -51,12 +69,32 @@ export function Sidebar() {
     ]
 
     return (
-        <nav className="w-[88px] xl:w-[275px] h-screen sticky top-0 border-r border-border/50 px-2 flex flex-col items-center xl:items-start justify-between py-2 overflow-y-auto no-scrollbar">
-            <div className="w-full flex flex-col items-center xl:items-start space-y-1">
+        <nav
+            className={cn(
+                "h-screen sticky top-0 flex flex-col justify-between overflow-y-auto no-scrollbar",
+                // Match the slim X-style rail in collapsed mode
+                forceCollapsed
+                    ? "bg-black border-r border-white/10 px-2 py-3"
+                    : "bg-black border-r border-white/10 px-3 py-3",
+                forceCollapsed ? "w-[88px] items-center" : "w-[88px] xl:w-[275px] items-center xl:items-start"
+            )}
+        >
+            <div className={cn("w-full flex flex-col", forceCollapsed ? "items-center space-y-2" : "items-center xl:items-start space-y-1.5")}>
                 {/* Logo */}
                 {/* Logo */}
-                <Link to="/" className="p-3 mb-1 xl:ml-0 hover:bg-muted/50 rounded-full transition cursor-pointer block">
-                    <img src="/websplash.png" alt="X" className="w-8 h-8 min-w-8 dark:invert" />
+                <Link
+                    to="/"
+                    className={cn(
+                        "rounded-full transition cursor-pointer block",
+                        forceCollapsed ? "p-2 mb-1 hover:bg-white/5" : "p-3 mb-1 xl:ml-0 hover:bg-muted/50"
+                    )}
+                    onClick={triggerHomeRefresh}
+                >
+                    <img
+                        src="/websplash.png"
+                        alt="W"
+                        className={cn("w-7 h-7 min-w-7 invert")}
+                    />
                 </Link>
 
                 {/* Nav Items */}
@@ -66,14 +104,24 @@ export function Sidebar() {
                             <DropdownMenu key="More">
                                 <DropdownMenuTrigger asChild>
                                     <div className={cn(
-                                        "flex items-center gap-4 text-[20px] px-4 rounded-full w-max xl:w-min xl:pr-8 transition hover:bg-gray-200 dark:hover:bg-zinc-900 cursor-pointer",
-                                        "h-[50px]"
+                                        "flex items-center rounded-full cursor-pointer select-none",
+                                        forceCollapsed
+                                            ? "h-[48px] w-[48px] justify-center text-white/80 hover:bg-white/5 hover:text-white"
+                                            : "h-[52px] px-4 gap-4 w-max xl:w-full xl:pr-6 text-white/90 hover:bg-white/5 hover:text-white",
                                     )}>
-                                        <item.icon className="w-[26.25px] h-[26.25px]" />
-                                        <span className="hidden xl:inline leading-6">{item.label}</span>
+                                        <item.icon className={cn(forceCollapsed ? "w-7 h-7" : "w-[26.25px] h-[26.25px]")} />
+                                        <span className={cn("leading-6", forceCollapsed ? "hidden" : "hidden xl:inline")}>{item.label}</span>
                                     </div>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-[300px] mb-2 bg-background border border-border/20 rounded-xl shadow-xl p-0 overflow-hidden" align="start" side="top">
+                                <DropdownMenuContent
+                                    // Render to the right so it doesn't get clipped by viewport height on mobile,
+                                    // and keep shadow visible (no overflow-hidden).
+                                    className="w-[300px] bg-background border border-border/20 rounded-xl shadow-2xl p-0"
+                                    align="start"
+                                    side="right"
+                                    sideOffset={12}
+                                    collisionPadding={12}
+                                >
                                     <Link to="/creator-studio">
                                         <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                             <Sparkles className="w-[18px] h-[18px]" />
@@ -162,24 +210,29 @@ export function Sidebar() {
                             key={item.label}
                             to={item.path}
                             className={cn(
-                                "flex items-center gap-4 text-[20px] px-4 rounded-full w-max xl:w-min xl:pr-8 transition hover:bg-gray-200 dark:hover:bg-zinc-900",
-                                isActive ? "font-bold" : "font-normal",
+                                "flex items-center rounded-full relative",
+                                forceCollapsed
+                                    ? "h-[52px] w-[52px] justify-center text-white/80 hover:bg-white/5 hover:text-white"
+                                    : cn(
+                                        "h-[52px] gap-4 px-4 w-max xl:w-full xl:pr-6 text-[19px] text-white/90 hover:bg-white/5 hover:text-white",
+                                        isActive ? "bg-white/10 text-white font-semibold" : "font-normal"
+                                    ),
                                 item.gradient && "bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-cyan-500/10 hover:from-purple-500/20 hover:via-blue-500/20 hover:to-cyan-500/20"
                             )}
-                            style={{ height: '50px' }}
+                            onClick={item.path === "/" ? triggerHomeRefresh : undefined}
                         >
                             {isActive && item.filledIcon ? (
                                 <item.filledIcon
                                     className={cn(
                                         "w-[26.25px] h-[26.25px] shrink-0",
-                                        "text-foreground"
+                                        forceCollapsed ? "text-white" : "text-white"
                                     )}
                                 />
                             ) : (
                                 <item.icon
                                     className={cn(
-                                        "w-[26.25px] h-[26.25px] shrink-0",
-                                        !item.gradient && (isActive ? "text-foreground" : "text-foreground/70"),
+                                        forceCollapsed ? "w-7 h-7 shrink-0" : "w-[26.25px] h-[26.25px] shrink-0",
+                                        !item.gradient && (isActive ? (forceCollapsed ? "text-white" : "text-foreground") : (forceCollapsed ? "text-white/70" : "text-foreground/70")),
                                         item.gradient && "text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500"
                                     )}
                                     strokeWidth={isActive ? 2.5 : 2}
@@ -187,8 +240,12 @@ export function Sidebar() {
                                     style={item.gradient ? { stroke: "url(#gradient)" } : {}}
                                 />
                             )}
+                            {forceCollapsed && isActive && (
+                                <span className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-sky-500 shadow-[0_0_0_3px_rgba(0,0,0,0.9)]" />
+                            )}
                             <span className={cn(
-                                "hidden xl:inline leading-6 whitespace-nowrap",
+                                forceCollapsed ? "hidden" : "hidden xl:inline",
+                                "leading-6 whitespace-nowrap",
                                 item.gradient && "bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500 bg-clip-text text-transparent"
                             )}>
                                 {item.label}
@@ -211,16 +268,21 @@ export function Sidebar() {
                 {/* Post Button */}
                 <ComposeModal>
                     <button
-                        className="mt-4 bg-primary text-primary-foreground font-bold text-[17px] rounded-full w-[52px] h-[52px] xl:h-[52px] xl:w-[90%] hover:opacity-90 transition shadow-lg flex items-center justify-center transform active:scale-95 duration-200"
+                        className={cn(
+                            "font-bold rounded-full transition shadow-lg flex items-center justify-center transform active:scale-95 duration-200",
+                            forceCollapsed
+                                ? "mt-2 bg-white text-black hover:bg-white/90 shadow-xl w-[52px] h-[52px]"
+                                : "mt-4 bg-white text-black hover:bg-white/95 shadow-xl w-[52px] h-[52px] xl:w-full xl:h-[54px] xl:px-6"
+                        )}
                     >
-                        <span className="hidden xl:inline">{t('nav.post')}</span>
-                        <Feather className="xl:hidden w-6 h-6" />
+                        <span className={cn("hidden xl:inline", forceCollapsed && "hidden")}>{t('nav.post')}</span>
+                        <Feather className={cn("w-6 h-6", forceCollapsed ? "" : "xl:hidden")} />
                     </button>
                 </ComposeModal>
             </div>
 
             {/* User Profile */}
-            <div className="w-full mb-4 px-2 xl:px-0">
+            <div className={cn("w-full px-2 xl:px-0", forceCollapsed ? "mb-2 mt-2 flex justify-center" : "mb-3 mt-3")}>
                 <UserProfileMenu />
             </div>
         </nav>

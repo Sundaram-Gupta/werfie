@@ -3,15 +3,16 @@ let io;
 exports.init = (server) => {
     const { Server } = require('socket.io');
     io = new Server(server, {
-        path: '/ws/live',
+        path: '/api/posts/ws',
         cors: {
-            origin: '*',
-            methods: ['GET', 'POST']
+            origin: (origin, callback) => callback(null, true),
+            methods: ['GET', 'POST'],
+            credentials: true
         }
     });
 
     io.on('connection', (socket) => {
-        console.log('[ContentService:WorldLeadersWS] Client connected:', socket.id);
+        console.log('[ContentService:MainWS] Client connected to root:', socket.id);
 
         socket.on('subscribe', (region) => {
             if (region) {

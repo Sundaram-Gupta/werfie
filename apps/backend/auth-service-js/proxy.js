@@ -22,7 +22,7 @@ const isAllowedOrigin = (origin) => {
     } catch { return false; }
 };
 
-export function middleware(request) {
+export function proxy(request) {
     const origin = request.headers.get('origin');
     const allowedOrigin = isAllowedOrigin(origin) ? origin : 'http://localhost:5173';
 

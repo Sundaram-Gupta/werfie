@@ -15,7 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 app.use(express.json());
 
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://localhost:3001'],
+    origin: (origin, callback) => callback(null, true), // Allow all origins in dev
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id']
@@ -895,14 +895,32 @@ app.get('/communities/:id/members', async (req, res) => {
 app.get('/', optionalAuthenticateToken, async (req, res) => {
     console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId || 'anonymous'}`);
     try {
-        const { userId, repliesOnly } = req.query;
+        // Avoid any intermediary/proxy caching for feed requests.
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
+
+        const { userId, repliesOnly, excludeReplies, topLevelOnly, limit, offset, skip } = req.query;
         const currentUserId = req.user?.userId || req.user?.id || null;
 
         const where = { ...publishedPostFilter() };
         if (userId) where.userId = userId;
-        if (repliesOnly === 'true') where.replyToId = { not: null };
+        const isTruthy = (v) => {
+            if (v === true) return true;
+            const s = String(v ?? '').trim().toLowerCase();
+            return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+        };
+        if (isTruthy(repliesOnly)) where.replyToId = { not: null };
+        // excludeReplies/topLevelOnly means only top-level posts (no replies)
+        if (isTruthy(excludeReplies) || isTruthy(topLevelOnly)) where.replyToId = null;
 
         console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, query: req.query });
+
+        const takeRaw = parseInt(limit, 10);
+        const take = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 20;
+        const skipRaw = parseInt(offset ?? skip, 10);
+        const skipCount = Number.isFinite(skipRaw) && skipRaw > 0 ? skipRaw : 0;
 
         const includeOpt = {
             user: { include: { profile: true } },
@@ -917,8 +935,9 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
         }
         const posts = await prisma.post.findMany({
             where,
-            take: 20,
-            orderBy: { createdAt: 'desc' },
+            take,
+            skip: skipCount,
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             include: includeOpt
         });
 
@@ -937,6 +956,7 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
 app.get('/following', authenticateToken, async (req, res) => {
     try {
         const currentUserId = req.user.userId;
+        const { limit, offset, skip } = req.query;
 
         // Get list of users the current user is following
         const following = await prisma.follow.findMany({
@@ -946,12 +966,18 @@ app.get('/following', authenticateToken, async (req, res) => {
 
         const followingIds = following.map(f => f.followingId);
 
+        const takeRaw = parseInt(limit, 10);
+        const take = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 20;
+        const skipRaw = parseInt(offset ?? skip, 10);
+        const skipCount = Number.isFinite(skipRaw) && skipRaw > 0 ? skipRaw : 0;
+
         const posts = await prisma.post.findMany({
             where: {
                 ...publishedPostFilter(),
                 userId: { in: followingIds }
             },
-            take: 20,
+            take,
+            skip: skipCount,
             orderBy: { createdAt: 'desc' },
             include: {
                 user: { include: { profile: true } },
@@ -1091,7 +1117,7 @@ app.post('/:id/retweet', authenticateToken, async (req, res) => {
             await prisma.notification.create({
                 data: {
                     userId: post.userId,
-                    type: 'retweet',
+                    type: 'repost', // Unified to 'repost' for frontend consistency
                     actorId: userId,
                     postId: id
                 }
@@ -1444,12 +1470,21 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
 });
 
 const http = require('http');
-const server = http.createServer(app);
+// Create server with manual request handler to bypass Express middleware for WebSockets
+const server = http.createServer((req, res) => {
+    // If it's a socket.io request (polling or upgrade), don't pass to Express
+    // This avoids URL rewrite and global Auth middleware interference
+    if (req.url && (req.url.includes('/api/posts/ws') || req.url.includes('/ws/live'))) {
+        return; // Let socket.io handle it
+    }
+    app(req, res);
+});
 const websocketService = require('./services/websocket.service');
 const { startScheduledPostPublisher } = require('./scheduledPostPublisher');
 websocketService.init(server);
 
-server.listen(PORT, '127.0.0.1', () => {
-    console.log(`Content Service with WebSockets running on port ${PORT}`);
+const bindHost = process.env.BIND_HOST || '0.0.0.0';
+server.listen(PORT, bindHost, () => {
+    console.log(`Content Service with WebSockets running on port ${PORT} (bound to ${bindHost})`);
     startScheduledPostPublisher(); // Kafka-driven scheduled post publishing (every 60s)
 });

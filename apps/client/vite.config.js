@@ -11,9 +11,11 @@ export default defineConfig({
     },
   },
   server: {
-    host: true,
+    // Listen on all interfaces so other devices on LAN can reach the app (e.g. http://YOUR_PC_IP:5173)
+    host: '0.0.0.0',
     port: 5173,
-    allowedHosts: true, // allow LAN IP access (e.g. 192.168.1.101:5173 from another desktop)
+    strictPort: false,
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:3001',

@@ -13,7 +13,7 @@ export function Feed({ tab = 'for-you' }) {
 
     // Infinite scroll: when user scrolls near bottom, load more posts (Intersection Observer)
     useEffect(() => {
-        if (tab !== 'for-you' || !hasMore || loadingMore) return
+        if (!hasMore || loadingMore) return
         const el = loadMoreTriggerRef.current
         if (!el) return
         const observer = new IntersectionObserver(
@@ -98,7 +98,7 @@ export function Feed({ tab = 'for-you' }) {
                 )
             })}
             {/* Sentinel for infinite scroll: when this enters viewport, loadMore() runs */}
-            {tab === 'for-you' && hasMore && (
+            {hasMore && (
                 <div ref={loadMoreTriggerRef} className="flex justify-center py-4 border-t border-border" aria-hidden>
                     {loadingMore && (
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

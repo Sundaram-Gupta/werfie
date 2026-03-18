@@ -39,6 +39,9 @@ export default function MainLayout() {
                              location.pathname === "/debate" ||
                              location.pathname.startsWith("/debate/")
 
+    // On chat routes, keep the main sidebar icon-only (do not remove the chat page sidebar).
+    const collapseMainSidebar = location.pathname === "/chat" || location.pathname === "/chat/settings"
+
     return (
         // Outer container: centers content and applies theme colors
         <div className="flex flex-col min-h-screen bg-background text-foreground selection:bg-primary/30">
@@ -46,7 +49,7 @@ export default function MainLayout() {
             {/* Inner container: max-width 1300px, three-column flex layout */}
             <div className="w-full max-w-[1300px] flex items-start mx-auto">
                 {/* Left column: Navigation sidebar (88px collapsed, 275px expanded) */}
-                <Sidebar />
+                <Sidebar forceCollapsed={collapseMainSidebar} />
 
                 {/* Center column: Main content area with dynamic width */}
                 <main className={`flex-1 ${hideRightSidebar ? 'max-w-full' : 'max-w-[600px]'} min-h-screen border-r border-l border-border/50`}>

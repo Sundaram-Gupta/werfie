@@ -1,7 +1,7 @@
 import { Feed } from "@/components/feed/feed"
 import { Image, BarChart2, CalendarClock, Smile, MapPin, X, Calendar } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
-import { cn } from "@/lib/utils"
+import { cn, getMediaUrl } from "@/lib/utils"
 import { postService } from "@/services/api"
 import { useAuth } from "@/context/AuthContext"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -255,7 +255,7 @@ export default function Home() {
 
     const userHandle = user?.profile?.handle || user?.handle || user?.email?.split('@')[0] || 'user'
     const userName = user?.profile?.name || user?.name || (userHandle ? userHandle.charAt(0).toUpperCase() + userHandle.slice(1) : 'User')
-    const userAvatar = user?.profile?.avatar || user?.avatar || '/websplash.png'
+    const userAvatar = user?.profile?.avatar || user?.avatar || null
 
     return (
         <div>
@@ -281,7 +281,7 @@ export default function Home() {
             {/* Post Composer */}
             <div className="px-4 py-3 border-b border-border flex gap-3">
                 <Avatar className="w-10 h-10 shrink-0">
-                    <AvatarImage src={userAvatar} />
+                    <AvatarImage src={getMediaUrl(userAvatar)} />
                     <AvatarFallback>{userName[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 w-full relative">

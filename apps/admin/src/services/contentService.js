@@ -14,7 +14,7 @@ export const getPostsCount = async () => {
     }
 };
 
-export const getPosts = async (filter = 'all', page = 1, limit = 20) => {
+export const getPosts = async (filter = 'all', page = 1, limit = 100) => {
     try {
         const response = await api.get('/admin/posts', {
             params: { filter, page, limit }

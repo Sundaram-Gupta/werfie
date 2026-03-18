@@ -22,8 +22,12 @@ info:
   version: 1.0.0
 
 servers:
+  # IMPORTANT: keep the first server relative so Swagger works from LAN IPs too.
+  # If you open `/api-docs` from another device, `localhost` points to *that device* and causes "Failed to fetch"/CORS-like errors.
+  - url: /
+    description: Current host (recommended)
   - url: http://localhost:3001
-    description: Client Gateway (use this - Auth, Messaging, Users, etc.)
+    description: Client Gateway (localhost)
   - url: http://127.0.0.1:3001
     description: Client Gateway (127.0.0.1)
   - url: http://localhost:3019
@@ -1568,6 +1572,7 @@ paths:
     get:
       summary: List conversations
       tags: [Messaging]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: limit
           in: query
@@ -1580,6 +1585,7 @@ paths:
     post:
       summary: Create conversation
       tags: [Messaging]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -1588,12 +1594,14 @@ paths:
               properties:
                 recipientId: { type: string }
       responses:
-        '201': { description: Created }
+        '200': { description: Created }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/messages/conversations/{id}:
     get:
       summary: Get conversation
       tags: [Messaging]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -1601,11 +1609,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Conversation }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/messages/conversations/{id}/messages:
     get:
       summary: Get messages
       tags: [Messaging]
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: id
           in: path
@@ -1619,11 +1629,13 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Messages }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/messages/send:
     post:
       summary: Send message
       tags: [Messaging]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -1634,12 +1646,14 @@ paths:
                 content: { type: string }
                 conversationId: { type: string }
       responses:
-        '201': { description: Sent }
+        '200': { description: Sent }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/messages/upload:
     post:
       summary: Upload attachment
       tags: [Messaging]
+      security: [{ bearerAuth: [] }]
       requestBody:
         content:
           multipart/form-data:
@@ -1647,6 +1661,7 @@ paths:
               type: object
       responses:
         '200': { description: Uploaded }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ============ MONETIZATION ============
   /api/monetization/profile:

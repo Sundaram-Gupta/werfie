@@ -55,7 +55,12 @@ function FollowCard({ user, initialFollowing = false, allowFollow = false, onFol
                 </Avatar>
                 <div className="flex flex-col">
                     <div className="flex items-center gap-1">
-                        <span className="font-bold text-[15px] hover:underline">{user.profile?.name || user?.name || (() => { const h = user?.profile?.handle || user?.handle || user?.email?.split('@')[0]; return h ? h.charAt(0).toUpperCase() + h.slice(1) : 'User'; })()}</span>
+                        <span className="font-bold text-[15px] hover:underline">{(() => {
+            const currentName = user.profile?.name || user.name;
+            const h = user?.profile?.handle || user?.handle || user?.email?.split('@')[0];
+            const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User';
+            return hasRealName ? currentName : (h ? h.charAt(0).toUpperCase() + h.slice(1) : 'User');
+        })()}</span>
                         {user.profile?.verified && <BadgeCheck className="w-[18px] h-[18px] text-blue-500 fill-blue-500/10" />}
                     </div>
                     <span className="text-muted-foreground text-[15px]">@{user.profile?.handle || 'user'}</span>

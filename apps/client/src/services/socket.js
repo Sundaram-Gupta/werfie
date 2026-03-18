@@ -1,10 +1,27 @@
 import { io } from "socket.io-client"
+import axios from "axios"
+import { getApiBase, getGatewayUrl } from "@/lib/api"
 
 // Use '' for same-origin when unset (Vite proxy handles /api; works via IP e.g. 192.168.1.37:5173)
 const API_URL = import.meta.env.VITE_API_URL || ''
-const MESSAGING_URL = import.meta.env.VITE_MESSAGING_URL || API_URL
+// Prefer direct gateway connection for socket to avoid Vite proxy websocket flakiness on refresh/LAN
+const MESSAGING_URL = import.meta.env.VITE_MESSAGING_URL || getGatewayUrl() || API_URL
 
 let socket
+
+async function tryRefreshAccessToken() {
+    const refreshToken = localStorage.getItem('refreshToken')
+    if (!refreshToken) return null
+    const base = getApiBase()
+    const { data } = await axios.post(`${base}/api/auth/refresh`, { refreshToken })
+    const payload = data?.data ?? data
+    const accessToken = payload?.accessToken
+    if (accessToken) {
+        localStorage.setItem('accessToken', accessToken)
+        return accessToken
+    }
+    return null
+}
 
 export const socketService = {
     connect: () => {
@@ -13,6 +30,7 @@ export const socketService = {
         if (!token) return null
 
         if (socket) return socket // Return existing socket (even if connecting) to avoid duplicates
+        let refreshing = false
 
         socket = io(MESSAGING_URL, {
             path: '/api/messages/ws',
@@ -35,6 +53,35 @@ export const socketService = {
 
         socket.on("connect_error", (err) => {
             console.error("Socket error", err)
+            const msg = err?.message || ''
+            const looksLikeAuth =
+                msg.toLowerCase().includes('authentication') ||
+                msg.toLowerCase().includes('invalid token') ||
+                msg.toLowerCase().includes('jwt expired')
+
+            // If access token expired, refresh and reconnect once
+            if (looksLikeAuth && !refreshing) {
+                refreshing = true
+                ;(async () => {
+                    try {
+                        const newAccessToken = await tryRefreshAccessToken()
+                        if (!newAccessToken) {
+                            socket?.disconnect()
+                            socket = null
+                            return
+                        }
+
+                        socket?.disconnect()
+                        socket = null
+                        socketService.connect()
+                    } catch (e) {
+                        socket?.disconnect()
+                        socket = null
+                    } finally {
+                        refreshing = false
+                    }
+                })()
+            }
         })
 
         return socket

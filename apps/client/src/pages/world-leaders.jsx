@@ -3,7 +3,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { Globe, BadgeCheck, Radio, AlertTriangle } from 'lucide-react';
 import { AnnouncementFeedCard } from '../components/feed/announcement-feed-card';
-import { getApiBase } from '@/lib/api';
+import { getApiBase, getGatewayUrl } from '@/lib/api';
 
 export default function WorldLeadersPage() {
     const [feed, setFeed] = useState([]);
@@ -45,7 +45,7 @@ export default function WorldLeadersPage() {
         fetchData();
 
         // Setup WebSocket connection
-        const socket = io(getApiBase(), { path: '/ws/live' });
+        const socket = io(getGatewayUrl(), { path: '/ws/live' });
 
         socket.on('connect', () => {
             console.log('Connected to World Leaders Live Updates');

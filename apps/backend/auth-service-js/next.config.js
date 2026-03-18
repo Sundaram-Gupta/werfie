@@ -1,7 +1,11 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Turbopack: use auth-service-js as root so multiple lockfiles (monorepo) don't trigger a warning
+  turbopack: { root: path.join(__dirname) },
   // Force restart 2026-02-05
-  // CORS handled by middleware and headers in server.js
+  // CORS handled by proxy and headers in server.js
   async headers() {
     return []
   },

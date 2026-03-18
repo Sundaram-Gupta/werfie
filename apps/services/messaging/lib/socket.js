@@ -10,7 +10,8 @@ export function getSocketServer(httpServer) {
         io = new Server(httpServer, {
             path: '/api/messages/ws',
             cors: {
-                origin: "http://localhost:5173",
+                // Allow dev access from LAN/localhost (Vite, gateway, etc.)
+                origin: (origin, cb) => cb(null, true),
                 methods: ["GET", "POST"],
                 credentials: true
             },

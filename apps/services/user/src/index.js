@@ -47,11 +47,13 @@ function normalizeUserRecord(user) {
     if (!user) return null;
     const { passwordHash, ...safeUser } = user;
     
+    const defaultHandle = safeUser.email ? safeUser.email.split('@')[0] : 'user';
+    const fallbackName = defaultHandle.charAt(0).toUpperCase() + defaultHandle.slice(1);
+
     if (!safeUser.profile) {
-        const handle = safeUser.email ? safeUser.email.split('@')[0] : 'user';
         safeUser.profile = {
-            name: 'User',
-            handle: handle,
+            name: fallbackName,
+            handle: defaultHandle,
             bio: null,
             avatar: null,
             banner: null,
@@ -63,10 +65,15 @@ function normalizeUserRecord(user) {
         };
     } else {
         // Ensure all expected fields exist on profile
+        // If name is missing, empty, or literally "User", use capitalized handle
+        const handle = safeUser.profile.handle || defaultHandle;
+        const currentName = safeUser.profile.name;
+        const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User';
+        
         safeUser.profile = {
             ...safeUser.profile,
-            name: safeUser.profile.name || 'User',
-            handle: safeUser.profile.handle || (safeUser.email ? safeUser.email.split('@')[0] : 'user'),
+            name: hasRealName ? currentName : (handle.charAt(0).toUpperCase() + handle.slice(1)),
+            handle: handle,
             verified: safeUser.profile.verified ?? false
         };
     }
@@ -531,10 +538,7 @@ app.get('/suggestions', async (req, res) => {
             }
         }
 
-        const safeUsers = users.map(user => {
-            const { passwordHash, ...safe } = user;
-            return safe;
-        });
+        const safeUsers = users.map(normalizeUserRecord);
 
         res.json(safeUsers);
     } catch (error) {
@@ -581,10 +585,7 @@ app.get('/search', async (req, res) => {
             }
         }
 
-        const safeUsers = users.map(user => {
-            const { passwordHash, ...safe } = user;
-            return safe;
-        });
+        const safeUsers = users.map(normalizeUserRecord);
 
         res.json(safeUsers);
     } catch (error) {
@@ -711,16 +712,52 @@ app.put('/:id', authenticateToken, async (req, res) => {
         if (gender !== undefined) updateData.gender = gender || null;
         if (birthdate !== undefined) updateData.birthdate = birthdate ? new Date(birthdate) : null;
 
-        const updatedProfile = await prisma.profile.upsert({
-            where: { userId: req.params.id },
-            update: updateData,
-            create: {
-                userId: req.params.id,
-                handle: req.user.email.split('@')[0], // Fallback handle
-                name: name || 'User',
-                ...updateData
+        const baseCreate = {
+            userId: req.params.id,
+            handle: (req.user?.email ? String(req.user.email).split('@')[0] : null) || `user_${String(req.params.id).slice(0, 8)}`,
+            name: name || 'User',
+        };
+
+        // Select only fields that are guaranteed to exist across DB versions.
+        // Some environments are missing Profile.gender, which would crash Prisma if selected implicitly.
+        const PROFILE_SAFE_SELECT = {
+            id: true,
+            userId: true,
+            name: true,
+            handle: true,
+            bio: true,
+            avatar: true,
+            banner: true,
+            location: true,
+            website: true,
+            birthdate: true,
+            createdAt: true,
+            updatedAt: true,
+            verified: true,
+        };
+
+        let updatedProfile;
+        try {
+            updatedProfile = await prisma.profile.upsert({
+                where: { userId: req.params.id },
+                update: updateData,
+                create: { ...baseCreate, ...updateData },
+                select: PROFILE_SAFE_SELECT
+            });
+        } catch (err) {
+            // Backward-compat: some DBs don't have Profile.gender yet.
+            if (err?.code === 'P2022' && String(err?.message || '').includes('Profile.gender')) {
+                const { gender: _omit, ...noGender } = updateData;
+                updatedProfile = await prisma.profile.upsert({
+                    where: { userId: req.params.id },
+                    update: noGender,
+                    create: { ...baseCreate, ...noGender },
+                    select: PROFILE_SAFE_SELECT
+                });
+            } else {
+                throw err;
             }
-        });
+        }
 
         res.json({ ...updatedProfile, preferredLanguage });
     } catch (error) {

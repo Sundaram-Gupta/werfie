@@ -24,7 +24,11 @@ export function AuthProvider({ children }) {
                         await authService.logout()
                     }
                 } catch (error) {
-                    console.error('Auth check failed:', error)
+                    // 401/403 on /api/auth/me is normal when token expired or opening app on another device – clear session, don't log as error
+                    const status = error.response?.status
+                    if (status !== 401 && status !== 403) {
+                        console.error('Auth check failed:', error)
+                    }
                     await authService.logout()
                 }
             }

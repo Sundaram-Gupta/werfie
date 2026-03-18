@@ -15,6 +15,7 @@ import { Image, X, MapPin, Smile, FileBarChart2, CalendarClock, Globe } from "lu
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { postService } from "@/services/api"
+import { getMediaUrl } from "@/lib/utils"
 
 export function ComposeModal({ children }) {
     const [postContent, setPostContent] = useState("")
@@ -116,7 +117,7 @@ export function ComposeModal({ children }) {
 
     const userHandle = user?.profile?.handle || user?.handle || user?.email?.split('@')[0] || 'user'
     const userName = user?.profile?.name || user?.name || (userHandle ? userHandle.charAt(0).toUpperCase() + userHandle.slice(1) : 'User')
-    const userAvatar = user?.profile?.avatar || user?.avatar || '/websplash.png'
+    const userAvatar = user?.profile?.avatar || user?.avatar || null
 
     return (
         <Dialog onOpenChange={setOpen} open={open}>
@@ -141,7 +142,7 @@ export function ComposeModal({ children }) {
                     <div className="flex gap-3">
                         <div className="flex flex-col items-center">
                             <Avatar className="w-10 h-10 border border-black z-10">
-                                <AvatarImage src={userAvatar} />
+                                <AvatarImage src={getMediaUrl(userAvatar)} />
                                 <AvatarFallback>{userName[0]?.toUpperCase() || 'U'}</AvatarFallback>
                             </Avatar>
                         </div>

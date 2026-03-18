@@ -18,7 +18,7 @@ export function PostAnalyticsModal({ open, onOpenChange, post }) {
     const user = {
         name: post.user?.profile?.name || post.user?.name || 'Unknown User',
         handle: post.user?.profile?.handle || post.user?.handle || 'unknown',
-        avatar: post.user?.profile?.avatar || post.user?.avatar || '/websplash.png',
+        avatar: post.user?.profile?.avatar || post.user?.avatar || null,
         verified: post.user?.profile?.verified || post.user?.verified || false
     }
 

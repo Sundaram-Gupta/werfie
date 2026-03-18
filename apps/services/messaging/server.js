@@ -23,7 +23,7 @@ const httpServer = createServer()
 
 // 1. CORS Middleware - Global (allow gateway + client for Swagger & app)
 const corsOptions = {
-    origin: ['http://localhost:5173', 'http://localhost:3001', 'http://127.0.0.1:3001'],
+    origin: (origin, callback) => callback(null, true), // Allow all origins in dev
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token', 'x-user-id', 'x-verified-gateway', 'x-user-email'],
     credentials: true,

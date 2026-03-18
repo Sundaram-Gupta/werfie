@@ -213,6 +213,7 @@ model Message {
   mimeType       String?
   status         String       @default("sent")
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
   conversation   Conversation @relation("ConversationMessages", fields: [conversationId], references: [id])
   sender         User         @relation(fields: [senderId], references: [id])
 

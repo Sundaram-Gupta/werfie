@@ -28,6 +28,7 @@ export default function Profile() {
     const [followLoading, setFollowLoading] = useState(false)
     const [followerCount, setFollowerCount] = useState(0)
     const [followingCount, setFollowingCount] = useState(0)
+    const [postCount, setPostCount] = useState(0)
     const [replies, setReplies] = useState([])
 
     // Determine which user ID to fetch
@@ -39,9 +40,10 @@ export default function Profile() {
             const userData = await userService.getUser(profileUserId)
             setProfile(userData)
 
-            // Prisma: _count.following = people who follow this user; _count.followers = people this user follows
-            setFollowerCount(userData._count?.following ?? 0)
-            setFollowingCount(userData._count?.followers ?? 0)
+            // Prisma: _count.followers = people who follow this user; _count.following = people this user follows
+            setFollowerCount(userData._count?.followers ?? 0)
+            setFollowingCount(userData._count?.following ?? 0)
+            setPostCount(userData._count?.posts ?? 0)
 
 
             // Check if current user is following this profile (only if viewing someone else's profile)
@@ -62,6 +64,10 @@ export default function Profile() {
                 user: post.user || userData
             }))
             setPosts(hydratedPosts)
+            // If backend count is missing/outdated, fall back to fetched length
+            if (!userData._count?.posts && Array.isArray(userPosts?.posts)) {
+                setPostCount(userPosts.posts.length)
+            }
 
             // Fetch user's replies (posts where replyToId is not null)
             const userReplies = await postService.getPosts({ userId: profileUserId, repliesOnly: true })
@@ -172,7 +178,7 @@ export default function Profile() {
     const birthdate = userProfile?.birthdate ? new Date(userProfile.birthdate) : null
 
     const joinDate = userProfile?.createdAt ? new Date(userProfile.createdAt) : new Date() 
-    const avatar = userProfile?.avatar || "/websplash.png"
+    const avatar = userProfile?.avatar || null
     const banner = userProfile?.banner || null
 
     return (
@@ -184,7 +190,7 @@ export default function Profile() {
                 </div>
                 <div>
                     <h1 className="text-[20px] font-bold leading-5">{name}</h1>
-                    <span className="text-[13px] text-muted-foreground">{stats?.posts || 0} {t('profile.posts_count')}</span>
+                    <span className="text-[13px] text-muted-foreground">{postCount || 0} {t('profile.posts_count')}</span>
                 </div>
             </div>
 

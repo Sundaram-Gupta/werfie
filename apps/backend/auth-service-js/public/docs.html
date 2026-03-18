@@ -26,7 +26,8 @@
     <script>
         window.onload = function() {
             window.ui = SwaggerUIBundle({
-                url: "/openapi.yaml",
+                // Use gateway-served spec so it works on LAN IP too
+                url: "/api-docs/spec",
                 dom_id: '#swagger-ui',
                 deepLinking: true,
                 presets: [
@@ -43,7 +44,18 @@
                 filter: true,
                 showRequestHeaders: true,
                 tryItOutEnabled: true,
-                persistAuthorization: true
+                persistAuthorization: true,
+                // Force requests to use the same host you opened docs from.
+                // This prevents "localhost" from breaking auth/authorize on other devices.
+                requestInterceptor: (req) => {
+                    try {
+                        const origin = window.location.origin;
+                        if (origin && typeof req?.url === 'string') {
+                            req.url = req.url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, origin);
+                        }
+                    } catch { /* ignore */ }
+                    return req;
+                }
             });
         };
     </script>

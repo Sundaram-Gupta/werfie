@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import EmojiPicker from 'emoji-picker-react'
 import { Link } from "react-router-dom"
-import { cn } from "@/lib/utils"
+import { cn, getMediaUrl } from "@/lib/utils"
 
 export function ReplyModal({ post, children }) {
     const { t } = useTranslation()
@@ -286,7 +286,7 @@ export function ReplyModal({ post, children }) {
     }
 
     const userName = currentUser?.profile?.name || currentUser?.name || 'Me'
-    const userAvatar = currentUser?.profile?.avatar || currentUser?.avatar || '/websplash.png'
+    const userAvatar = currentUser?.profile?.avatar || currentUser?.avatar || null
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -328,7 +328,7 @@ export function ReplyModal({ post, children }) {
 
                     <div className="flex gap-3 mt-1">
                         <Avatar className="w-10 h-10">
-                            <AvatarImage src={userAvatar} />
+                            <AvatarImage src={getMediaUrl(userAvatar)} />
                             <AvatarFallback className="bg-slate-700">{userName[0]?.toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 overflow-hidden">

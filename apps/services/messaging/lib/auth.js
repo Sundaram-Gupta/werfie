@@ -56,9 +56,8 @@ export function withAuth(handler, options = {}) {
             try {
                 user = await verifyJWT(authHeader.split(' ')[1])
             } catch (error) {
-                if (options.gracefulGet && request.method === 'GET' && request.url?.includes('/conversations')) {
-                    return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 })
-                }
+                // If a token was provided but is invalid/expired, DO NOT mask it as "200 []".
+                // Returning 401 makes Swagger/debugging accurate; the UI can handle 401 by re-login/refresh.
                 return new Response(JSON.stringify({ status: false, message: 'Invalid token', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
             }
         }

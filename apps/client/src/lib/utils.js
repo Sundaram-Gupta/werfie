@@ -13,10 +13,8 @@ export function getMediaUrl(path) {
   if (path.startsWith('http')) return path
   // Handle paths that already include /api/media
   if (path.startsWith('/api/media')) return `${API_BASE_URL}${path}`
-  // Handle local uploads served from public directory via API route
-  if (path.startsWith('/uploads')) {
-    const filename = path.split('/').pop()
-    return `${API_BASE_URL}/api/media/${filename}`
-  }
+  // Local uploads are served by the gateway and proxied to content-service
+  // Keep the full path (including subfolders) so `/uploads/images/...` resolves correctly.
+  if (path.startsWith('/uploads')) return `${API_BASE_URL}${path}`
   return path
 }

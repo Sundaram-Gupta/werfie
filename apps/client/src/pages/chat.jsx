@@ -53,6 +53,18 @@ function formatJoinedDate(dateOrStr) {
     return `Joined ${months[d.getMonth()]} ${d.getFullYear()}`
 }
 
+function formatDayLabel(dateOrStr) {
+    if (!dateOrStr) return ''
+    const d = dateOrStr instanceof Date ? dateOrStr : new Date(dateOrStr)
+    const today = new Date()
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const startOfThatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diffDays = Math.round((startOfToday - startOfThatDay) / 86400000)
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Yesterday'
+    return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: '2-digit' }).format(d)
+}
+
 const AVATAR_COLORS = [
     'bg-red-500', 'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500',
     'bg-teal-500', 'bg-cyan-500', 'bg-sky-500', 'bg-blue-500', 'bg-indigo-500',
@@ -95,6 +107,19 @@ export default function Chat() {
     const [followingUsers, setFollowingUsers] = useState([])
     const [showUserInfoModal, setShowUserInfoModal] = useState(false)
 
+    const upsertConversation = (prev, chatObj) => {
+        if (!chatObj?.id) return prev
+        const next = [chatObj, ...(prev || []).filter(c => String(c?.id) !== String(chatObj.id))]
+        // Also drop any accidental duplicates by id (defensive)
+        const seen = new Set()
+        return next.filter(c => {
+            const id = String(c?.id ?? '')
+            if (!id || seen.has(id)) return false
+            seen.add(id)
+            return true
+        })
+    }
+
     useEffect(() => {
         if (authLoading || !currentUser || !socket) return
 
@@ -124,7 +149,17 @@ export default function Chat() {
         try {
             setLoading(true)
             const data = await messagingService.getConversations()
-            const list = Array.isArray(data) ? data : []
+            const listRaw = Array.isArray(data) ? data : []
+            // Deduplicate by conversation id (backend or client can accidentally produce duplicates)
+            const seenIds = new Set()
+            const list = listRaw.filter(c => {
+                const id = c?.id
+                if (!id) return false
+                const key = String(id)
+                if (seenIds.has(key)) return false
+                seenIds.add(key)
+                return true
+            })
 
             // Enrich conversations with user profiles
             // Collect all OTHER user IDs
@@ -166,7 +201,26 @@ export default function Chat() {
                 }
             }).filter(Boolean)
 
-            setConversations(enriched)
+            // Ensure no duplicates by other user id in UI list (one sidebar entry per contact)
+            const uniq = []
+            const seenUserIds = new Set()
+            for (const c of enriched) {
+                const otherUserId = String(c.user?.id || 'unknown')
+                if (!seenUserIds.has(otherUserId) || otherUserId === 'unknown') {
+                    seenUserIds.add(otherUserId)
+                    uniq.push(c)
+                }
+            }
+            setConversations(uniq)
+
+            // Restore last opened conversation after refresh
+            try {
+                const lastId = localStorage.getItem('werfie:lastConversationId')
+                if (lastId && !selectedChat) {
+                    const match = enriched.find(c => String(c.id) === String(lastId))
+                    if (match) setSelectedChat(match)
+                }
+            } catch { /* ignore */ }
         } catch (error) {
             console.error("Failed to load conversations", error)
         } finally {
@@ -276,7 +330,7 @@ export default function Chat() {
                 unread: true
             }
 
-            setConversations(prev => [chatObj, ...prev])
+            setConversations(prev => upsertConversation(prev, chatObj))
         } catch (error) {
             console.error("Failed to fetch new conversation", error)
         }
@@ -293,6 +347,7 @@ export default function Chat() {
     // Load messages when selecting chat
     useEffect(() => {
         if (!selectedChat) return
+        try { localStorage.setItem('werfie:lastConversationId', String(selectedChat.id)) } catch { /* ignore */ }
 
         const fetchMessages = async () => {
             try {
@@ -330,6 +385,7 @@ export default function Chat() {
         mediaType: msg.type,
         thumbnailUrl: msg.thumbnailUrl,
         duration: msg.duration,
+        createdAt: msg.createdAt,
         timestamp: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
 
@@ -417,7 +473,7 @@ export default function Chat() {
                     unread: false
                 }
 
-                setConversations(prev => [chatObj, ...prev])
+                setConversations(prev => upsertConversation(prev, chatObj))
                 setSelectedChat(chatObj)
                 toast.success("New conversation started")
             }
@@ -713,71 +769,80 @@ export default function Chat() {
                                     </Button>
                                 </div>
 
-                                {/* Today separator */}
-                                <div className="flex items-center gap-4 py-3">
-                                    <div className="flex-1 h-px bg-border" />
-                                    <span className="text-muted-foreground text-[14px] font-medium">Today</span>
-                                    <div className="flex-1 h-px bg-border" />
-                                </div>
+                                {messages.map((msg, idx) => {
+                                    const prev = messages[idx - 1]
+                                    const thisDay = formatDayLabel(msg.createdAt)
+                                    const prevDay = prev ? formatDayLabel(prev.createdAt) : null
+                                    const showDay = thisDay && thisDay !== prevDay
 
-                                {messages.map((msg) => (
-                                    <div
-                                        key={msg.id}
-                                        className={cn(
-                                            "flex flex-col max-w-[70%]",
-                                            msg.sender === "me" ? "self-end items-end" : "self-start items-start"
-                                        )}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "px-4 py-3 rounded-2xl text-[16px]",
-                                                msg.sender === "me"
-                                                    ? "bg-[rgb(29,155,240)] text-white rounded-br-sm"
-                                                    : "bg-[#2f3336] text-white rounded-bl-sm"
-                                            )}
-                                        >
-                                            {msg.mediaUrl && (
-                                                msg.mediaType === 'video' ? (
-                                                    <div className="relative">
-                                                        <video
-                                                            src={getMediaUrl(msg.mediaUrl)}
-                                                            controls
-                                                            poster={getMediaUrl(msg.thumbnailUrl)}
-                                                            className="rounded-lg mb-2 max-h-[300px] w-full object-cover bg-black"
-                                                        />
-                                                        {msg.duration && (
-                                                            <span className="absolute bottom-4 right-2 bg-black/60 text-white text-xs px-1 rounded">
-                                                                {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ) : msg.mediaType === 'audio' ? (
-                                                    <div className="w-[200px] bg-gray-900 rounded-lg p-2 mb-2">
-                                                        <audio src={getMediaUrl(msg.mediaUrl)} controls className="w-full" />
-                                                        {msg.duration && (
-                                                            <div className="text-xs text-muted-foreground text-right mt-1">
-                                                                {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <img
-                                                        src={getMediaUrl(msg.mediaUrl)}
-                                                        alt="Attachment"
-                                                        className="rounded-lg mb-2 max-h-[300px] w-full object-cover"
-                                                    />
-                                                )
-                                            )}
-                                            <span className={msg.mediaUrl ? "block" : ""}>{msg.text}</span>
-                                            {msg.sender === "me" && (
-                                                <div className="flex items-center justify-end gap-1 mt-1 text-white/80">
-                                                    <span className="text-[12px]">{msg.timestamp}</span>
-                                                    <Check className="w-4 h-4" strokeWidth={2.5} />
+                                    return (
+                                        <div key={msg.id} className="contents">
+                                            {showDay && (
+                                                <div className="flex items-center justify-center py-3">
+                                                    <span className="text-muted-foreground text-[13px] font-medium">{thisDay}</span>
                                                 </div>
                                             )}
+
+                                            <div
+                                                className={cn(
+                                                    "flex flex-col max-w-[66%]",
+                                                    msg.sender === "me" ? "self-end items-end" : "self-start items-start"
+                                                )}
+                                            >
+                                                <div
+                                                    className={cn(
+                                                        "px-4 py-2.5 rounded-2xl text-[15px] leading-snug",
+                                                        msg.sender === "me"
+                                                            ? "bg-[rgb(29,155,240)] text-white rounded-br-md"
+                                                            : "bg-[#2f3336] text-white rounded-bl-md"
+                                                    )}
+                                                >
+                                                    {msg.mediaUrl && (
+                                                        msg.mediaType === 'video' ? (
+                                                            <div className="relative">
+                                                                <video
+                                                                    src={getMediaUrl(msg.mediaUrl)}
+                                                                    controls
+                                                                    poster={getMediaUrl(msg.thumbnailUrl)}
+                                                                    className="rounded-lg mb-2 max-h-[280px] w-full object-cover bg-black"
+                                                                />
+                                                                {msg.duration && (
+                                                                    <span className="absolute bottom-4 right-2 bg-black/60 text-white text-xs px-1 rounded">
+                                                                        {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : msg.mediaType === 'audio' ? (
+                                                            <div className="w-[220px] bg-gray-900 rounded-lg p-2 mb-2">
+                                                                <audio src={getMediaUrl(msg.mediaUrl)} controls className="w-full" />
+                                                                {msg.duration && (
+                                                                    <div className="text-xs text-muted-foreground text-right mt-1">
+                                                                        {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <img
+                                                                src={getMediaUrl(msg.mediaUrl)}
+                                                                alt="Attachment"
+                                                                className="rounded-lg mb-2 max-h-[280px] w-full object-cover"
+                                                            />
+                                                        )
+                                                    )}
+
+                                                    {msg.text ? <span className={msg.mediaUrl ? "block" : ""}>{msg.text}</span> : null}
+
+                                                    {msg.sender === "me" && (
+                                                        <div className="flex items-center justify-end gap-1 mt-1 text-white/80">
+                                                            <span className="text-[11px]">{msg.timestamp}</span>
+                                                            <Check className="w-4 h-4" strokeWidth={2.5} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                                 <div ref={messagesEndRef} />
                             </div>
 
@@ -814,7 +879,7 @@ export default function Chat() {
                                     </div>
                                 )}
 
-                                <div className="bg-[#202327] rounded-full flex items-center px-3 py-2.5 gap-2 focus-within:ring-1 focus-within:ring-blue-500/50">
+                                <div className="flex items-center gap-2">
                                     <input
                                         type="file"
                                         ref={fileInputRef}
@@ -825,39 +890,55 @@ export default function Chat() {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="text-muted-foreground hover:text-blue-500 hover:bg-white/5 rounded-full h-11 w-11 shrink-0"
+                                        className="bg-[#202327] hover:bg-[#2a2d31] text-white/80 hover:text-white rounded-full h-12 w-12 shrink-0"
                                         onClick={() => fileInputRef.current?.click()}
                                         disabled={isUploading}
                                         title="Attach"
                                     >
-                                        <Plus className="w-7 h-7" />
+                                        <Plus className="w-6 h-6" />
                                     </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className={cn("rounded-full h-11 w-11 shrink-0", showEmojiPicker ? "text-blue-500 bg-blue-500/10" : "text-muted-foreground hover:text-blue-500 hover:bg-white/5")}
-                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                        title="Emoji"
-                                    >
-                                        <Smile className="w-7 h-7" />
-                                    </Button>
-                                    <Input
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        placeholder="Message"
-                                        className="flex-1 border-none bg-transparent focus-visible:ring-0 text-white placeholder:text-muted-foreground px-3 h-11 text-[16px]"
-                                        onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className={cn("rounded-full h-11 w-11 shrink-0 transition-colors", (newMessage.trim() || mediaAttachment) ? "text-blue-500 hover:bg-blue-500/10" : "text-muted-foreground opacity-50")}
-                                        onClick={handleSendMessage}
-                                        disabled={(!newMessage.trim() && !mediaAttachment) || isUploading}
-                                        title="Send"
-                                    >
-                                        <Send className="w-7 h-7" />
-                                    </Button>
+                                    <div className="bg-[#202327] rounded-full flex items-center px-2.5 py-2 gap-1 flex-1 focus-within:ring-1 focus-within:ring-white/10">
+                                        <button
+                                            type="button"
+                                            className="h-10 w-10 rounded-full bg-white/[0.06] hover:bg-white/[0.10] text-white/80 hover:text-white flex items-center justify-center shrink-0"
+                                            title="GIF"
+                                            onClick={() => toast.info("GIF picker coming soon")}
+                                        >
+                                            <span className="text-[12px] font-bold">GIF</span>
+                                        </button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className={cn(
+                                                "rounded-full h-10 w-10 shrink-0 text-white/80 hover:text-white hover:bg-white/[0.06]",
+                                                showEmojiPicker ? "bg-white/[0.10] text-white" : ""
+                                            )}
+                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                            title="Emoji"
+                                        >
+                                            <Smile className="w-5 h-5" />
+                                        </Button>
+                                        <Input
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            placeholder="Unencrypted message"
+                                            className="flex-1 border-none bg-transparent focus-visible:ring-0 text-white placeholder:text-muted-foreground px-3 h-10 text-[15px]"
+                                            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                                        />
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className={cn(
+                                                "rounded-full h-10 w-10 shrink-0 transition-colors",
+                                                (newMessage.trim() || mediaAttachment) ? "text-white hover:bg-white/[0.06]" : "text-white/40"
+                                            )}
+                                            onClick={handleSendMessage}
+                                            disabled={(!newMessage.trim() && !mediaAttachment) || isUploading}
+                                            title="Send"
+                                        >
+                                            <Send className="w-5 h-5" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </>

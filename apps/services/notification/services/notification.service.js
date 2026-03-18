@@ -31,30 +31,35 @@ export class NotificationService {
                         like: "New Like",
                         follow: "New Follower",
                         reply: "New Reply",
+                        repost: "New Repost",
                         message: "New Message"
                     },
                     hi: {
                         like: "नई लाइक",
                         follow: "नया फॉलोअर",
                         reply: "नया जवाब",
+                        repost: "नई रीपोस्ट",
                         message: "नया संदेश"
                     },
                     es: {
                         like: "Nuevo Me gusta",
                         follow: "Nuevo Seguidor",
                         reply: "Nueva Respuesta",
+                        repost: "Nuevo Repost",
                         message: "Nuevo Mensaje"
                     },
                     fr: {
                         like: "Nouveau J'aime",
                         follow: "Nouvel Abonné",
                         reply: "Nouvelle Réponse",
+                        repost: "Nouveau Repost",
                         message: "Nouveau Message"
                     },
                     de: {
                         like: "Neues 'Gefällt mir'",
                         follow: "Neuer Follower",
                         reply: "Neue Antwort",
+                        repost: "Neuer Repost",
                         message: "Neue Nachricht"
                     }
                 };

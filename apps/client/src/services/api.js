@@ -1,4 +1,6 @@
-import api, { API_BASE_URL } from '@/lib/api'
+import api, { API_BASE_URL, getGatewayUrl } from '@/lib/api'
+
+export { getGatewayUrl }
 import axios from 'axios'
 
 import i18n from '@/i18n'
@@ -287,8 +289,8 @@ export const postService = {
     },
 
     // Get following feed
-    getFollowingPosts: async () => {
-        const { data } = await api.get('/api/posts/following')
+    getFollowingPosts: async (params = {}) => {
+        const { data } = await api.get('/api/posts/following', { params })
         return data
     },
 }
@@ -390,9 +392,8 @@ export const searchService = {
 
     // Search users
     searchUsers: async (query, params = {}) => {
-        const { data } = await api.get('/api/users/search', {
-            params: { q: query, ...params },
-        })
+        // Gateway routes this to user-service (/search)
+        const { data } = await api.get('/api/search/users', { params: { q: query, ...params } })
         return data
     },
 

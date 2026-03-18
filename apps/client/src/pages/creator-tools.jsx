@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { PostCard } from "@/components/feed/post-card"
 import { postService, mediaService, analyticsService } from "@/services/api"
+import { getGatewayUrl } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 import { io } from "socket.io-client"
 
@@ -962,7 +963,7 @@ export function PostDetail() {
     useEffect(() => {
         const onRefresh = () => fetchData(true)
         window.addEventListener('feed-refresh', onRefresh)
-        const socket = io(`${API_URL}/feed`, { path: '/ws/live', transports: ['polling', 'websocket'] })
+        const socket = io(`${getGatewayUrl()}/feed`, { path: '/ws/live', transports: ['polling', 'websocket'] })
         socket.on('post_published', onRefresh)
         return () => {
             window.removeEventListener('feed-refresh', onRefresh)

@@ -21,7 +21,7 @@ import CrisisAdminPanel from '@/components/crisis/CrisisAdminPanel';
 import { getCrises, getCrisisDetail } from '@/services/crisis.api';
 import { useAuth } from '@/context/AuthContext';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+import { getGatewayUrl } from '@/lib/api';
 
 const CrisisCommand = () => {
     const { user } = useAuth();
@@ -52,14 +52,15 @@ const CrisisCommand = () => {
     // WebSocket Integration
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
-        socketRef.current = io(API_BASE_URL, {
+        const gateway = getGatewayUrl();
+        socketRef.current = io(gateway, {
             path: '/ws/live',
             auth: { token }
         });
 
         const crisisNsp = socketRef.current.io.opts.path + '/crisis-live'; 
         // Note: socket.io-client namespaces are handled via io(url + '/nsp')
-        const crisisSocket = io(`${API_BASE_URL}/crisis-live`, {
+        const crisisSocket = io(`${gateway}/crisis-live`, {
             path: '/ws/live',
             auth: { token }
         });

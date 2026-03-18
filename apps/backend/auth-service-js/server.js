@@ -3,9 +3,20 @@ const express = require('express');
 const next = require('next');
 const http = require('http');
 const httpProxy = require('http-proxy');
-const { parse } = require('url');
 const path = require('path');
 const fs = require('fs');
+
+// WHATWG URL instead of deprecated url.parse()
+function parseUrl(url, base = 'http://localhost') {
+    try {
+        const u = new URL(url, base);
+        const query = {};
+        u.searchParams.forEach((v, k) => { query[k] = v; });
+        return { pathname: u.pathname, query };
+    } catch {
+        return { pathname: (url && url.split('?')[0]) || '/', query: {} };
+    }
+}
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 
@@ -79,6 +90,24 @@ mainServer.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id', 'X-Api-Version', 'X-CSRF-Token']
 }));
 
+// Auth login on Express so POST /api/auth/login always works (Next custom server can miss App Router POST → "Cannot POST /api/auth/login")
+const { gatewayLogin } = require('./lib/gateway-auth-login.cjs');
+mainServer.post('/api/auth/login', express.json({ limit: '512kb' }), async (req, res) => {
+    try {
+        const result = await gatewayLogin(req.body);
+        return res.status(result.status).json(result.json);
+    } catch (e) {
+        console.error('[Gateway] /api/auth/login error:', e);
+        const msg = e?.message || String(e);
+        const isDev = process.env.NODE_ENV !== 'production';
+        return res.status(500).json({
+            status: false,
+            message: isDev ? msg : 'Internal server error',
+            data: isDev ? { error: msg } : null
+        });
+    }
+});
+
 // We removed the global express.json() middleware because it consumes the body stream,
 // which causes http-proxy to hang on JSON POST requests. Next.js API routes and proxied
 // requests both require the raw stream to remain intact.
@@ -137,17 +166,14 @@ if (fs.existsSync(swaggerPath)) {
         res.setHeader('Content-Type', 'application/x-yaml');
         res.send(fs.readFileSync(swaggerPath, 'utf8'));
     });
-    mainServer.use('/api-docs', swaggerUi.serve, swaggerUi.setup(null, {
-        swaggerOptions: {
-            url: '/api-docs/spec',
-            persistAuthorization: true,
-            displayRequestDuration: true,
-            tryItOutEnabled: true,
-            filter: true,
-            persistAuth: true
-        },
-        customSiteTitle: 'Werfie API | Click Authorize after login to fix 401'
-    }));
+    // Serve a custom Swagger UI HTML so it works on LAN devices too.
+    // (swagger-ui-express cannot reliably accept JS function interceptors because options are serialized)
+    mainServer.get('/api-docs', (req, res) => {
+        res.sendFile(path.join(__dirname, 'public', 'docs.html'));
+    });
+    mainServer.get('/api-docs/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'public', 'docs.html'));
+    });
     console.log('[Gateway] Swagger UI at http://localhost:' + port + '/api-docs');
 } else {
     console.warn('[Gateway] swagger.yaml not found at', swaggerPath);
@@ -340,7 +366,8 @@ mainServer.all('*', (req, res) => {
         }
         return res.status(503).send('Next.js is still preparing. Please wait 10-20 seconds and refresh.');
     }
-    const parsedUrl = parse(req.url, true);
+    const base = `http://${req.headers.host || hostname}`;
+    const parsedUrl = parseUrl(req.url, base);
     handle(req, res, parsedUrl);
 });
 
@@ -348,15 +375,21 @@ mainServer.all('*', (req, res) => {
 httpServer.on('upgrade', (req, socket, head) => {
     try {
         const url = req.url || '';
-        const parsedUrl = parse(url);
+        const parsedUrl = parseUrl(url);
         const pathname = parsedUrl.pathname || '';
         console.log(`[Gateway] Upgrade request: ${pathname}`);
 
         if (pathname.startsWith('/api/messages/ws')) {
             console.log('[Gateway] Proxying WebSocket to Messaging Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3019' });
+        } else if (pathname.includes('/api/posts/ws')) {
+            console.log('[Gateway] Proxying WebSocket to Content Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
         } else if (pathname.startsWith('/ws/live')) {
             console.log('[Gateway] Proxying WebSocket to Content Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
+        } else if (pathname.includes('/ws/live')) {
+            console.log('[Gateway] Proxying WebSocket (fuzzy match) to Content Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
         } else if (pathname.startsWith('/ws/soapbox-live')) {
             console.log('[Gateway] Proxying Soapbox WebSocket to Content Service');
@@ -364,8 +397,8 @@ httpServer.on('upgrade', (req, socket, head) => {
         } else if (pathname.startsWith('/ws/debate-live')) {
             console.log('[Gateway] Proxying Debate WebSocket to Content Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
-        } else if (pathname.startsWith('/ws/world-leaders') || pathname.startsWith('/ws/live')) {
-            console.log('[Gateway] Proxying World Leaders/Live WebSocket to Content Service');
+        } else if (pathname.startsWith('/ws/world-leaders')) {
+            console.log('[Gateway] Proxying World Leaders WebSocket to Content Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
         } else {
             console.warn(`[Gateway] No upgrade handler for ${pathname}`);

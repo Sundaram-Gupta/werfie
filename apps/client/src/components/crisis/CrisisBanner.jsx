@@ -3,8 +3,7 @@ import { AlertCircle, ChevronRight, ShieldAlert, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { getCrises } from '@/services/crisis.api';
 import { io } from 'socket.io-client';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+import { getGatewayUrl } from '@/lib/api';
 
 const CrisisBanner = () => {
     const [criticalCrises, setCriticalCrises] = useState([]);
@@ -25,7 +24,7 @@ const CrisisBanner = () => {
 
         // Socket for real-time alerts
         const token = localStorage.getItem('accessToken');
-        const crisisSocket = io(`${API_BASE_URL}/crisis-live`, {
+        const crisisSocket = io(`${getGatewayUrl()}/crisis-live`, {
             path: '/ws/live',
             auth: { token }
         });

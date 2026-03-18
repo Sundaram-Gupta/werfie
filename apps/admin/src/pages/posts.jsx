@@ -9,7 +9,8 @@ import { EyeOff, Trash2, CheckCircle, RefreshCw, ChevronLeft, ChevronRight } fro
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { toast } from 'sonner';
 
-const PAGE_SIZE = 20;
+// Admin posts page size: show 100 posts per page
+const PAGE_SIZE = 100;
 
 /** Format large numbers as 103.5K, 1.2M, etc. */
 function formatCount(n) {

@@ -7,6 +7,50 @@ import { getMediaUrl } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 
+function PostSearchResult({ post, navigate }) {
+    const userLabel = post?.user?.profile?.name || post?.user?.name || post?.user?.email?.split?.('@')?.[0] || post?.user || 'Unknown'
+    const handle = post?.user?.profile?.handle || post?.handle || ''
+    const excerpt = (post?.content || '').toString().slice(0, 140)
+    return (
+        <div
+            className="px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => navigate(`/post/${post.id}`)}
+        >
+            <div className="text-[13px] text-muted-foreground flex items-center justify-between">
+                <span className="truncate">{userLabel}{handle ? ` • @${handle}` : ''}</span>
+            </div>
+            <div className="text-[14px] text-foreground mt-1 line-clamp-2">
+                {excerpt || '(No content)'}
+            </div>
+        </div>
+    )
+}
+
+function UserSearchResult({ user, navigate }) {
+    const h = user?.profile?.handle || user?.handle || user?.email?.split('@')[0]
+    const name = user?.profile?.name || user?.name || (h ? h.charAt(0).toUpperCase() + h.slice(1) : 'User')
+    return (
+        <div
+            className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => navigate(`/profile/${user.id}`)}
+        >
+            <Avatar className="w-9 h-9 rounded-full border border-border/10 flex-shrink-0">
+                <AvatarImage src={getMediaUrl(user.profile?.avatar)} />
+                <AvatarFallback>{name[0]?.toUpperCase() || 'U'}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+                <div className="flex items-center gap-1 min-w-0">
+                    <span className="font-bold text-[14px] truncate">{name}</span>
+                    {user.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10 flex-shrink-0" />}
+                </div>
+                <div className="text-[13px] text-muted-foreground truncate">@{h || 'user'}</div>
+            </div>
+        </div>
+    )
+}
+
 
 function TrendsList({ navigate }) {
     const { t } = useTranslation()
@@ -86,7 +130,9 @@ function SuggestionCard({ user, navigate, onFollowChange }) {
     }
 
     const h = user?.profile?.handle || user?.handle || user?.email?.split('@')[0]
-    const displayName = user?.profile?.name || user?.name || (h ? h.charAt(0).toUpperCase() + h.slice(1) : 'User')
+    const currentName = user?.profile?.name || user?.name;
+    const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User';
+    const displayName = hasRealName ? currentName : (h ? h.charAt(0).toUpperCase() + h.slice(1) : 'User');
 
     return (
         <div
@@ -131,6 +177,12 @@ export function RightSidebar() {
     const { t } = useTranslation()
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
+    const [query, setQuery] = useState('')
+    const [searchOpen, setSearchOpen] = useState(false)
+    const [searchLoading, setSearchLoading] = useState(false)
+    const [searchTab, setSearchTab] = useState('users') // 'users' | 'posts'
+    const [userResults, setUserResults] = useState([])
+    const [postResults, setPostResults] = useState([])
 
     const fetchSuggestions = useCallback(async () => {
         if (!currentUser?.id) {
@@ -165,23 +217,125 @@ export function RightSidebar() {
 
     const handleSearch = (e) => {
         if (e.key === 'Enter') {
-            navigate(`/search?q=${encodeURIComponent(e.target.value)}`)
+            const q = (e.target.value || '').toString().trim()
+            if (q) navigate(`/search?q=${encodeURIComponent(q)}`)
+            setSearchOpen(false)
         }
     }
+
+    useEffect(() => {
+        const q = query.trim()
+        if (!q) {
+            setSearchLoading(false)
+            setUserResults([])
+            setPostResults([])
+            return
+        }
+
+        let isActive = true
+        setSearchLoading(true)
+
+        const tmr = setTimeout(async () => {
+            try {
+                const [users, posts] = await Promise.all([
+                    searchService.searchUsers(q, { limit: 5 }),
+                    searchService.searchPosts(q, { limit: 5 }),
+                ])
+                if (!isActive) return
+                setUserResults(Array.isArray(users) ? users : (users?.users || []))
+                setPostResults(Array.isArray(posts) ? posts : (posts?.posts || []))
+            } catch (err) {
+                if (!isActive) return
+                setUserResults([])
+                setPostResults([])
+            } finally {
+                if (isActive) setSearchLoading(false)
+            }
+        }, 300)
+
+        return () => {
+            isActive = false
+            clearTimeout(tmr)
+        }
+    }, [query])
 
     return (
         <aside className="hidden lg:block w-[350px] pl-8 py-4 h-screen sticky top-0 overflow-y-auto no-scrollbar">
             {/* Search */}
             <div className="group sticky top-0 bg-background z-10 pb-1 pt-1">
-                <div className="bg-muted/50 rounded-full py-2.5 px-4 mb-4 flex items-center gap-3 focus-within:bg-background focus-within:ring-1 ring-primary transition text-muted-foreground focus-within:text-primary border border-transparent focus-within:border-primary">
+                <div className="bg-muted/50 rounded-full py-2.5 px-4 mb-1 flex items-center gap-3 focus-within:bg-background focus-within:ring-1 ring-primary transition text-muted-foreground focus-within:text-primary border border-transparent focus-within:border-primary">
                     <Search className="w-5 h-5" />
                     <input
                         type="text"
                         placeholder={t('right_sidebar.search_placeholder')}
                         className="bg-transparent border-none outline-none text-[15px] text-foreground placeholder-muted-foreground w-full h-full"
+                        value={query}
+                        onChange={(e) => {
+                            setQuery(e.target.value)
+                            setSearchOpen(true)
+                        }}
+                        onFocus={() => setSearchOpen(true)}
                         onKeyDown={handleSearch}
                     />
                 </div>
+                {searchOpen && query.trim().length > 0 && (
+                    <div
+                        className="mb-4 bg-background border border-border/40 rounded-[16px] overflow-hidden shadow-xl"
+                        onMouseDown={(e) => e.preventDefault()}
+                    >
+                        <div className="flex items-center gap-2 px-2 pt-2">
+                            <button
+                                type="button"
+                                className={`px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${searchTab === 'users' ? 'bg-foreground text-background' : 'hover:bg-muted/60 text-muted-foreground'}`}
+                                onClick={() => setSearchTab('users')}
+                            >
+                                Users
+                            </button>
+                            <button
+                                type="button"
+                                className={`px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${searchTab === 'posts' ? 'bg-foreground text-background' : 'hover:bg-muted/60 text-muted-foreground'}`}
+                                onClick={() => setSearchTab('posts')}
+                            >
+                                Posts
+                            </button>
+                            <div className="ml-auto pr-2 text-[12px] text-muted-foreground">
+                                {searchLoading ? 'Searching…' : ''}
+                            </div>
+                        </div>
+
+                        {searchTab === 'users' ? (
+                            <div className="pt-1">
+                                {searchLoading ? (
+                                    <div className="p-4 text-center text-muted-foreground text-[13px]">Searching users…</div>
+                                ) : userResults.length === 0 ? (
+                                    <div className="p-4 text-center text-muted-foreground text-[13px]">No users found</div>
+                                ) : (
+                                    userResults.map((u) => <UserSearchResult key={u.id} user={u} navigate={navigate} />)
+                                )}
+                            </div>
+                        ) : (
+                            <div className="pt-1">
+                                {searchLoading ? (
+                                    <div className="p-4 text-center text-muted-foreground text-[13px]">Searching posts…</div>
+                                ) : postResults.length === 0 ? (
+                                    <div className="p-4 text-center text-muted-foreground text-[13px]">No posts found</div>
+                                ) : (
+                                    postResults.map((p) => <PostSearchResult key={p.id} post={p} navigate={navigate} />)
+                                )}
+                            </div>
+                        )}
+
+                        <div
+                            className="text-primary text-[15px] px-4 py-3 cursor-pointer hover:bg-white/[0.03] transition border-t border-border/30"
+                            onClick={() => {
+                                navigate(`/search?q=${encodeURIComponent(query.trim())}`)
+                                setSearchOpen(false)
+                            }}
+                        >
+                            Show all results
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Trends Widget */}

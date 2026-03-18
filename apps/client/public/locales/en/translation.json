@@ -129,6 +129,7 @@
             "follow": "followed you",
             "reply": "replied to your post",
             "mention": "mentioned you",
+            "message": "sent you a message",
             "unknown_user": "Unknown user"
         }
     },

@@ -55,17 +55,40 @@ Send these files:
 
 ### **Option 2: Share via Network (Same WiFi)**
 
-**Find your local IP**:
+**Find your PC’s IP** (the machine running the dev server):
 ```bash
+# Windows (PowerShell or CMD)
+ipconfig
+
+# Look for "IPv4 Address" under your active adapter (e.g. Wi-Fi or Ethernet).
+# Example: 192.168.1.103
+
 # On Mac
 ipconfig getifaddr en0
-
-# Example output: 192.168.1.100
+# Example: 192.168.1.100
 ```
 
-**Share this URL**:
+**Important:** Use the **dev machine’s** IP, not the other device’s. On the other device (phone, another laptop), open:
+- **Frontend (app):** `http://YOUR_PC_IP:5173` (e.g. http://192.168.1.103:5173)
+- **API / Swagger:** `http://YOUR_PC_IP:3001/api` and `http://YOUR_PC_IP:3001/api-docs`
+
+**If it doesn’t load from another device:**
+
+1. **Windows Firewall** – Allow inbound connections to the dev server:
+   - Run PowerShell **as Administrator**, then:
+   ```powershell
+   New-NetFirewallRule -DisplayName "Vite Dev 5173" -Direction Inbound -LocalPort 5173 -Protocol TCP -Action Allow
+   New-NetFirewallRule -DisplayName "Gateway 3001" -Direction Inbound -LocalPort 3001 -Protocol TCP -Action Allow
+   ```
+   - Or: Windows Security → Firewall → Advanced → Inbound Rules → New Rule → Port → TCP 5173 and 3001 → Allow.
+
+2. **Same network** – Other device must be on the same Wi‑Fi/LAN as the PC.
+
+3. **Correct IP** – On the PC run `ipconfig` and use the IPv4 address shown there in the browser on the other device.
+
+**Share this URL** (replace with your PC’s IP):
 ```
-http://192.168.1.100:3001/api
+http://YOUR_PC_IP:3001/api
 ```
 
 **Update CORS** (if needed):

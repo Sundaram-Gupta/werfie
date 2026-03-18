@@ -186,7 +186,12 @@ export default function UsersPage() {
                                                 <AvatarFallback>{user.profile?.name?.charAt(0) || user.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex flex-col">
-                                                <span>{user.profile?.name || 'Unknown'}</span>
+                                                <span>{(() => {
+                                                    const currentName = user.profile?.name;
+                                                    const handle = user.profile?.handle || user.email?.split('@')[0];
+                                                    const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User' && currentName !== 'Unknown';
+                                                    return hasRealName ? currentName : (handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : 'User');
+                                                })()}</span>
                                                 <span className="text-xs text-muted-foreground">{user.profile?.handle || user.email}</span>
                                             </div>
                                         </div>
@@ -334,7 +339,12 @@ export default function UsersPage() {
                                     <AvatarImage src={selectedUser.profile?.avatar} />
                                     <AvatarFallback className="text-2xl">{selectedUser.profile?.name?.charAt(0) || selectedUser.email.charAt(0)}</AvatarFallback>
                                 </Avatar>
-                                <h3 className="text-xl font-bold">{selectedUser.profile?.name || 'Unknown'}</h3>
+                                <h3 className="text-xl font-bold">{(() => {
+                                    const currentName = selectedUser.profile?.name;
+                                    const handle = selectedUser.profile?.handle || selectedUser.email?.split('@')[0];
+                                    const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User' && currentName !== 'Unknown';
+                                    return hasRealName ? currentName : (handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : 'User');
+                                })()}</h3>
                                 <p className="text-sm text-muted-foreground">@{selectedUser.profile?.handle || selectedUser.email}</p>
                                 <div className="flex gap-2 mt-2">
                                     {getRoleBadge(selectedUser.role)}

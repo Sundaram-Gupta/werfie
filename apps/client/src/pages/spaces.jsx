@@ -147,8 +147,8 @@ export default function Spaces() {
                     <div className="relative">
                         <div className="absolute inset-0 bg-white/20 rounded-full blur-xl animate-pulse" />
                         <Avatar className="w-28 h-28 border-4 border-white shadow-2xl relative z-10">
-                            <AvatarImage src={user?.profile?.avatar || user?.avatar || "/websplash.png"} />
-                            <AvatarFallback>You</AvatarFallback>
+                            <AvatarImage src={getMediaUrl(user?.profile?.avatar || user?.avatar || null)} />
+                            <AvatarFallback>{(user?.profile?.name || user?.name || 'You')[0]?.toUpperCase() || 'Y'}</AvatarFallback>
                         </Avatar>
                         <div className="absolute bottom-0 right-0 bg-primary border-4 border-[#8c1af5] rounded-full p-1.5 z-20">
                             <Mic className="w-5 h-5 text-white" />
@@ -227,8 +227,8 @@ export default function Spaces() {
                             <h3 className="font-bold mb-3 text-sm uppercase tracking-wider opacity-80">Current Speakers</h3>
                             <div className="flex items-center gap-3">
                                 <Avatar className="w-10 h-10 border-2 border-primary">
-                                    <AvatarImage src={user?.profile?.avatar || user?.avatar || "/websplash.png"} />
-                                    <AvatarFallback>You</AvatarFallback>
+                                    <AvatarImage src={getMediaUrl(user?.profile?.avatar || user?.avatar || null)} />
+                                    <AvatarFallback>{(user?.profile?.name || user?.name || 'You')[0]?.toUpperCase() || 'Y'}</AvatarFallback>
                                 </Avatar>
                                 <div>
                                     <div className="font-bold text-sm">You (Host)</div>

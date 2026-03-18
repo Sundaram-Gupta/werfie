@@ -79,10 +79,11 @@ export default function Notifications() {
                             {/* Icon based on type */}
                             <div className="w-10 flex justify-end">
                                 {notification.type === 'like' && <Heart className="w-8 h-8 text-pink-500 fill-current" />}
-                                {notification.type === 'repost' && <Repeat2 className="w-8 h-8 text-green-500" />}
+                                {(notification.type === 'repost' || notification.type === 'retweet') && <Repeat2 className="w-8 h-8 text-green-500" />}
                                 {notification.type === 'follow' && <User className="w-8 h-8 text-blue-500 fill-current" />}
                                 {notification.type === 'reply' && <MessageCircle className="w-8 h-8 text-blue-500 fill-current" />}
                                 {notification.type === 'mention' && <AtSign className="w-8 h-8 text-green-500" />}
+                                {notification.type === 'message' && <MessageCircle className="w-8 h-8 text-primary fill-current" />}
                             </div>
 
                             <div className="flex-1 space-y-2">
@@ -97,10 +98,11 @@ export default function Notifications() {
                                     <span className="text-foreground ml-1">
 
                                         {notification.type === 'like' && t('notifications.types.like')}
-                                        {notification.type === 'repost' && t('notifications.types.repost')}
+                                        {(notification.type === 'repost' || notification.type === 'retweet') && t('notifications.types.repost')}
                                         {notification.type === 'follow' && t('notifications.types.follow')}
                                         {notification.type === 'reply' && t('notifications.types.reply')}
                                         {notification.type === 'mention' && t('notifications.types.mention')}
+                                        {notification.type === 'message' && t('notifications.types.message')}
                                     </span>
                                 </div>
 

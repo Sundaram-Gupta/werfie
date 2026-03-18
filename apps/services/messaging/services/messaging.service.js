@@ -136,7 +136,7 @@ export class MessagingService {
     static async findDirectConversation(user1, user2) {
         if (user1 === user2) return null;
 
-        return prisma.conversation.findFirst({
+        const conversations = await prisma.conversation.findMany({
             where: {
                 type: 'direct',
                 AND: [
@@ -147,7 +147,10 @@ export class MessagingService {
             include: {
                 participants: true
             }
-        })
+        });
+
+        // Find the one with exactly 2 participants
+        return conversations.find(conv => conv.participants.length === 2) || null;
     }
 
     static async getConversations(userId) {
@@ -172,11 +175,31 @@ export class MessagingService {
                 }
             })
             
-            // Map the latest message to 'lastMessage' for frontend compatibility
-            return conversations.map(conv => ({
-                ...conv,
-                lastMessage: conv.messages?.[0] || null
-            }))
+            // Map latest message to `lastMessage` and add small derived fields to make the response easier
+            // to understand in Swagger while keeping backward compatibility for the client.
+            return conversations.map(conv => {
+                const lastMessage = conv.messages?.[0] || null
+                const participantUserIds = (conv.participants || []).map(p => p.userId)
+                const otherParticipantUserIds = participantUserIds.filter(id => String(id) !== String(userId))
+                const otherUserId = conv.type === 'direct' ? (otherParticipantUserIds[0] || null) : null
+
+                const lastMessageAt = lastMessage?.createdAt || conv.updatedAt
+                const lastMessagePreview =
+                    lastMessage?.content
+                        ? lastMessage.content
+                        : lastMessage?.mediaUrl
+                            ? (lastMessage.type === 'image' ? '📷 Image' : lastMessage.type === 'video' ? '🎬 Video' : lastMessage.type === 'audio' ? '🎧 Audio' : '📎 Attachment')
+                            : null
+
+                return {
+                    ...conv,
+                    lastMessage,
+                    lastMessageAt,
+                    lastMessagePreview,
+                    participantUserIds,
+                    otherUserId,
+                }
+            })
         } catch (error) {
             console.error(`getConversations Error for userId ${userId}:`, error?.message || error)
             throw error

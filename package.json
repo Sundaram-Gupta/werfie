@@ -15,8 +15,7 @@
     "pm2:restart": "pm2 restart ecosystem.config.js",
     "pm2:delete": "pm2 delete all",
     "pm2:logs": "pm2 logs",
-    "pm2:monit": "pm2 monit",
-    "seed:demo-users": "ts-node scripts/seed-demo-users.ts"
+    "pm2:monit": "pm2 monit"
   },
   "dependencies": {
     "@faker-js/faker": "^10.3.0",

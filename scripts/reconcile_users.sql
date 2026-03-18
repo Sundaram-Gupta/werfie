@@ -38,7 +38,7 @@ INSERT INTO public."Profile" (id, "userId", name, handle, avatar, "createdAt", "
 SELECT 
     gen_random_uuid()::text,
     m.new_id,
-    COALESCE(NULLIF(TRIM(u.firstname || ' ' || u.lastname), ''), u.username, 'User'),
+    COALESCE(NULLIF(TRIM(u.firstname || ' ' || u.lastname), ''), INITCAP(u.username), INITCAP(LEFT(u.email, POSITION('@' IN u.email) - 1)), 'User'),
     COALESCE(u.username, 'user_' || u.id),
     u.profile_image,
     COALESCE(u.created_at, NOW()),

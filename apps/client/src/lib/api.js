@@ -13,6 +13,18 @@ export const getApiBase = () => {
   return ''
 }
 
+// Gateway URL for WebSockets – connect directly to gateway (3001) to avoid Vite proxy closing the connection (e.g. on LAN 192.168.x.x:5173)
+export const getGatewayUrl = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    const isLan = host.startsWith('192.168.') || host.startsWith('10.') || (host.startsWith('172.') && /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host))
+    if (isLan || host === 'localhost' || host === '127.0.0.1') {
+      return `${window.location.protocol}//${host}:3001`
+    }
+  }
+  return import.meta.env.VITE_API_URL || 'http://localhost:3001'
+}
+
 // For direct service URLs (e.g. WebSockets) when on LAN - use host + service port
 export const getContentServiceUrl = () => {
   if (typeof window !== 'undefined') {
