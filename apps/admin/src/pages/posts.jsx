@@ -28,6 +28,8 @@ export default function PostsPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
+    const [viewMode, setViewMode] = useState('paged'); // 'paged' | 'all'
+    const [hasMore, setHasMore] = useState(false);
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
@@ -42,6 +44,7 @@ export default function PostsPage() {
             const hasServerPagination = pag?.totalPages != null;
             const postsToShow = hasServerPagination ? list : list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
             setPosts(postsToShow);
+            setHasMore(hasServerPagination ? (currentPage < pages) : (postsToShow.length >= PAGE_SIZE));
         } catch (error) {
             console.error(error);
             toast.error('Failed to load posts');
@@ -50,9 +53,43 @@ export default function PostsPage() {
         }
     }, [filter, currentPage]);
 
+    const loadAllPosts = useCallback(async () => {
+        setLoading(true);
+        setViewMode('all');
+        try {
+            const all = [];
+            let page = 1;
+            // Hard safety cap to avoid infinite loops if backend misbehaves
+            const MAX_PAGES = 2000;
+            while (page <= MAX_PAGES) {
+                const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all', page, PAGE_SIZE);
+                const list = data?.posts ?? (Array.isArray(data) ? data : data?.data ?? []);
+                if (!Array.isArray(list) || list.length === 0) break;
+                all.push(...list);
+                if (list.length < PAGE_SIZE) break;
+                page += 1;
+            }
+            setPosts(all);
+            setCurrentPage(1);
+            setHasMore(false);
+            // Prefer uncapped count if available; otherwise fall back to fetched length
+            setTotalPosts((filter === 'all' ? (totalCountUncapped || all.length) : all.length));
+            setTotalPages(1);
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to load all posts');
+        } finally {
+            setLoading(false);
+        }
+    }, [filter, totalCountUncapped]);
+
     useEffect(() => {
-        fetchPosts();
-    }, [fetchPosts]);
+        if (viewMode === 'all') {
+            loadAllPosts();
+        } else {
+            fetchPosts();
+        }
+    }, [fetchPosts, loadAllPosts, viewMode]);
 
     useEffect(() => {
         contentService.getPostsCount().then(setTotalCountUncapped).catch(() => {});
@@ -60,6 +97,7 @@ export default function PostsPage() {
 
     useEffect(() => {
         setCurrentPage(1);
+        setViewMode('paged');
     }, [filter]);
 
     useRefreshOnFocus(fetchPosts);
@@ -104,7 +142,9 @@ export default function PostsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">
-                        Page {currentPage} of {totalPages}
+                        {viewMode === 'all'
+                            ? `Showing all`
+                            : `Page ${currentPage} of ${totalPages}`}
                         {(filter === 'all'
                             ? (totalCountUncapped > 0 ? totalCountUncapped : totalPosts) != null
                             : totalPosts != null) && ` • ${formatCount(filter === 'all' ? (totalCountUncapped > 0 ? totalCountUncapped : totalPosts) : totalPosts)} total`}
@@ -112,6 +152,15 @@ export default function PostsPage() {
                     <Button variant="outline" size="sm" onClick={fetchPosts} disabled={loading}>
                         <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                         Refresh
+                    </Button>
+                    <Button
+                        variant={viewMode === 'all' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={viewMode === 'all' ? () => setViewMode('paged') : loadAllPosts}
+                        disabled={loading}
+                        title="Load all posts from DB (may take time)"
+                    >
+                        {viewMode === 'all' ? 'Paged view' : 'Load all'}
                     </Button>
                 </div>
             </div>
@@ -130,7 +179,7 @@ export default function PostsPage() {
                 </TabsContent>
             </Tabs>
 
-            {(totalPages > 1 || (totalPosts != null && totalPosts > 0)) && (
+            {viewMode !== 'all' && (totalPages > 1 || (totalPosts != null && totalPosts > 0)) && (
                 <div className="flex items-center justify-between px-2">
                     <p className="text-sm text-muted-foreground">
                         {totalPosts > 0
@@ -170,7 +219,7 @@ export default function PostsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage >= totalPages || loading}
+                            disabled={(!hasMore && currentPage >= totalPages) || loading}
                         >
                             Next <ChevronRight className="h-4 w-4 ml-1" />
                         </Button>

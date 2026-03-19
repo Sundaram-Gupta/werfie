@@ -12,13 +12,20 @@ import { Button } from "@/components/ui/button"
 import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Image, X, MapPin, Smile, FileBarChart2, CalendarClock, Globe } from "lucide-react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { postService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
+import { ArticlePreviewCard } from "./article-preview-card"
 
-export function ComposeModal({ children }) {
-    const [postContent, setPostContent] = useState("")
+export function ComposeModal({ children, initialContent = "" }) {
+    const [postContent, setPostContent] = useState(initialContent)
+    
+    // Update content when prop changes (e.g. sharing different articles)
+    useEffect(() => {
+        if (initialContent) setPostContent(initialContent)
+    }, [initialContent])
+
     const [open, setOpen] = useState(false)
     const [isPosting, setIsPosting] = useState(false)
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -28,6 +35,14 @@ export function ComposeModal({ children }) {
     const textareaRef = useRef(null)
     const { user } = useAuth()
     const { t } = useTranslation()
+
+    // Detect article links for preview cards
+    const articleId = useMemo(() => {
+        if (typeof postContent !== 'string') return null;
+        // Match /article/UUID or /article/ID
+        const match = postContent.match(/\/article\/([a-zA-Z0-9-]+)/);
+        return match ? match[1] : null;
+    }, [postContent]);
 
     const MAX_CHARS = 280
     const progress = (postContent.length / MAX_CHARS) * 100
@@ -154,6 +169,13 @@ export function ComposeModal({ children }) {
                                 value={postContent}
                                 onChange={(e) => setPostContent(e.target.value)}
                             />
+
+                            {/* Article Preview Card */}
+                            {articleId && (
+                                <div className="mb-4">
+                                    <ArticlePreviewCard articleId={articleId} />
+                                </div>
+                            )}
 
                             {/* Media Previews */}
                             {filePreviews.length > 0 && (

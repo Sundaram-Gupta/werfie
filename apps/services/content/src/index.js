@@ -22,6 +22,45 @@ app.use(cors({
 }));
 app.use(require('./middleware/api-response'));
 
+// Handle /api/posts/liked before rewrite so the path is always matched (gateway forwards /api/posts/liked)
+const optionalAuth = require('./middleware/auth').optionalAuthenticateToken;
+app.get('/api/posts/liked', optionalAuth, async (req, res) => {
+    try {
+        const raw = req.query.userId;
+        const queryUserId = (typeof raw === 'string' && raw.trim() && raw !== 'undefined') ? raw.trim() : null;
+        const currentUserId = req.user?.userId || req.user?.id || null;
+        const targetUserId = queryUserId || currentUserId;
+        if (!targetUserId) {
+            return res.status(401).json({ error: 'Unauthorized', posts: [] });
+        }
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+        const postInclude = {
+            user: { include: { profile: true } },
+            media: true,
+            replyTo: { include: { user: { include: { profile: true } } } },
+            _count: { select: { replies: true, likes: true, retweets: true } }
+        };
+        if (currentUserId) {
+            postInclude.likes = { where: { userId: currentUserId }, select: { id: true } };
+            postInclude.bookmarks = { where: { userId: currentUserId }, select: { id: true } };
+            postInclude.highlightedIn = { where: { userId: currentUserId }, select: { id: true } };
+        }
+        const likes = await prisma.like.findMany({
+            where: { userId: targetUserId },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            include: { post: { include: postInclude } }
+        });
+        const now = new Date();
+        const posts = likes.map((l) => l.post).filter((p) => p && (!p.scheduledAt || new Date(p.scheduledAt) <= now));
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.json({ posts });
+    } catch (err) {
+        console.error('[ContentService] GET /api/posts/liked error:', err);
+        res.status(500).json({ error: 'Failed to fetch liked posts', posts: [] });
+    }
+});
+
 // Generic Rewrite Middleware - MOVED TO TOP for consistent routing
 app.use((req, res, next) => {
     // console.log(`[ContentService] Incoming: ${req.method} ${req.url}`);
@@ -45,6 +84,8 @@ const commentRoutes = require('./routes/commentRoutes');
 const crisisRoutes = require('./routes/crisisRoutes');
 const soapboxRoutes = require('./routes/soapboxRoutes');
 const debateRoutes = require('./routes/debateRoutes');
+const highlightsRoutes = require('./routes/highlightsRoutes');
+const articlesRoutes = require('./routes/articlesRoutes');
 const MediaService = require('./services/media.service');
 
 // All routes now assume the /api prefix has been stripped if they were called with it
@@ -56,10 +97,14 @@ app.use('/comments', commentRoutes);
 app.use('/crisis', crisisRoutes);
 app.use('/soapbox', soapboxRoutes);
 app.use('/debate', debateRoutes);
+app.use('/highlights', highlightsRoutes);
+app.use('/articles', articlesRoutes);
 
 // Backup registration in case rewrite fails or is skipped
 app.use('/api/soapbox', soapboxRoutes);
 app.use('/api/debate', debateRoutes);
+app.use('/api/highlights', highlightsRoutes);
+app.use('/api/articles', articlesRoutes);
 
 // Health Checks
 app.get('/_health', (req, res) => res.json({ status: 'ok', service: 'content-service' }));
@@ -260,7 +305,8 @@ app.get('/search', async (req, res) => {
                 media: true,
                 _count: {
                     select: { likes: true, retweets: true, replies: true }
-                }
+                },
+                highlightedIn: { where: { userId: req.headers['x-user-id'] || '' }, select: { id: true } }
             },
             take: parseInt(limit),
             skip: parseInt(offset),
@@ -529,6 +575,12 @@ app.get('/scheduled', authenticateToken, async (req, res) => {
 
 // Get Timeline - cursor-based pagination for fast initial load and "load more". Latest first.
 app.get('/timeline/home', authenticateToken, async (req, res) => {
+    // Prevent aggressive mobile OS caching (URLSession/OkHttp)
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
     try {
         const currentUserId = req.user?.userId || req.user?.id;
         const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 30));
@@ -541,7 +593,8 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
             media: true,
             replyTo: { include: { user: { include: { profile: true } } } },
             _count: { select: { replies: true, likes: true, retweets: true } },
-            bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } }
+            bookmarks: { where: { userId: currentUserId || '' }, select: { id: true } },
+            highlightedIn: { where: { userId: currentUserId || '' }, select: { id: true } }
         };
 
         // Random feed mode: return a different set on each refresh (no cursor pagination)
@@ -563,18 +616,20 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
                 include
             });
             const byId = new Map(fetched.map(p => [p.id, p]));
-            const posts = ids.map(id => byId.get(id)).filter(Boolean);
+            const rawPosts = ids.map(id => byId.get(id)).filter(Boolean);
+            const posts = interleaveRandomFeed(rawPosts);
             return res.json({ posts, nextCursor: null, hasMore: false });
         }
 
-        const posts = await prisma.post.findMany({
+        const rawPosts = await prisma.post.findMany({
             where,
             orderBy,
             take: limit,
             ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
             include
         });
-        const nextCursor = posts.length === limit ? posts[posts.length - 1].id : null;
+        const nextCursor = rawPosts.length === limit ? rawPosts[rawPosts.length - 1].id : null;
+        const posts = interleaveRandomFeed(rawPosts);
         res.json({ posts, nextCursor, hasMore: !!nextCursor });
     } catch (error) {
         console.error('Timeline Error:', error);
@@ -588,6 +643,88 @@ function extractHashtags(content) {
     if (!content || typeof content !== 'string') return [];
     const matches = content.match(/#[a-zA-Z0-9_]+/g) || [];
     return [...new Set(matches.map(m => '#' + m.slice(1).toLowerCase()))];
+}
+
+/**
+ * Shuffles an array in place using Fisher-Yates algorithm.
+ */
+function shuffleInPlace(arr) {
+    if (!Array.isArray(arr)) return arr;
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+/**
+ * Professional feed logic: Groups posts by user and interleaves them to prevent 
+ * consecutive posts from the same user (unless unavoidable due to small user pool).
+ * Also randomizes the order within each batch for a fresh "Discovery" feel.
+ */
+function interleaveRandomFeed(items) {
+    const list = Array.isArray(items) ? items.slice() : [];
+    if (list.length <= 2) return list;
+
+    // Group posts by user ID to identify clumps
+    const groups = new Map();
+    for (const it of list) {
+        const uid = String(it.userId || (it.user && (it.user.id || it.user.userId)) || 'anon');
+        if (!groups.has(uid)) groups.set(uid, []);
+        groups.get(uid).push(it);
+    }
+
+    const keys = Array.from(groups.keys());
+    // Randomize within each user's internal list
+    for (const k of keys) shuffleInPlace(groups.get(k));
+
+    const out = [];
+    let prevKey = null;
+
+    while (out.length < list.length) {
+        // Find maximum remaining count among buckets to prioritize larger buckets
+        let max = 0;
+        for (const k of keys) {
+            const c = groups.get(k).length;
+            if (c > max) max = c;
+        }
+        if (max === 0) break;
+
+        // Candidates: keys with max remaining posts, excluding the previous key to avoid back-to-back
+        let candidates = [];
+        for (const k of keys) {
+            const c = groups.get(k).length;
+            if (c === max && k !== prevKey) {
+                candidates.push(k);
+            }
+        }
+
+        // If forced to repeat (unavoidable), allow selection from all max-count buckets
+        if (candidates.length === 0) {
+            for (const k of keys) {
+                if (groups.get(k).length === max) candidates.push(k);
+            }
+        }
+
+        // Pick random candidate among equals to maintain entropy
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        const bucket = groups.get(pick);
+        const nextItem = bucket.shift();
+        if (nextItem) {
+            out.push(nextItem);
+            prevKey = pick;
+        }
+    }
+    
+    // Safety check for edge case leftovers
+    if (out.length < list.length) {
+        const outIds = new Set(out.map(o => String(o.id)));
+        for (const it of list) {
+            if (!outIds.has(String(it.id))) out.push(it);
+        }
+    }
+
+    return out;
 }
 
 // Get Trends – spike-based from real posts: sudden increase in usage, unique users, time-sensitive
@@ -890,18 +1027,55 @@ app.get('/communities/:id/members', async (req, res) => {
 // Get Single Post - Moved to bottom to avoid conflicts
 // app.get('/:id', ...)
 
+// Get posts liked by a user (for profile Likes tab)
+app.get('/liked', optionalAuthenticateToken, async (req, res) => {
+    try {
+        const raw = req.query.userId;
+        const queryUserId = (typeof raw === 'string' && raw.trim() && raw !== 'undefined') ? raw.trim() : null;
+        const currentUserId = req.user?.userId || req.user?.id || null;
+        const targetUserId = queryUserId || currentUserId;
+        if (!targetUserId) {
+            return res.status(401).json({ error: 'Unauthorized', posts: [] });
+        }
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+        const postInclude = {
+            user: { include: { profile: true } },
+            media: true,
+            replyTo: { include: { user: { include: { profile: true } } } },
+            _count: { select: { replies: true, likes: true, retweets: true } }
+        };
+        if (currentUserId) {
+            postInclude.likes = { where: { userId: currentUserId }, select: { id: true } };
+            postInclude.bookmarks = { where: { userId: currentUserId }, select: { id: true } };
+            postInclude.highlightedIn = { where: { userId: currentUserId }, select: { id: true } };
+        }
+        const likes = await prisma.like.findMany({
+            where: { userId: targetUserId },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            include: { post: { include: postInclude } }
+        });
+        const now = new Date();
+        const posts = likes.map((l) => l.post).filter((p) => p && (!p.scheduledAt || new Date(p.scheduledAt) <= now));
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.json({ posts });
+    } catch (err) {
+        console.error('[ContentService] GET /liked error:', err);
+        res.status(500).json({ error: 'Failed to fetch liked posts', posts: [] });
+    }
+});
 
 // Get All Posts (Feed compatible) - public when no auth; with auth includes bookmarks
 app.get('/', optionalAuthenticateToken, async (req, res) => {
     console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId || 'anonymous'}`);
     try {
         // Avoid any intermediary/proxy caching for feed requests.
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
         res.setHeader('Surrogate-Control', 'no-store');
 
-        const { userId, repliesOnly, excludeReplies, topLevelOnly, limit, offset, skip } = req.query;
+        const { userId, repliesOnly, excludeReplies, topLevelOnly, limit, offset, skip, cursor } = req.query;
         const currentUserId = req.user?.userId || req.user?.id || null;
 
         const where = { ...publishedPostFilter() };
@@ -915,7 +1089,7 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
         // excludeReplies/topLevelOnly means only top-level posts (no replies)
         if (isTruthy(excludeReplies) || isTruthy(topLevelOnly)) where.replyToId = null;
 
-        console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, query: req.query });
+        console.log(`[ContentService] Feed Params:`, { userId, repliesOnly, excludeReplies, query: req.query });
 
         const takeRaw = parseInt(limit, 10);
         const take = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 20;
@@ -930,21 +1104,82 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
         };
         if (currentUserId) {
             includeOpt.bookmarks = { where: { userId: currentUserId }, select: { id: true } };
+            includeOpt.highlightedIn = { where: { userId: currentUserId }, select: { id: true } };
+            includeOpt.likes = { where: { userId: currentUserId }, select: { id: true } };
+            includeOpt.retweets = { where: { userId: currentUserId }, select: { id: true } };
         } else {
             includeOpt.bookmarks = { where: { userId: '' }, select: { id: true } };
+            includeOpt.highlightedIn = { where: { userId: '' }, select: { id: true } };
         }
-        const posts = await prisma.post.findMany({
+        
+        // Ensure latest posts are first
+        const orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
+
+        // Offset-based pagination prioritized over complex cursor logic for reliable ordering
+        let fetchedPosts = [];
+        let nextCursor = null;
+        let hasMore = false;
+
+        // If cursor is provided, try cursor pagination, otherwise default to offset
+        if (cursor && !skipCount) {
+             const cursorId = String(cursor);
+             const cursorPost = await prisma.post.findUnique({
+                 where: { id: cursorId },
+                 select: { id: true, createdAt: true }
+             });
+
+             const cursorCreatedAt = cursorPost?.createdAt || null;
+
+             const cursorWhere = cursorCreatedAt
+                 ? {
+                     AND: [
+                         where,
+                         {
+                             OR: [
+                                 { createdAt: { lt: cursorCreatedAt } },
+                                 { AND: [{ createdAt: cursorCreatedAt }, { id: { lt: cursorId } }] }
+                             ]
+                         }
+                     ]
+                 }
+                 : where;
+
+             const cursorRows = await prisma.post.findMany({
+                 where: cursorWhere,
+                 take: take + 1,
+                 orderBy,
+                 include: includeOpt
+             });
+             hasMore = cursorRows.length > take;
+             fetchedPosts = hasMore ? cursorRows.slice(0, take) : cursorRows;
+             nextCursor = hasMore && fetchedPosts.length ? fetchedPosts[fetchedPosts.length - 1].id : null;
+             
+             // Shuffle only for discovery/general feeds (not specific users/communities)
+             const shouldShuffle = !userId && !req.query.communityId && !req.query.search;
+             const posts = shouldShuffle ? interleaveRandomFeed(fetchedPosts) : fetchedPosts;
+             
+             return res.json({ posts, nextCursor, hasMore });
+        }
+
+        // Standard Offset pagination (default and more reliable for "newest first" hard reloads)
+        const offsetRows = await prisma.post.findMany({
             where,
-            take,
+            take: take + 1,
             skip: skipCount,
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            orderBy,
             include: includeOpt
         });
+        hasMore = offsetRows.length > take;
+        fetchedPosts = hasMore ? offsetRows.slice(0, take) : offsetRows;
+        nextCursor = hasMore && fetchedPosts.length ? fetchedPosts[fetchedPosts.length - 1].id : null;
 
-        res.json({ posts });
+        // Shuffle only for discovery/general feeds
+        const shouldShuffle = !userId && !req.query.communityId && !req.query.search;
+        const posts = shouldShuffle ? interleaveRandomFeed(fetchedPosts) : fetchedPosts;
+
+        res.json({ posts, nextCursor, hasMore });
     } catch (error) {
         console.error('[ContentService] Feed Error:', error);
-        // Handle Prisma schema mismatch (e.g. missing Post.scheduledAt column) gracefully in dev
         if (error && error.code === 'P2022') {
             return res.json({ posts: [] });
         }
@@ -955,8 +1190,16 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
 // Get Following Feed
 app.get('/following', authenticateToken, async (req, res) => {
     try {
+        // Prevent caching to serve fresh feed
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
+
         const currentUserId = req.user.userId;
-        const { limit, offset, skip } = req.query;
+        const { limit, offset, skip, excludeReplies, topLevelOnly } = req.query;
+
+        console.log(`[ContentService] Following Feed Params:`, { excludeReplies, query: req.query });
 
         // Get list of users the current user is following
         const following = await prisma.follow.findMany({
@@ -971,14 +1214,29 @@ app.get('/following', authenticateToken, async (req, res) => {
         const skipRaw = parseInt(offset ?? skip, 10);
         const skipCount = Number.isFinite(skipRaw) && skipRaw > 0 ? skipRaw : 0;
 
-        const posts = await prisma.post.findMany({
-            where: {
-                ...publishedPostFilter(),
-                userId: { in: followingIds }
-            },
+        const publishedFilter = publishedPostFilter();
+        const where = {
+             ...publishedFilter,
+             userId: { in: followingIds }
+        };
+
+        const isTruthy = (v) => {
+            if (v === true) return true;
+            const s = String(v ?? '').trim().toLowerCase();
+            return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+        };
+
+        if (isTruthy(excludeReplies) || isTruthy(topLevelOnly)) {
+            where.replyToId = null;
+        }
+
+        const orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
+
+        const fetchedPosts = await prisma.post.findMany({
+            where,
             take,
             skip: skipCount,
-            orderBy: { createdAt: 'desc' },
+            orderBy,
             include: {
                 user: { include: { profile: true } },
                 media: true,
@@ -995,6 +1253,9 @@ app.get('/following', authenticateToken, async (req, res) => {
                 bookmarks: { where: { userId: currentUserId }, select: { id: true } }
             }
         });
+
+        // Apply interleaving to Following feed as well for professional look
+        const posts = interleaveRandomFeed(fetchedPosts);
 
 
         // Sanitize users in posts (remove passwordHash)
@@ -1434,17 +1695,26 @@ app.post('/spaces', authenticateToken, async (req, res) => {
 });
 
 // Get Single Post - Moved to bottom to avoid conflicts
-app.get('/:id', async (req, res) => {
+app.get('/:id', optionalAuthenticateToken, async (req, res) => {
     console.log('GET /:id hit', req.params.id);
+    const currentUserId = req.user?.userId || req.user?.id || null;
     try {
+        const postInclude = {
+            user: { include: { profile: true } },
+            media: true,
+            replyTo: { include: { user: { include: { profile: true } } } },
+            _count: { select: { replies: true, likes: true, retweets: true } }
+        };
+        if (currentUserId) {
+            postInclude.likes = { where: { userId: currentUserId }, select: { id: true } };
+            postInclude.bookmarks = { where: { userId: currentUserId }, select: { id: true } };
+            // Note: highlightedIn is the relation name from Post to Highlight
+            postInclude.highlightedIn = { where: { userId: currentUserId }, select: { id: true } };
+        }
+
         const post = await prisma.post.findUnique({
             where: { id: req.params.id },
-            include: {
-                user: { include: { profile: true } },
-                media: true,
-                replyTo: { include: { user: { include: { profile: true } } } },
-                _count: { select: { replies: true, likes: true, retweets: true } }
-            }
+            include: postInclude
         });
         if (!post) return res.status(404).json({ error: `Post not found (ID: ${req.params.id})` });
         res.json(post);

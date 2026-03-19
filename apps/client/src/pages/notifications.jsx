@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { notificationService } from "@/services/api"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Heart, User, Repeat2, MessageCircle, AtSign, Settings, Loader2 } from "lucide-react"
+import { Heart, Users, Repeat2, MessageSquare, MessageCircle, AtSign, Settings, Loader2 } from "lucide-react"
 import { BadgeCheck } from "lucide-react"
 import { getMediaUrl } from "@/lib/utils"
 
@@ -80,8 +80,8 @@ export default function Notifications() {
                             <div className="w-10 flex justify-end">
                                 {notification.type === 'like' && <Heart className="w-8 h-8 text-pink-500 fill-current" />}
                                 {(notification.type === 'repost' || notification.type === 'retweet') && <Repeat2 className="w-8 h-8 text-green-500" />}
-                                {notification.type === 'follow' && <User className="w-8 h-8 text-blue-500 fill-current" />}
-                                {notification.type === 'reply' && <MessageCircle className="w-8 h-8 text-blue-500 fill-current" />}
+                                {notification.type === 'follow' && <Users className="w-8 h-8 text-sky-500" />}
+                                {notification.type === 'reply' && <MessageSquare className="w-8 h-8 text-violet-500" />}
                                 {notification.type === 'mention' && <AtSign className="w-8 h-8 text-green-500" />}
                                 {notification.type === 'message' && <MessageCircle className="w-8 h-8 text-primary fill-current" />}
                             </div>

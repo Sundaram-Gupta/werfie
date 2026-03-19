@@ -3,7 +3,7 @@ let io;
 exports.init = (server) => {
     const { Server } = require('socket.io');
     io = new Server(server, {
-        path: '/api/posts/ws',
+        path: '/ws/live',
         cors: {
             origin: (origin, callback) => callback(null, true),
             methods: ['GET', 'POST'],

@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client'
+import api from '@/lib/api'
 import { postService, userService, authService, announcementService } from '@/services/api'
 import { getGatewayUrl } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -166,8 +167,46 @@ function avoidBoundarySameUser(head, nextKey, getKey) {
     return list
 }
 
+// Universal pass: reorder so no two consecutive posts have the same user key.
+// Used for all tabs so the feed never shows back-to-back posts from one user.
+function ensureNoConsecutiveSameUser(list, getKey) {
+    const arr = Array.isArray(list) ? list.slice() : []
+    if (arr.length < 2) return arr
+    const key = (it) => String(getKey?.(it) ?? '')
+    let changed = true
+    for (let pass = 0; pass < 5 && changed; pass++) {
+        changed = false
+        for (let i = 1; i < arr.length; i++) {
+            if (key(arr[i]) !== key(arr[i - 1])) continue
+            const want = key(arr[i])
+            let swapped = false
+            for (let j = i + 1; j < arr.length; j++) {
+                if (key(arr[j]) !== want) {
+                    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+                    swapped = true
+                    changed = true
+                    break
+                }
+            }
+            if (!swapped) {
+                for (let j = i - 2; j >= 0; j--) {
+                    if (key(arr[j]) !== want) {
+                        ;[arr[i], arr[j]] = [arr[j], arr[i]]
+                        changed = true
+                        break
+                    }
+                }
+            }
+        }
+    }
+    return arr
+}
+
 function postUserKey(p) {
-    return p?.isOfficialAnnouncement ? `ann:${p?.id ?? ''}` : (p?.userId ?? p?.user?.id ?? '')
+    if (p?.isOfficialAnnouncement) return `ann:${p?.id ?? ''}`
+    const uid = p?.userId ?? p?.user?.id ?? ''
+    // Fallback to post id so missing user data doesn't collapse different users into one key
+    return uid !== '' && uid != null ? String(uid) : `post:${p?.id ?? ''}`
 }
 
 function normalizeUser(u, defaultId) {
@@ -179,7 +218,24 @@ function normalizeUser(u, defaultId) {
 }
 
 async function hydratePosts(fetchedPosts) {
-    const userIds = [...new Set(fetchedPosts.filter(item => !item.isOfficialAnnouncement && item.userId).map(item => item.userId))];
+    // Most feeds already include `user` + `profile` from backend includes.
+    // Only fetch user profiles for posts that are missing usable user data.
+    const userIds = [
+        ...new Set(
+            fetchedPosts
+                .filter(item => {
+                    if (!item || item.isOfficialAnnouncement) return false
+                    if (!item.userId) return false
+                    const u = item.user
+                    const hasHandle = !!(u?.profile?.handle || u?.handle)
+                    const hasName = !!(u?.profile?.name || u?.name)
+                    const hasEmail = !!u?.email
+                    // If backend already provided identity fields, don't refetch.
+                    return !(hasHandle || hasName || hasEmail)
+                })
+                .map(item => item.userId)
+        )
+    ];
     let userMap = {};
     if (userIds.length > 0) {
         try {
@@ -210,6 +266,8 @@ export function usePosts(params = {}) {
 
     const seenIdsRef = useRef(null)
     const offsetRef = useRef(0)
+    const fetchCtrlRef = useRef(null)
+    const warnedTimeoutRef = useRef(false)
     if (seenIdsRef.current == null) seenIdsRef.current = readSeenIds()
     if (!offsetRef.current) offsetRef.current = readOffset()
 
@@ -237,6 +295,11 @@ export function usePosts(params = {}) {
     // by using persisted `seenPostIds` + `offset` as a best-effort cursor.
     const fetchPosts = async (silent = false) => {
         try {
+            // Avoid overlapping requests piling up (common cause of Axios 30s timeout spam)
+            try { fetchCtrlRef.current?.abort?.() } catch {}
+            const ctrl = new AbortController()
+            fetchCtrlRef.current = ctrl
+
             if (!silent) setLoading(true)
             if (!silent) setPosts([]) // browser reload: new session state, so OK to reset UI here
             setError(null)
@@ -244,6 +307,10 @@ export function usePosts(params = {}) {
             setHasMore(false)
             let data;
             let announcementsData = [];
+            // Home feed should be top-level only by default (replyToId IS NULL)
+            const baseParams = (params.tab === 'for-you' || params.tab === 'following')
+                ? { ...params, excludeReplies: params.excludeReplies ?? true }
+                : { ...params }
 
             if (params.tab === 'bookmarks') {
                 const res = await postService.getBookmarks({ limit: 50 })
@@ -251,18 +318,27 @@ export function usePosts(params = {}) {
             } else if (params.tab === 'following') {
                 data = await postService.getFollowingPosts({ limit: FEED_PAGE_SIZE, _ts: Date.now() })
             } else if (params.tab === 'for-you') {
-                const [postsRes, annRes] = await Promise.all([
-                    // Use cursor-based feed for infinite scroll; shuffle client-side for variety.
-                    authService.getFeed({ limit: FEED_PAGE_SIZE }),
-                    announcementService.getFeed().catch(e => {
-                        console.error('Failed to fetch announcements feed:', e);
-                        return [];
-                    })
-                ]);
-                data = postsRes;
-                announcementsData = Array.isArray(annRes) ? annRes : (annRes.posts || []);
+                // For "For you" we want: different posts on every browser refresh + no repeats.
+                // Use offset cursor (persisted in sessionStorage) + seenPostIds to page through unseen content.
+                const startOffset = offsetRef.current || 0
+
+                data = await api.get('/api/posts', {
+                    params: { ...baseParams, limit: FEED_PAGE_SIZE, offset: startOffset, _ts: Date.now() },
+                    timeout: 20000,
+                    signal: ctrl.signal,
+                }).then(r => r.data)
+
+                announcementsData = await api.get('/api/announcements/feed', {
+                    params: { _ts: Date.now() },
+                    timeout: 8000,
+                    signal: ctrl.signal,
+                }).then(r => r.data).then(d => (Array.isArray(d) ? d : (d?.posts || []))).catch(() => [])
             } else {
-                data = await postService.getPosts({ ...params, limit: params.limit ?? FEED_PAGE_SIZE, offset: offsetRef.current || 0, _ts: Date.now() })
+                data = await api.get('/api/posts', {
+                    params: { ...baseParams, limit: params.limit ?? FEED_PAGE_SIZE, offset: offsetRef.current || 0, _ts: Date.now() },
+                    timeout: 20000,
+                    signal: ctrl.signal,
+                }).then(r => r.data)
             }
             let fetchedPosts = [];
             let next = null;
@@ -275,12 +351,27 @@ export function usePosts(params = {}) {
                 if (data.hasMore != null) more = data.hasMore;
             }
 
-            // For "For You", shuffle the first page only (keeps cursor-based infinite scroll working)
-            if (params.tab === 'for-you' && !silent) {
-                fetchedPosts = interleaveRandomNoAdjacent(
-                    [...fetchedPosts],
-                    postUserKey
-                )
+            // For "For you": enforce no-repeat + randomized order (no consecutive same-user).
+            if (params.tab === 'for-you') {
+                let unseen = filterUnseen(fetchedPosts)
+                let attempts = 0
+                while (unseen.length < FEED_PAGE_SIZE && attempts < 6) {
+                    if (unseen.length >= FEED_PAGE_SIZE) break
+                    offsetRef.current = (offsetRef.current || 0) + FEED_PAGE_SIZE
+                    writeOffset(offsetRef.current)
+                    const nextPage = await api.get('/api/posts', {
+                        params: { ...baseParams, limit: FEED_PAGE_SIZE, offset: offsetRef.current, _ts: Date.now() },
+                        timeout: 20000,
+                        signal: ctrl.signal,
+                    }).then(r => r.data)
+                    const nextRaw = nextPage?.posts ?? (Array.isArray(nextPage) ? nextPage : [])
+                    const nextUnseen = filterUnseen(nextRaw)
+                    unseen = dedupeById([...(unseen || []), ...(nextUnseen || [])])
+                    attempts++
+                    if (nextRaw.length < FEED_PAGE_SIZE) break
+                }
+
+                fetchedPosts = interleaveRandomNoAdjacent(unseen.slice(0, FEED_PAGE_SIZE), postUserKey)
             }
 
             // For bookmarks tab, each post is already bookmarked (mark for UI)
@@ -309,18 +400,22 @@ export function usePosts(params = {}) {
             fetchedPosts = dedupeById(fetchedPosts)
             // Enforce "different posts on every reload" for normal feeds:
             // filter out already-seen posts, and if none left, advance offset until we find unseen.
-            if (params.tab !== 'bookmarks') {
+            if (params.tab !== 'bookmarks' && params.tab !== 'for-you') {
                 let unseen = filterUnseen(fetchedPosts.filter(p => !p?.isOfficialAnnouncement))
                 let attempts = 0
                 while (unseen.length === 0 && attempts < 5) {
                     offsetRef.current = (offsetRef.current || 0) + FEED_PAGE_SIZE
                     writeOffset(offsetRef.current)
-                    const nextPage = await postService.getPosts({
-                        ...params,
+                    const nextPage = await api.get('/api/posts', {
+                        params: {
+                            ...baseParams,
                         limit: params.limit ?? FEED_PAGE_SIZE,
                         offset: offsetRef.current,
                         _ts: Date.now(),
-                    })
+                        },
+                        timeout: 20000,
+                        signal: ctrl.signal,
+                    }).then(r => r.data)
                     const nextRaw = nextPage?.posts ?? (Array.isArray(nextPage) ? nextPage : [])
                     unseen = filterUnseen(nextRaw)
                     attempts++
@@ -335,14 +430,34 @@ export function usePosts(params = {}) {
             }
 
             fetchedPosts = await hydratePosts(fetchedPosts);
+            fetchedPosts = ensureNoConsecutiveSameUser(fetchedPosts, postUserKey);
 
             setPosts(fetchedPosts)
             markSeen(fetchedPosts.filter(p => !p?.isOfficialAnnouncement))
             setNextCursor(next)
             setHasMore(!!more)
         } catch (err) {
-            console.error('Error fetching posts:', err)
-            setError(err.response?.data?.details || err.message)
+            // Request cancellation is expected in dev (React StrictMode double-invokes effects)
+            // and when we abort previous in-flight requests. Do not surface as an error UI.
+            const isCanceled =
+                String(err?.name || '') === 'CanceledError' ||
+                String(err?.code || '') === 'ERR_CANCELED' ||
+                /canceled|cancelled/i.test(String(err?.message || '')) ||
+                String(err?.name || '') === 'AbortError'
+            if (isCanceled) return
+
+            const msg = err?.response?.data?.details || err?.message || 'Failed to load feed'
+            setError(msg)
+
+            const isTimeout = String(err?.code || '').toUpperCase() === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''))
+            if (isTimeout) {
+                if (!warnedTimeoutRef.current) {
+                    warnedTimeoutRef.current = true
+                    console.warn('[usePosts] API timeout (30s). This happens when the gateway/services are down, or many overlapping requests were triggered while scrolling/refreshing. We now abort old requests and keep the UI stable.')
+                }
+            } else if (String(err?.name || '') !== 'CanceledError') {
+                console.error('Error fetching posts:', err)
+            }
         } finally {
             if (!silent) setLoading(false)
         }
@@ -383,15 +498,16 @@ export function usePosts(params = {}) {
 
             setPosts(prev => {
                 const prevList = Array.isArray(prev) ? prev : []
+                let nextList
                 if (params.tab === 'for-you') {
-                    // Randomize only the new batch, and fix boundary so last(new) != first(prev)
                     const firstPrevKey = prevList[0] ? postUserKey(prevList[0]) : null
                     let newBatch = interleaveRandomNoAdjacent(hydrated || [], postUserKey)
                     newBatch = avoidBoundarySameUser(newBatch, firstPrevKey, postUserKey)
-                    return dedupeById([...(newBatch || []), ...(prevList || [])])
+                    nextList = dedupeById([...(newBatch || []), ...(prevList || [])])
+                } else {
+                    nextList = dedupeById([...(hydrated || []), ...(prevList || [])])
                 }
-                // Default: prepend newest-first
-                return dedupeById([...(hydrated || []), ...(prevList || [])])
+                return ensureNoConsecutiveSameUser(nextList, postUserKey)
             })
             markSeen(unseen)
         } catch (err) {
@@ -418,12 +534,15 @@ export function usePosts(params = {}) {
             const more = !!data?.hasMore
             setPosts(prev => {
                 const prevList = Array.isArray(prev) ? prev : []
+                let nextList
                 if (params.tab === 'for-you') {
                     const lastPrevKey = prevList.length ? postUserKey(prevList[prevList.length - 1]) : null
                     const batch = interleaveRandomNoAdjacent(hydrated || [], postUserKey, { prevKey: lastPrevKey })
-                    return dedupeById([...(prevList || []), ...(batch || [])])
+                    nextList = dedupeById([...(prevList || []), ...(batch || [])])
+                } else {
+                    nextList = dedupeById([...(prevList || []), ...(hydrated || [])])
                 }
-                return dedupeById([...(prevList || []), ...(hydrated || [])])
+                return ensureNoConsecutiveSameUser(nextList, postUserKey)
             })
             markSeen(unseen)
             setNextCursor(next)
@@ -460,7 +579,15 @@ export function usePosts(params = {}) {
         const socket = io(`${gateway}/feed`, {
             path: '/ws/live',
             auth: { token },
-            transports: ['websocket', 'polling']
+            // IMPORTANT: Avoid browser console "WebSocket connection failed" spam by not attempting
+            // a websocket upgrade when the network/proxy blocks it. Polling keeps live updates working.
+            transports: ['polling'],
+            upgrade: false,
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 800,
+            reconnectionDelayMax: 4000,
+            timeout: 12000,
         })
 
         socket.on('post_published', () => refreshNewPosts())
@@ -485,23 +612,7 @@ export function usePosts(params = {}) {
             }
             setPosts(prev => {
                 const prevList = Array.isArray(prev) ? prev : []
-                const next = [postWithUser, ...(prevList || [])]
-                if (params.tab === 'for-you' && next.length >= 2) {
-                    // If the first two posts are from same user, swap with the first different user.
-                    const k0 = postUserKey(next[0])
-                    const k1 = postUserKey(next[1])
-                    if (k0 && k1 && k0 === k1) {
-                        for (let i = 2; i < next.length; i++) {
-                            const ki = postUserKey(next[i])
-                            if (ki && ki !== k0) {
-                                const tmp = next[1]
-                                next[1] = next[i]
-                                next[i] = tmp
-                                break
-                            }
-                        }
-                    }
-                }
+                const next = ensureNoConsecutiveSameUser([postWithUser, ...(prevList || [])], postUserKey)
                 return next
             })
             markSeen([newPost])

@@ -27,9 +27,10 @@ const port = 3001;
 const bindHost = process.env.HOST || process.env.BIND_HOST || '0.0.0.0';
 
 // Service targets - use env vars for flexibility, fallback to defaults (no trailing slash)
+// Service targets - use env vars for flexibility, fallback to defaults (no trailing slash)
 const USER_SERVICE_TARGET = (process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 3002}`).replace(/\/+$/, '');
 
-const app = next({ dev, hostname, port });
+const app = next({ dev, hostname });
 const handle = app.getRequestHandler();
 
 const proxy = httpProxy.createProxyServer({
@@ -265,6 +266,16 @@ mainServer.all('/api/feed*', (req, res) => {
     injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
+mainServer.all('/api/highlights*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
+mainServer.all('/api/articles*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+});
+
 mainServer.all('/api/enterprise*', (req, res) => {
     injectUserFromToken(req);
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
@@ -440,11 +451,13 @@ function startListening() {
     });
 }
 
-// Handle server errors. Do NOT exit on EADDRINUSE - startListening() retry will run from the listen callback.
+// Handle server errors. 
 httpServer.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
         if (listenRetries < MAX_LISTEN_RETRIES) {
-            console.warn(`[Gateway] Port ${port} in use (error event); retry ${listenRetries}/${MAX_LISTEN_RETRIES} will run.`);
+            listenRetries++;
+            console.warn(`[Gateway] Port ${port} in use (error event); retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`);
+            setTimeout(startListening, LISTEN_RETRY_MS);
             return;
         }
         console.error(`[Gateway] Port ${port} still in use after ${MAX_LISTEN_RETRIES} retries. Free it: netstat -ano | findstr :${port} then taskkill /PID <pid> /F`);

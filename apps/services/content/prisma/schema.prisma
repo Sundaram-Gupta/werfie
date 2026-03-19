@@ -37,6 +37,10 @@ model User {
   notifications Notification[] @relation("NotificationRecipient")
   triggeredNotifications Notification[] @relation("NotificationActor")
   
+  // Highlights & Articles
+  highlights    Highlight[]
+  articles      Article[]
+  
   // Relations from Business & Ads
   businessProfile BusinessProfile?
   businessMemberships BusinessMember[]
@@ -240,6 +244,7 @@ model Post {
   bookmarks   Bookmark[]
   notifications Notification[]
   communityPosts CommunityPost[]
+  highlightedIn Highlight[]
   
   @@index([userId])
   @@index([replyToId])
@@ -330,8 +335,8 @@ model Follow {
   followingId String
   createdAt   DateTime @default(now())
   
-  follower  User @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
   @@unique([followerId, followingId])
 }
 
@@ -1098,4 +1103,38 @@ model DebateVote {
   session         DebateSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, userId])
+}
+
+// -----------------------------------------------------------------------------
+// Highlights & Articles System
+// -----------------------------------------------------------------------------
+
+model Highlight {
+  id          String   @id @default(uuid())
+  userId      String
+  postId      String
+  createdAt   DateTime @default(now())
+  orderIndex  Int      @default(0)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId])
+}
+
+model Article {
+  id            String   @id @default(uuid())
+  userId        String
+  title         String
+  content       String   @db.Text
+  coverImage    String?
+  isPublished   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }

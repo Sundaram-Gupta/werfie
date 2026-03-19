@@ -1,14 +1,16 @@
-import { ArrowLeft, MoreHorizontal, Calendar, Link as LinkIcon, MapPin, Mail, Loader2, MessageCircle, BadgeCheck, User } from "lucide-react"
+import { ArrowLeft, MoreHorizontal, Calendar, Link as LinkIcon, MapPin, Mail, Loader2, MessageCircle, BadgeCheck, User, Play } from "lucide-react"
 import { toast } from "sonner"
 import { useNavigate, useParams } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PostCard } from "@/components/feed/post-card"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { cn, getMediaUrl } from "@/lib/utils"
+import { getApiBase } from "@/lib/api"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { useAuth } from "@/context/AuthContext"
-import { userService, postService } from "@/services/api"
+import { userService, postService, highlightsService, articlesService } from "@/services/api"
 import { EditProfileModal } from "@/components/profile/edit-profile-modal"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SetupProgress } from "@/components/profile/setup-progress"
@@ -30,6 +32,10 @@ export default function Profile() {
     const [followingCount, setFollowingCount] = useState(0)
     const [postCount, setPostCount] = useState(0)
     const [replies, setReplies] = useState([])
+    const [likedPosts, setLikedPosts] = useState([])
+    const [highlights, setHighlights] = useState([])
+    const [articles, setArticles] = useState([])
+    const [mediaLightbox, setMediaLightbox] = useState(null) // { url, isVideo, post }
 
     // Determine which user ID to fetch
     const profileUserId = userId || currentUser?.id
@@ -76,6 +82,49 @@ export default function Profile() {
                 user: post.user || userData
             }))
             setReplies(hydratedReplies)
+
+            // Fetch posts this user has liked (for Likes tab)
+            try {
+                const uid = profileUserId && String(profileUserId).trim()
+                if (uid) {
+                    const likedRes = await postService.getLikedPosts({ userId: uid, limit: 50 })
+                    const likedList = Array.isArray(likedRes?.posts) ? likedRes.posts : []
+                    const hydratedLiked = likedList.map(post => ({
+                        ...post,
+                        user: post.user || userData
+                    }))
+                    setLikedPosts(hydratedLiked)
+                } else {
+                    setLikedPosts([])
+                }
+            } catch (likedErr) {
+                console.warn('Failed to fetch liked posts:', likedErr?.response?.data || likedErr?.message || likedErr)
+                setLikedPosts([])
+            }
+
+            // Fetch Highlights
+            try {
+                const highlightsData = await highlightsService.getHighlights(profileUserId)
+                const hydratedHighlights = highlightsData.map(post => ({
+                    ...post,
+                    user: post.user || userData
+                }))
+                setHighlights(hydratedHighlights)
+            } catch (hErr) {
+                console.warn('Failed to fetch highlights:', hErr)
+                setHighlights([])
+            }
+
+            // Fetch Articles
+            try {
+                // For own profile, show drafts too. For others, only published.
+                const publishedOnly = profileUserId !== currentUser?.id
+                const articlesData = await articlesService.getArticles(profileUserId, publishedOnly)
+                setArticles(articlesData)
+            } catch (aErr) {
+                console.warn('Failed to fetch articles:', aErr)
+                setArticles([])
+            }
         } catch (err) {
             console.error("Failed to load profile:", err)
             setError("Failed to load profile data")
@@ -110,10 +159,150 @@ export default function Profile() {
             await postService.deletePost(postId)
             setPosts(prev => prev.filter(p => p.id !== postId))
             setReplies(prev => prev.filter(p => p.id !== postId))
-            // Update stats if needed, or rely on refetch
+            setLikedPosts(prev => prev.filter(p => p.id !== postId))
         } catch (err) {
             console.error('Failed to delete post:', err)
-            throw err // Re-throw so the dropdown knows it failed
+            throw err
+        }
+    }
+
+    const updatePostInAllTabs = (postId, updater) => {
+        const apply = (list) => (Array.isArray(list) ? list.map(p => p.id === postId ? updater(p) : p) : [])
+        setPosts(prev => apply(prev))
+        setReplies(prev => apply(prev))
+        setLikedPosts(prev => apply(prev))
+        setHighlights(prev => apply(prev))
+    }
+
+    const handleLikePost = async (postId) => {
+        const prevPosts = posts
+        const prevReplies = replies
+        const prevLiked = likedPosts
+        updatePostInAllTabs(postId, (p) => ({
+            ...p,
+            likes: [{ id: 'temp' }],
+            _count: { ...p._count, likes: (p._count?.likes || 0) + 1 }
+        }))
+        try {
+            await postService.likePost(postId)
+        } catch (err) {
+            console.error('Failed to like post:', err)
+            setPosts(prevPosts)
+            setReplies(prevReplies)
+            setLikedPosts(prevLiked)
+        }
+    }
+
+    const handleUnlikePost = async (postId) => {
+        const prevPosts = posts
+        const prevReplies = replies
+        const prevLiked = likedPosts
+        updatePostInAllTabs(postId, (p) => ({
+            ...p,
+            likes: [],
+            _count: { ...p._count, likes: Math.max((p._count?.likes || 0) - 1, 0) }
+        }))
+        try {
+            await postService.unlikePost(postId)
+        } catch (err) {
+            console.error('Failed to unlike post:', err)
+            setPosts(prevPosts)
+            setReplies(prevReplies)
+            setLikedPosts(prevLiked)
+        }
+    }
+
+    const handleRetweetPost = async (postId) => {
+        const prevPosts = posts
+        const prevReplies = replies
+        const prevLiked = likedPosts
+        updatePostInAllTabs(postId, (p) => ({
+            ...p,
+            retweets: [{ id: 'temp' }],
+            _count: { ...p._count, retweets: (p._count?.retweets || 0) + 1 }
+        }))
+        try {
+            await postService.retweetPost(postId)
+        } catch (err) {
+            console.error('Failed to retweet post:', err)
+            setPosts(prevPosts)
+            setReplies(prevReplies)
+            setLikedPosts(prevLiked)
+        }
+    }
+
+    const handleUnretweetPost = async (postId) => {
+        const prevPosts = posts
+        const prevReplies = replies
+        const prevLiked = likedPosts
+        updatePostInAllTabs(postId, (p) => ({
+            ...p,
+            retweets: [],
+            _count: { ...p._count, retweets: Math.max((p._count?.retweets || 0) - 1, 0) }
+        }))
+        try {
+            await postService.unretweetPost(postId)
+        } catch (err) {
+            console.error('Failed to undo retweet:', err)
+            setPosts(prevPosts)
+            setReplies(prevReplies)
+            setLikedPosts(prevLiked)
+        }
+    }
+
+    const handleBookmarkPost = async (postId) => {
+        const prevPosts = posts
+        const prevReplies = replies
+        const prevLiked = likedPosts
+        updatePostInAllTabs(postId, (p) => ({
+            ...p,
+            bookmarks: [{ id: 'temp' }]
+        }))
+        try {
+            await postService.bookmarkPost(postId)
+        } catch (err) {
+            console.error('Failed to bookmark post:', err)
+            setPosts(prevPosts)
+            setReplies(prevReplies)
+            setLikedPosts(prevLiked)
+        }
+    }
+
+    const handleUnbookmarkPost = async (postId) => {
+        const prevPosts = posts
+        const prevReplies = replies
+        const prevLiked = likedPosts
+        updatePostInAllTabs(postId, (p) => ({
+            ...p,
+            bookmarks: []
+        }))
+        try {
+            await postService.unbookmarkPost(postId)
+        } catch (err) {
+            console.error('Failed to remove bookmark:', err)
+            setPosts(prevPosts)
+            setReplies(prevReplies)
+            setLikedPosts(prevLiked)
+        }
+    }
+
+    const handleUnlikeLiked = async (postId) => {
+        try {
+            await postService.unlikePost(postId)
+            setLikedPosts(prev => prev.filter(p => p.id !== postId))
+        } catch (err) {
+            console.error('Failed to unlike post:', err)
+        }
+    }
+
+    const handleLikeLiked = async (postId) => {
+        try {
+            await postService.likePost(postId)
+            setLikedPosts(prev => prev.map(p => p.id === postId
+                ? { ...p, likes: [{ id: 'temp' }], _count: { ...p._count, likes: (p._count?.likes || 0) + 1 } }
+                : p))
+        } catch (err) {
+            console.error('Failed to like post:', err)
         }
     }
 
@@ -143,6 +332,26 @@ export default function Profile() {
         // Optionally refresh full data
         fetchProfile()
     }
+
+    const mediaBase = getApiBase() || ''
+    const mediaItems = useMemo(() => {
+        const list = []
+        const allPosts = [...(posts || []), ...(replies || [])]
+        for (const post of allPosts) {
+            const mediaList = Array.isArray(post?.media) ? post.media : []
+            for (const media of mediaList) {
+                const raw = media?.mediaUrl
+                if (!raw) continue
+                const url = raw.startsWith('http') ? raw : `${mediaBase}${raw.startsWith('/') ? '' : '/'}${raw}`
+                const urlLower = url.toLowerCase()
+                const looksLikeVideo = urlLower.endsWith('.mp4') || urlLower.endsWith('.webm') || urlLower.endsWith('.mov') || urlLower.endsWith('.m4v') ||
+                    urlLower.includes('.mp4?') || urlLower.includes('.webm?') || urlLower.includes('.mov?') || urlLower.includes('.m4v?')
+                const isVideo = media?.mediaType === 'video' || looksLikeVideo
+                list.push({ post, media: { ...media, mediaUrl: url, thumbnailUrl: media.thumbnailUrl ? (media.thumbnailUrl.startsWith('http') ? media.thumbnailUrl : `${mediaBase}${media.thumbnailUrl.startsWith('/') ? '' : '/'}${media.thumbnailUrl}`) : null }, isVideo })
+            }
+        }
+        return list
+    }, [posts, replies, mediaBase])
 
     if (loading) {
         return <div className="flex justify-center items-center h-screen"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -330,34 +539,191 @@ export default function Profile() {
                 <TabsContent value="posts" className="mt-0">
                     {currentUser?.id === profile.id && <SetupProgress />}
                     <div className="divide-y divide-border/50">
-                        {posts.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
+                        {posts.map(post => (
+                            <PostCard
+                                key={post.id}
+                                post={post}
+                                onDelete={handleDeletePost}
+                                onLike={handleLikePost}
+                                onUnlike={handleUnlikePost}
+                                onRetweet={handleRetweetPost}
+                                onUnretweet={handleUnretweetPost}
+                                onBookmark={handleBookmarkPost}
+                                onUnbookmark={handleUnbookmarkPost}
+                            />
+                        ))}
                         {posts.length === 0 && <div className="p-8 text-center text-muted-foreground">{t('feed.no_posts_yet')}</div>}
                     </div>
                 </TabsContent>
 
                 <TabsContent value="replies" className="mt-0">
                     <div className="divide-y divide-border/50">
-                        {replies.map(post => <PostCard key={post.id} post={post} onDelete={handleDeletePost} />)}
+                        {replies.map(post => (
+                            <PostCard
+                                key={post.id}
+                                post={post}
+                                onDelete={handleDeletePost}
+                                onLike={handleLikePost}
+                                onUnlike={handleUnlikePost}
+                                onRetweet={handleRetweetPost}
+                                onUnretweet={handleUnretweetPost}
+                                onBookmark={handleBookmarkPost}
+                                onUnbookmark={handleUnbookmarkPost}
+                            />
+                        ))}
                         {replies.length === 0 && <div className="p-8 text-center text-muted-foreground">{t('profile.no_replies')}</div>}
                     </div>
                 </TabsContent>
 
                 <TabsContent value="highlights" className="mt-0">
-                    <div className="p-8 text-center text-muted-foreground">No highlights yet</div>
+                    <div className="divide-y divide-border/50">
+                        {highlights.map(post => (
+                            <PostCard
+                                key={post.id}
+                                post={post}
+                                onDelete={handleDeletePost}
+                                onLike={handleLikePost}
+                                onUnlike={handleUnlikePost}
+                                onRetweet={handleRetweetPost}
+                                onUnretweet={handleUnretweetPost}
+                                onBookmark={handleBookmarkPost}
+                                onUnbookmark={handleUnbookmarkPost}
+                                onToggleHighlight={(postId, isNowHighlighted) => {
+                                    if (!isNowHighlighted) {
+                                        setHighlights(prev => prev.filter(p => p.id !== postId));
+                                    }
+                                }}
+                            />
+                        ))}
+                        {highlights.length === 0 && (
+                            <div className="p-8 text-center text-muted-foreground">
+                                {profile.id === currentUser?.id 
+                                    ? "Showcase your best posts here by adding them to your highlights."
+                                    : "No highlights to show yet."
+                                }
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="articles" className="mt-0">
-                    <div className="p-8 text-center text-muted-foreground">No articles yet</div>
+                    <div className="flex flex-col">
+                        {currentUser?.id === profile.id && (
+                             <div className="p-4 flex justify-center border-b border-border/50">
+                                 <Button variant="outline" onClick={() => navigate('/articles/new')} className="rounded-full font-bold min-w-[200px]">
+                                     Write an Article
+                                 </Button>
+                             </div>
+                        )}
+                        
+                        <div className="divide-y divide-border/50">
+                            {articles.map(article => (
+                                <div 
+                                    key={article.id} 
+                                    className="p-4 hover:bg-muted/30 cursor-pointer transition border-b border-border/50" 
+                                    onClick={() => navigate(`/article/${article.id}`)}
+                                >
+                                    {article.coverImage && (
+                                        <img src={getMediaUrl(article.coverImage)} className="w-full h-48 object-cover rounded-xl mb-3" />
+                                    )}
+                                    <h2 className="text-xl font-bold mb-1">{article.title}</h2>
+                                    <p className="text-muted-foreground line-clamp-3 mb-2">{article.content.substring(0, 200).replace(/[#*]/g, '')}...</p>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <span>{new Date(article.createdAt).toLocaleDateString()}</span>
+                                        {!article.isPublished && <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded-full text-xs">Draft</span>}
+                                    </div>
+                                </div>
+                            ))}
+                            {articles.length === 0 && (
+                                <div className="p-8 text-center text-muted-foreground">
+                                    {profile.id === currentUser?.id 
+                                        ? "Share your thoughts in long-form articles."
+                                        : "No articles published yet."
+                                    }
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="media" className="mt-0">
-                    <div className="p-8 text-center text-muted-foreground">No media yet</div>
+                    {mediaItems.length === 0 ? (
+                        <div className="p-8 text-center text-muted-foreground">{t('profile.no_media', 'No media yet')}</div>
+                    ) : (
+                        <div className="grid grid-cols-3 gap-0.5 p-1">
+                            {mediaItems.map((item, index) => {
+                                const { media, isVideo } = item
+                                const url = media.mediaUrl
+                                const thumb = media.thumbnailUrl || url
+                                return (
+                                    <button
+                                        key={`${item.post.id}-${media.id ?? index}`}
+                                        type="button"
+                                        className="relative aspect-square bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                                        onClick={() => setMediaLightbox({ url, isVideo, post: item.post })}
+                                    >
+                                        {isVideo ? (
+                                            <>
+                                                <video
+                                                    src={url}
+                                                    className="w-full h-full object-cover"
+                                                    muted
+                                                    playsInline
+                                                    preload="metadata"
+                                                    poster={thumb}
+                                                />
+                                                <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                    <Play className="w-10 h-10 text-white fill-white" />
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <img
+                                                src={url}
+                                                alt=""
+                                                className="w-full h-full object-cover"
+                                            />
+                                        )}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
                 </TabsContent>
 
                 <TabsContent value="likes" className="mt-0">
-                    <div className="p-8 text-center text-muted-foreground">No likes yet</div>
+                    <div className="divide-y divide-border/50">
+                        {likedPosts.map(post => (
+                            <PostCard
+                                key={post.id}
+                                post={post}
+                                onDelete={handleDeletePost}
+                                onLike={handleLikeLiked}
+                                onUnlike={handleUnlikeLiked}
+                                onRetweet={handleRetweetPost}
+                                onUnretweet={handleUnretweetPost}
+                                onBookmark={handleBookmarkPost}
+                                onUnbookmark={handleUnbookmarkPost}
+                            />
+                        ))}
+                        {likedPosts.length === 0 && (
+                            <div className="p-8 text-center text-muted-foreground">{t('profile.no_likes', 'No likes yet')}</div>
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
+
+            {/* Media lightbox */}
+            <Dialog open={!!mediaLightbox} onOpenChange={(open) => !open && setMediaLightbox(null)}>
+                <DialogContent className="max-w-[95vw] max-h-[90vh] w-auto p-0 bg-black/95 border-border overflow-hidden" onPointerDownOutside={() => setMediaLightbox(null)}>
+                    {mediaLightbox && (
+                        mediaLightbox.isVideo ? (
+                            <video src={mediaLightbox.url} controls className="w-full max-h-[90vh] object-contain" autoPlay playsInline />
+                        ) : (
+                            <img src={mediaLightbox.url} alt="" className="w-full max-h-[90vh] object-contain" />
+                        )
+                    )}
+                </DialogContent>
+            </Dialog>
         </div >
     )
 }

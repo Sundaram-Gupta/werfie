@@ -30,13 +30,13 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { userService, moderationService, listService } from "@/services/api"
+import { userService, moderationService, listService, highlightsService } from "@/services/api"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
 import { AddToListModal } from "../lists/add-to-list-modal"
 import { PostAnalyticsModal } from "./post-analytics-modal"
 
-export function MoreOptionsDropdown({ user, contentType = 'post', contentId, post, onDelete }) {
+export function MoreOptionsDropdown({ user, contentType = 'post', contentId, post, onDelete, onToggleHighlight }) {
     const { user: currentUser } = useAuth()
     const [isFollowing, setIsFollowing] = useState(false)
     const [isReporting, setIsReporting] = useState(false)
@@ -45,6 +45,26 @@ export function MoreOptionsDropdown({ user, contentType = 'post', contentId, pos
     const [showAnalyticsModal, setShowAnalyticsModal] = useState(false)
 
     const isOwner = currentUser?.id === user.id || currentUser?.id === user.userId 
+    const [isHighlighted, setIsHighlighted] = useState(post?.highlightedIn?.length > 0)
+
+    const handleToggleHighlight = async (e) => {
+        e.stopPropagation();
+        try {
+            const result = await highlightsService.toggleHighlight(contentId);
+            const nowHighlighted = !!result.highlighted;
+            setIsHighlighted(nowHighlighted);
+            
+            // Notify parent
+            if (onToggleHighlight) {
+                onToggleHighlight(contentId, nowHighlighted);
+            }
+            
+            toast.success(nowHighlighted ? 'Added to highlights' : 'Removed from highlights');
+        } catch (error) {
+            console.error('Highlight toggle failed:', error);
+            toast.error('Failed to update highlight status');
+        }
+    };
 
     const handleDelete = async () => {
         if (!onDelete) return;
@@ -151,6 +171,13 @@ export function MoreOptionsDropdown({ user, contentType = 'post', contentId, pos
             >
                 {isOwner && (
                     <>
+                        <DropdownMenuItem 
+                            className="flex gap-3 px-4 py-3 cursor-pointer text-[15px] font-bold text-white hover:bg-[rgb(22,24,28)] focus:bg-[rgb(22,24,28)]"
+                            onClick={handleToggleHighlight}
+                        >
+                            <Star className={cn("w-[18px] h-[18px]", isHighlighted && "fill-yellow-500 text-yellow-500")} />
+                            <span>{isHighlighted ? 'Remove from Highlights' : 'Highlight on your profile'}</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem 
                             className="flex gap-3 px-4 py-3 cursor-pointer text-[15px] font-bold text-red-500 hover:bg-[rgb(22,24,28)] focus:bg-[rgb(22,24,28)] focus:text-red-500"
                             onClick={(e) => {

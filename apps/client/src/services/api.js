@@ -87,8 +87,15 @@ export const authService = {
 
     // Get current user
     getCurrentUser: async () => {
-        const { data } = await api.get('/api/auth/me')
-        return data
+        try {
+            const { data } = await api.get('/api/auth/me')
+            return data
+        } catch (error) {
+            // 401/403 is expected when token is missing/expired; treat as "not logged in"
+            const status = error?.response?.status
+            if (status === 401 || status === 403) return null
+            throw error
+        }
     },
 
     // Check if user is authenticated
@@ -271,6 +278,11 @@ export const postService = {
     // Get bookmarked posts
     getBookmarks: async (params = {}) => {
         const { data } = await api.get('/api/posts/bookmarks', { params })
+        return data
+    },
+
+    getLikedPosts: async (params = {}) => {
+        const { data } = await api.get('/api/posts/liked', { params })
         return data
     },
 
@@ -766,3 +778,42 @@ export const werfieAiService = {
         return json?.data?.text ?? json?.text ?? 'No response from AI.'
     }
 }
+
+// Highlights Services
+export const highlightsService = {
+    toggleHighlight: async (postId) => {
+        const { data } = await api.post('/api/highlights/toggle', { postId });
+        return data;
+    },
+    getHighlights: async (userId) => {
+        const { data } = await api.get(`/api/highlights/user/${userId}`);
+        return (data?.data?.posts || data?.posts || data || []);
+    }
+};
+
+// Articles Services
+export const articlesService = {
+    createArticle: async (articleData) => {
+        const { data } = await api.post('/api/articles', articleData);
+        return data?.data ?? data;
+    },
+    getArticles: async (userId, publishedOnly = false) => {
+        const { data } = await api.get(`/api/articles/user/${userId}`, {
+            params: { publishedOnly }
+        });
+        const items = data?.data ?? data;
+        return Array.isArray(items) ? items : [];
+    },
+    getArticle: async (id) => {
+        const { data } = await api.get(`/api/articles/${id}`);
+        return data?.data ?? data;
+    },
+    updateArticle: async (id, articleData) => {
+        const { data } = await api.put(`/api/articles/${id}`, articleData);
+        return data?.data ?? data;
+    },
+    deleteArticle: async (id) => {
+        const { data } = await api.delete(`/api/articles/${id}`);
+        return data;
+    }
+};

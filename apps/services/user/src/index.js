@@ -548,7 +548,7 @@ app.get('/suggestions', async (req, res) => {
 });
 
 // Search Users
-app.get('/search', async (req, res) => {
+app.get('/api/users/search', async (req, res) => {
     const { q, limit = 20 } = req.query;
 
     if (!q || q.trim().length === 0) {
@@ -731,6 +731,7 @@ app.put('/:id', authenticateToken, async (req, res) => {
             location: true,
             website: true,
             birthdate: true,
+            gender: true,
             createdAt: true,
             updatedAt: true,
             verified: true,

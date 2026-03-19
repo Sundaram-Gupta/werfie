@@ -41,6 +41,8 @@ import SoapboxView from "@/pages/soapbox-view"
 import Soapbox from "@/pages/soapbox"
 import DebateView from "@/pages/debate-view"
 import Debate from "@/pages/debate"
+import ArticleEditor from "@/pages/articles/ArticleEditor"
+import ArticleDetail from "@/pages/articles/ArticleDetail"
 
 import { AuthModalProvider } from "./components/auth/auth-modal-context"
 import { AuthModal } from "./components/auth/auth-modal"
@@ -103,6 +105,9 @@ function App() {
                 <Route path="/soapbox" element={<Soapbox />} />
                 <Route path="/debate/:id" element={<DebateView />} />
                 <Route path="/debate" element={<Debate />} />
+                <Route path="/articles/new" element={<ArticleEditor />} />
+                <Route path="/articles/edit/:id" element={<ArticleEditor />} />
+                <Route path="/article/:id" element={<ArticleDetail />} />
               </Route>
 
               {/* Protected Standalone Layouts (No Main Sidebar) */}

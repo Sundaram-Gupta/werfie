@@ -1,8 +1,10 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Link as RouterLink } from "react-router-dom"
 import { BadgeCheck } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
+import { ArticlePreviewCard } from "./article-preview-card"
 
 import { getMediaUrl } from "@/lib/utils"
 import { getApiBase } from "@/lib/api"
@@ -197,7 +199,7 @@ function AutoPlayVideo({ src, poster, className, style, onError }) {
     )
 }
 
-export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete }) {
+export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete, onToggleHighlight }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const mediaBase = getApiBase() || ''
@@ -281,6 +283,60 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
         views: post.stats?.views || '0'
     }
 
+    // Detect article links for preview cards
+    const articleId = useMemo(() => {
+        const content = post.content ?? post.text ?? post.body ?? post.data?.content ?? '';
+        if (typeof content !== 'string') return null;
+        
+        // Match /article/UUID or /article/ID
+        const match = content.match(/\/article\/([a-zA-Z0-9-]+)/);
+        return match ? match[1] : null;
+    }, [post.content]);
+
+    const renderContentWithLinks = (text) => {
+        if (!text) return null;
+        
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const parts = text.split(urlRegex);
+        
+        return parts.map((part, i) => {
+            if (part.match(urlRegex)) {
+                const isInternal = part.includes(window.location.host) || part.startsWith('/');
+                const isArticle = part.includes('/article/');
+                
+                if (isInternal && isArticle) {
+                    const path = part.includes(window.location.host) 
+                        ? part.split(window.location.host)[1] 
+                        : part;
+                    return (
+                        <RouterLink 
+                            key={i} 
+                            to={path} 
+                            className="text-blue-500 hover:underline break-all"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {part}
+                        </RouterLink>
+                    );
+                }
+                
+                return (
+                    <a 
+                        key={i} 
+                        href={part} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-blue-500 hover:underline break-all"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {part}
+                    </a>
+                );
+            }
+            return part;
+        });
+    };
+
 
 
     return (
@@ -304,7 +360,7 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground whitespace-nowrap">{timestamp}</span>
                     </div>
-                    <MoreOptionsDropdown user={user} contentId={post.id} post={post} onDelete={onDelete} />
+                    <MoreOptionsDropdown user={user} contentId={post.id} post={post} onDelete={onDelete} onToggleHighlight={onToggleHighlight} />
                 </div>
 
                 {/* Reply indicator */}
@@ -343,7 +399,7 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                     return (
                         <div className="mt-0.5">
                             <div className="text-[15px] leading-5 whitespace-pre-wrap break-words text-foreground">
-                                {contentExpanded || !isLong ? trimmed : preview}
+                                {renderContentWithLinks(contentExpanded || !isLong ? trimmed : preview)}
                             </div>
                             {isLong && (
                                 <button
@@ -413,6 +469,11 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                             );
                         })}
                     </div>
+                )}
+
+                {/* Article Preview Card */}
+                {articleId && (
+                    <ArticlePreviewCard articleId={articleId} />
                 )}
 
                 {/* Fullscreen image viewer */}

@@ -65,18 +65,6 @@ function formatDayLabel(dateOrStr) {
     return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: '2-digit' }).format(d)
 }
 
-const AVATAR_COLORS = [
-    'bg-red-500', 'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500',
-    'bg-teal-500', 'bg-cyan-500', 'bg-sky-500', 'bg-blue-500', 'bg-indigo-500',
-    'bg-violet-500', 'bg-purple-500', 'bg-fuchsia-500', 'bg-pink-500',
-]
-function getAvatarColor(nameOrId) {
-    if (!nameOrId) return AVATAR_COLORS[0]
-    let hash = 0
-    const str = String(nameOrId)
-    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash)
-    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
-}
 
 export default function Chat() {
     const { t } = useTranslation()
@@ -662,7 +650,7 @@ export default function Chat() {
                                         >
                                             <Avatar className="w-10 h-10 border border-border pointer-events-none">
                                                 <AvatarImage src={getMediaUrl(normalized.avatar)} />
-                                                <AvatarFallback className={cn("text-white font-semibold", getAvatarColor(normalized.name || normalized.id))}>{(normalized.name?.[0] || 'U').toUpperCase()}</AvatarFallback>
+                                                <AvatarFallback>{(normalized.name?.[0] || 'U').toUpperCase()}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 min-w-0 pointer-events-none">
                                                 <div className="flex items-center gap-1">
@@ -703,7 +691,7 @@ export default function Chat() {
                                 >
                                     <Avatar className="w-12 h-12 border border-border shrink-0">
                                         <AvatarImage src={getMediaUrl(chat.user.avatar)} />
-                                        <AvatarFallback className={cn("text-white font-semibold text-lg", getAvatarColor(chat.user.name || chat.user.id))}>{chat.user.name?.[0] || "U"}</AvatarFallback>
+                                        <AvatarFallback>{chat.user.name?.[0] || "U"}</AvatarFallback>
                                     </Avatar>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between gap-2">
@@ -734,7 +722,7 @@ export default function Chat() {
                                 >
                                     <Avatar className="w-10 h-10 border border-border shrink-0 cursor-pointer">
                                         <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} />
-                                        <AvatarFallback className={cn("text-white font-semibold", getAvatarColor(selectedChat.user.name || selectedChat.user.id))}>{selectedChat.user.name?.[0]}</AvatarFallback>
+                                        <AvatarFallback>{selectedChat.user.name?.[0]}</AvatarFallback>
                                     </Avatar>
                                     <h2 className="text-[18px] font-bold truncate text-left">{selectedChat.user.name}</h2>
                                 </button>
@@ -751,7 +739,7 @@ export default function Chat() {
                                 <div className="flex flex-col items-center justify-center py-8">
                                     <Avatar className="w-20 h-20 mb-3 border-2 border-border">
                                         <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} />
-                                        <AvatarFallback className={cn("text-white font-semibold text-2xl", getAvatarColor(selectedChat.user.name || selectedChat.user.id))}>{selectedChat.user.name?.[0]}</AvatarFallback>
+                                        <AvatarFallback className="text-2xl">{selectedChat.user.name?.[0]}</AvatarFallback>
                                     </Avatar>
                                     <h3 className="text-[18px] font-bold flex items-center gap-1 mb-0.5">
                                         {selectedChat.user.name}

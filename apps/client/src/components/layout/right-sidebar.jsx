@@ -1,11 +1,12 @@
 import { Search, TrendingUp, BadgeCheck, MoreHorizontal } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useNavigate } from "react-router-dom"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { userService, searchService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
+import api from "@/lib/api"
 
 function PostSearchResult({ post, navigate }) {
     const userLabel = post?.user?.profile?.name || post?.user?.name || post?.user?.email?.split?.('@')?.[0] || post?.user || 'Unknown'
@@ -56,14 +57,19 @@ function TrendsList({ navigate }) {
     const { t } = useTranslation()
     const [trends, setTrends] = useState([])
     const [loading, setLoading] = useState(true)
+    const warnedRef = useRef(false)
 
     useEffect(() => {
         const fetchTrends = async () => {
             try {
-                const data = await searchService.getTrends()
+                // Use a shorter timeout to avoid 30s console spam when backend is down.
+                const data = await api.get('/api/trends', { params: { limit: 20 }, timeout: 8000 }).then(r => r.data)
                 setTrends(data)
             } catch (error) {
-                console.error("Failed to load trends", error)
+                if (!warnedRef.current) {
+                    warnedRef.current = true
+                    console.warn("Failed to load trends (timeout/unreachable).")
+                }
             } finally {
                 setLoading(false)
             }
@@ -183,6 +189,7 @@ export function RightSidebar() {
     const [searchTab, setSearchTab] = useState('users') // 'users' | 'posts'
     const [userResults, setUserResults] = useState([])
     const [postResults, setPostResults] = useState([])
+    const suggestionsCtrlRef = useRef(null)
 
     const fetchSuggestions = useCallback(async () => {
         if (!currentUser?.id) {
@@ -190,9 +197,13 @@ export function RightSidebar() {
             return
         }
         try {
+            try { suggestionsCtrlRef.current?.abort?.() } catch {}
+            const ctrl = new AbortController()
+            suggestionsCtrlRef.current = ctrl
+
             const [suggestionsData, followingData] = await Promise.all([
-                userService.getSuggestions({ limit: 15, page: 1 }),
-                userService.getFollowing(currentUser.id, { limit: 100 })
+                api.get('/api/users/suggestions', { params: { limit: 15, page: 1 }, timeout: 12000, signal: ctrl.signal }).then(r => r.data),
+                api.get(`/api/users/${currentUser.id}/following`, { params: { limit: 100 }, timeout: 12000, signal: ctrl.signal }).then(r => r.data),
             ])
             const list = suggestionsData?.users ?? (Array.isArray(suggestionsData) ? suggestionsData : (suggestionsData?.data && Array.isArray(suggestionsData.data) ? suggestionsData.data : []))
             const following = Array.isArray(followingData) ? followingData : (followingData?.data && Array.isArray(followingData.data) ? followingData.data : [])
@@ -200,7 +211,8 @@ export function RightSidebar() {
             const filteredData = list.filter(user => user && user.id !== currentUser.id && !followingIds.has(user.id))
             setSuggestions(filteredData)
         } catch (error) {
-            console.error("Failed to load suggestions", error)
+            // Avoid noisy console spam on slow/offline backend
+            console.warn("Failed to load suggestions (timeout/unreachable).")
         } finally {
             setLoading(false)
         }
