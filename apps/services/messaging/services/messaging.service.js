@@ -10,20 +10,125 @@ if (!global.prisma) {
 prisma = global.prisma;
 
 export class MessagingService {
-    /**
-     * Send a message to a specific conversation
-     */
-    static async sendMessageToConversation({ conversationId, senderId, content, type = 'text', mediaUrl, thumbnailUrl, duration, size, mimeType }) {
-        // 1. Validate participation
+    static _conversationSettingsTableAvailable = true
+
+    static hasConversationSettingsModel() {
+        return Boolean(prisma?.conversationUserSetting) && this._conversationSettingsTableAvailable
+    }
+
+    static markConversationSettingsUnavailable(error) {
+        // P2021 = table does not exist. Disable settings queries for this process.
+        if (error?.code === 'P2021') {
+            this._conversationSettingsTableAvailable = false
+            console.warn('[MessagingService] ConversationUserSetting table unavailable; using fallback behavior.')
+        }
+    }
+
+    static async ensureParticipant(conversationId, userId) {
+        const participant = await prisma.participant.findFirst({
+            where: { conversationId, userId },
+            select: { id: true }
+        })
+        if (!participant) throw new Error("Unauthorized to access this conversation")
+    }
+
+    static async getConversationSettings(conversationId, userId) {
+        await this.ensureParticipant(conversationId, userId)
+        if (!this.hasConversationSettingsModel()) {
+            return {
+                conversationId,
+                userId,
+                disappearingMode: 'off',
+                blockScreenshots: false,
+                blockMessages: false
+            }
+        }
+        try {
+            return await prisma.conversationUserSetting.upsert({
+                where: { conversationId_userId: { conversationId, userId } },
+                update: {},
+                create: { conversationId, userId }
+            })
+        } catch (error) {
+            this.markConversationSettingsUnavailable(error)
+            return {
+                conversationId,
+                userId,
+                disappearingMode: 'off',
+                blockScreenshots: false,
+                blockMessages: false
+            }
+        }
+    }
+
+    static async updateConversationSettings(conversationId, userId, updates = {}) {
+        await this.ensureParticipant(conversationId, userId)
+        const next = {}
+        if (typeof updates.disappearingMode === 'string') next.disappearingMode = updates.disappearingMode
+        if (typeof updates.blockScreenshots === 'boolean') next.blockScreenshots = updates.blockScreenshots
+        if (typeof updates.blockMessages === 'boolean') next.blockMessages = updates.blockMessages
+        if (!this.hasConversationSettingsModel()) {
+            return {
+                conversationId,
+                userId,
+                disappearingMode: next.disappearingMode || 'off',
+                blockScreenshots: Boolean(next.blockScreenshots),
+                blockMessages: Boolean(next.blockMessages)
+            }
+        }
+        return prisma.conversationUserSetting.upsert({
+            where: { conversationId_userId: { conversationId, userId } },
+            update: next,
+            create: { conversationId, userId, ...next }
+        })
+    }
+
+    static async assertCanSendToConversation(conversationId, senderId) {
         const conversation = await prisma.conversation.findUnique({
             where: { id: conversationId },
             include: { participants: true }
         })
-
         if (!conversation) throw new Error("Conversation not found")
 
         const isParticipant = conversation.participants.some(p => p.userId === senderId)
         if (!isParticipant) throw new Error("User is not a participant of this conversation")
+
+        // For direct chats, recipient can block incoming messages.
+        if (conversation.type === 'direct' && this.hasConversationSettingsModel()) {
+            const recipient = conversation.participants.find(p => p.userId !== senderId)
+            if (recipient?.userId) {
+                const recipientSettings = await prisma.conversationUserSetting.findUnique({
+                    where: { conversationId_userId: { conversationId, userId: recipient.userId } },
+                    select: { blockMessages: true }
+                })
+                if (recipientSettings?.blockMessages) {
+                    throw new Error("This user is not accepting messages in this conversation")
+                }
+            }
+        }
+
+        return conversation
+    }
+
+    /**
+     * Send a message to a specific conversation
+     */
+    static async sendMessageToConversation({ 
+        conversationId, 
+        senderId, 
+        content, 
+        type = 'text', 
+        mediaUrl, 
+        thumbnailUrl, 
+        duration, 
+        size, 
+        mimeType,
+        replyToId,
+        isForwarded = false,
+        forwardedFromId
+    }) {
+        // 1. Validate participation
+        const conversation = await this.assertCanSendToConversation(conversationId, senderId)
 
         // 2. Create message
         const message = await prisma.message.create({
@@ -37,12 +142,16 @@ export class MessagingService {
                 duration,
                 size,
                 mimeType,
-                status: 'sent'
+                status: 'sent',
+                replyToId,
+                isForwarded,
+                forwardedFromId
             },
             include: {
                 conversation: {
                     select: { participants: true }
-                }
+                },
+                replyTo: true
             }
         })
 
@@ -76,14 +185,15 @@ export class MessagingService {
                 .map(p => p.userId)
 
             for (const recipientId of recipientIds) {
-                await kafkaProducer.send('MESSAGE_SENT', {
+                // DON'T await Kafka in the main flow to avoid blocking on connection issues
+                kafkaProducer.send('MESSAGE_SENT', {
                     messageId: message.id,
                     senderId,
                     recipientId,
                     conversationId,
                     content: message.content,
                     type: message.type
-                })
+                }).catch(err => console.error('❌ Kafka send failed:', err))
             }
         } catch (kafkaError) {
             console.error('❌ Failed to produce Kafka event:', kafkaError)
@@ -237,6 +347,157 @@ export class MessagingService {
     static async getMessages(conversationId) {
         return prisma.message.findMany({
             where: { conversationId },
+            include: {
+                reactions: true
+            },
+            orderBy: { createdAt: 'asc' }
+        })
+    }
+
+    static async deleteMessage(messageId, userId) {
+        // Only allow sender to delete their own message (simplified "delete for me" to "delete for all" for now)
+        const message = await prisma.message.findUnique({ where: { id: messageId } })
+        if (!message) throw new Error("Message not found")
+        if (message.senderId !== userId) throw new Error("Unauthorized to delete this message")
+
+        return prisma.message.delete({
+            where: { id: messageId }
+        })
+    }
+
+    static async addReaction(messageId, userId, emoji) {
+        return prisma.messageReaction.upsert({
+            where: {
+                messageId_userId_emoji: {
+                    messageId,
+                    userId,
+                    emoji
+                }
+            },
+            update: {},
+            create: {
+                messageId,
+                userId,
+                emoji
+            }
+        })
+    }
+
+    static async removeReaction(messageId, userId, emoji) {
+        return prisma.messageReaction.deleteMany({
+            where: {
+                messageId,
+                userId,
+                emoji
+            }
+        })
+    }
+
+    static async getMessage(messageId) {
+        return prisma.message.findUnique({
+            where: { id: messageId },
+            include: {
+                sender: {
+                    select: { id: true, email: true, profile: true }
+                },
+                reactions: true,
+                replyTo: true
+            }
+        })
+    }
+
+    static async updateMessage(messageId, userId, content) {
+        const message = await prisma.message.findUnique({ where: { id: messageId } })
+        if (!message) throw new Error("Message not found")
+        if (message.senderId !== userId) throw new Error("Unauthorized to edit this message")
+
+        return prisma.message.update({
+            where: { id: messageId },
+            data: {
+                content,
+                isEdited: true,
+                editedAt: new Date()
+            }
+        })
+    }
+
+    static async forwardMessage(messageId, senderId, targetConversationId) {
+        const originalMessage = await prisma.message.findUnique({ where: { id: messageId } })
+        if (!originalMessage) throw new Error("Original message not found")
+
+        return this.sendMessageToConversation({
+            conversationId: targetConversationId,
+            senderId,
+            content: originalMessage.content,
+            type: originalMessage.type,
+            mediaUrl: originalMessage.mediaUrl,
+            thumbnailUrl: originalMessage.thumbnailUrl,
+            duration: originalMessage.duration,
+            size: originalMessage.size,
+            mimeType: originalMessage.mimeType,
+            isForwarded: true,
+            forwardedFromId: messageId
+        })
+    }
+
+    static async hideMessage(messageId, userId) {
+        return prisma.hiddenMessage.create({
+            data: {
+                messageId,
+                userId
+            }
+        })
+    }
+
+    static async getMessages(conversationId, userId) {
+        if (!userId) {
+            return prisma.message.findMany({
+                where: { conversationId },
+                include: { reactions: true },
+                orderBy: { createdAt: 'asc' }
+            })
+        }
+        await this.ensureParticipant(conversationId, userId)
+        let settings = null
+        if (this.hasConversationSettingsModel()) {
+            try {
+                settings = await prisma.conversationUserSetting.findUnique({
+                    where: { conversationId_userId: { conversationId, userId } },
+                    select: { disappearingMode: true }
+                })
+            } catch (error) {
+                this.markConversationSettingsUnavailable(error)
+            }
+        }
+        const mode = settings?.disappearingMode || 'off'
+        const now = Date.now()
+        let createdAtFilter
+        if (mode === '1h') createdAtFilter = new Date(now - 60 * 60 * 1000)
+        if (mode === '24h') createdAtFilter = new Date(now - 24 * 60 * 60 * 1000)
+        if (mode === '7d') createdAtFilter = new Date(now - 7 * 24 * 60 * 60 * 1000)
+
+        const where = {
+            conversationId,
+            NOT: {
+                hiddenBy: {
+                    some: { userId }
+                }
+            }
+        }
+        if (createdAtFilter) where.createdAt = { gte: createdAtFilter }
+
+        return prisma.message.findMany({
+            where,
+            include: {
+                reactions: true,
+                replyTo: {
+                    include: {
+                        sender: {
+                            select: { id: true, email: true, profile: true }
+                        }
+                    }
+                }
+            },
             orderBy: { createdAt: 'asc' }
         })
     }

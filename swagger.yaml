@@ -26,14 +26,6 @@ servers:
   # If you open `/api-docs` from another device, `localhost` points to *that device* and causes "Failed to fetch"/CORS-like errors.
   - url: /
     description: Current host (recommended)
-  - url: http://localhost:3001
-    description: Client Gateway (localhost)
-  - url: http://127.0.0.1:3001
-    description: Client Gateway (127.0.0.1)
-  - url: http://localhost:3019
-    description: Messaging Service (direct)
-  - url: http://localhost:3012
-    description: Admin Backend
 
 tags:
   - name: Messaging
@@ -1661,6 +1653,161 @@ paths:
               type: object
       responses:
         '200': { description: Uploaded }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/{messageId}:
+    get:
+      summary: Get message info
+      description: Retrieve detailed information about a message, including sender and reactions.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Message details }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Message not found }
+    patch:
+      summary: Edit message
+      description: Edit the content of a message. Only the sender can edit their own messages.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+      responses:
+        '200': { description: Message updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      summary: Delete message
+      description: Permanently delete a message for all participants.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Message deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/{messageId}/hide:
+    delete:
+      summary: Hide message (Delete for me)
+      description: Hide a message for the current user. It will still be visible to other participants.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Message hidden }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/{messageId}/reply:
+    post:
+      summary: Reply to message
+      description: Send a threaded reply to a message.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+                type: { type: string, enum: [text, image, video, audio, file] }
+                mediaUrl: { type: string }
+      responses:
+        '200': { description: Reply sent }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/{messageId}/forward:
+    post:
+      summary: Forward message
+      description: Forward a message to another conversation.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetConversationId]
+              properties:
+                targetConversationId: { type: string }
+      responses:
+        '200': { description: Message forwarded }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/{messageId}/react:
+    post:
+      summary: Add/Toggle reaction
+      description: Add or toggle a reaction emoji on a message.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string }
+      responses:
+        '200': { description: Reaction updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      summary: Remove reaction
+      description: Remove a specific reaction emoji from a message.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string }
+      responses:
+        '200': { description: Reaction removed }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ============ MONETIZATION ============

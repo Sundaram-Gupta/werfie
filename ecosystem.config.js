@@ -1,13 +1,13 @@
 const path = require('path');
 const runNextDevScript = path.join(__dirname, 'scripts', 'run-next-dev.cjs');
+const runAuthGuardedScript = path.join(__dirname, 'scripts', 'run-auth-service-guarded.cjs');
 
 module.exports = {
     apps: [
         {
             name: 'auth-service',
             cwd: './apps/backend/auth-service-js',
-            script: 'node',
-            args: ['server.js'],
+            script: runAuthGuardedScript,
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,

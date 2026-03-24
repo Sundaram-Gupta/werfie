@@ -51,7 +51,20 @@
                     try {
                         const origin = window.location.origin;
                         if (origin && typeof req?.url === 'string') {
-                            req.url = req.url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, origin);
+                            let u = req.url.trim();
+                            // Fix protocol-relative URLs like //host/path
+                            if (u.startsWith('//')) {
+                                u = `${window.location.protocol}${u}`;
+                            }
+                            // Fix relative URLs so browser never treats them as invalid CORS targets
+                            if (u.startsWith('/')) {
+                                u = `${origin}${u}`;
+                            } else if (!/^https?:\/\//i.test(u)) {
+                                u = `${origin}/${u.replace(/^\/+/, '')}`;
+                            }
+                            // Force loopback URLs to current origin (LAN-safe + no cross-origin surprises)
+                            u = u.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, origin);
+                            req.url = u;
                         }
                     } catch { /* ignore */ }
                     return req;

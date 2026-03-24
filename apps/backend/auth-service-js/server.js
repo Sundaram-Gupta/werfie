@@ -29,6 +29,8 @@ const bindHost = process.env.HOST || process.env.BIND_HOST || '0.0.0.0';
 // Service targets - use env vars for flexibility, fallback to defaults (no trailing slash)
 // Service targets - use env vars for flexibility, fallback to defaults (no trailing slash)
 const USER_SERVICE_TARGET = (process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 3002}`).replace(/\/+$/, '');
+const CONTENT_SERVICE_TARGET = (process.env.CONTENT_SERVICE_URL || `http://127.0.0.1:3003`).replace(/\/+$/, '');
+const MESSAGING_SERVICE_TARGET = (process.env.MESSAGING_SERVICE_URL || `http://127.0.0.1:3019`).replace(/\/+$/, '');
 
 const app = next({ dev, hostname });
 const handle = app.getRequestHandler();
@@ -36,6 +38,11 @@ const handle = app.getRequestHandler();
 const proxy = httpProxy.createProxyServer({
     changeOrigin: true,
     ws: true
+});
+
+// Response logging for proxy
+proxy.on('proxyRes', (proxyRes, req, res) => {
+    console.log(`[Gateway] Received ${proxyRes.statusCode} from ${req.url}`);
 });
 
 // Error handling for proxy
@@ -58,16 +65,18 @@ proxy.on('error', (err, req, res) => {
 });
 
 proxy.on('proxyReq', (proxyReq, req, res, options) => {
-    // Explicitly forward Authorization so downstream services receive it
-    const auth = req.headers.authorization || req.headers.Authorization;
-    if (auth) proxyReq.setHeader('Authorization', auth);
+    // Forward user headers if injected by injectUserFromToken
+    // Forward user headers if injected by injectUserFromToken
     if (req._gatewayUser) {
         proxyReq.setHeader('x-verified-gateway', 'true');
         proxyReq.setHeader('x-user-id', String(req._gatewayUser.userId));
         proxyReq.setHeader('x-user-email', req._gatewayUser.email || '');
     }
-    const target = typeof options.target === 'string' ? options.target : (options.target?.href || '[Object Target]');
-    console.log(`[Gateway] Proxying ${req.method} ${req.url} -> ${target}${proxyReq.path}`);
+    const targetString = typeof options.target === 'string' ? options.target : (options.target.href || String(options.target));
+    // Collapse multiple slashes in the path to avoid Socket.io 400 errors
+    if (proxyReq.path) {
+        proxyReq.path = proxyReq.path.replace(/\/+/g, '/');
+    }
 });
 
 let isAppPrepared = false;
@@ -187,9 +196,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 // Helper: verify JWT and attach gateway user so proxyReq can set headers (http-proxy may not forward modified req.headers)
 function injectUserFromToken(req) {
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.slice(7).trim().replace(/\s+/g, ' ');
+    const token = authHeader && typeof authHeader === 'string' && authHeader.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (token) {
         try {
+            console.log(`[Gateway] Verifying token for ${req.url}: ${token.substring(0, 20)}...`);
+            console.log(`[Gateway] Using JWT_SECRET: ${JWT_SECRET}`);
             const decoded = jwt.verify(token, JWT_SECRET);
             const userId = decoded.sub || decoded.userId || decoded.id;
             if (userId) {
@@ -197,26 +208,32 @@ function injectUserFromToken(req) {
                 req.headers['x-verified-gateway'] = 'true';
                 req.headers['x-user-id'] = String(userId);
                 req.headers['x-user-email'] = (decoded.email || '').toString();
+                console.log(`[Gateway] Successfully verified token for userId: ${userId}`);
             }
         } catch (e) {
+            console.warn(`[Gateway] JWT Verification failed for ${req.url}: ${e.message}`);
             // Verification failed - downstream may return 401
+        }
+    } else {
+        if (authHeader) {
+            console.warn(`[Gateway] No token found in Authorization header: ${authHeader}`);
         }
     }
 }
 
 mainServer.all('/api/messages*', (req, res, next) => {
     injectUserFromToken(req);
-    proxy.web(req, res, { target: 'http://127.0.0.1:3019' });
+    proxy.web(req, res, { target: MESSAGING_SERVICE_TARGET });
 });
 
 // 2. Content Service Proxy – verify JWT at gateway and inject x-user-id for posts, etc.
 mainServer.all('/api/posts*', (req, res) => {
     injectUserFromToken(req);
-    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+    proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
 });
 mainServer.all('/api/explore*', (req, res) => {
     injectUserFromToken(req);
-    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+    proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
 });
 // Trends: spike-based hashtags from content service (not Next.js Trend table)
 mainServer.all('/api/trends*', (req, res) => {
@@ -248,7 +265,7 @@ mainServer.all('/api/comments*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 mainServer.all('/ws/live*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+    proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
 });
 mainServer.all('/api/soapbox*', (req, res) => {
     injectUserFromToken(req);
@@ -350,12 +367,24 @@ mainServer.all('/api/settings*', (req, res) => {
 
 // 4a. Socket.io /ws/* (polling + upgrade) - proxy to content service for live feeds
 mainServer.all('/ws*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+    proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
 });
 
-// 4. Other Microservices Catch-all (monetization, settings have explicit routes above)
+// Search – proxy directly to user/content services (works without search-service 3006)
+// Must use exact paths – Express * does not match exact path
+mainServer.all('/api/search/users', (req, res) => {
+    const orig = req.url;
+    req.url = (orig.includes('?') ? '/api/users/search?' + orig.split('?')[1] : '/api/users/search');
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
+});
+mainServer.all('/api/search/posts', (req, res) => {
+    const orig = req.url;
+    req.url = (orig.includes('?') ? '/search?' + orig.split('?')[1] : '/search');
+    proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
+});
+
+// 4. Other Microservices Catch-all (search handled above by direct proxy to user/content)
 const microservices = [
-    { path: '/api/search', port: 3006 },
     { path: '/api/analytics', port: 3009 },
     { path: '/api/moderation', port: 3010 },
 ];
@@ -424,20 +453,48 @@ httpServer.on('upgrade', (req, socket, head) => {
 const MAX_LISTEN_RETRIES = 5;
 const LISTEN_RETRY_MS = 3000;
 let listenRetries = 0;
+let listenRetryTimer = null;
+let isListenInFlight = false;
+let isServerBound = false;
+
+function clearRetryTimer() {
+    if (listenRetryTimer) {
+        clearTimeout(listenRetryTimer);
+        listenRetryTimer = null;
+    }
+}
+
+function scheduleListenRetry(reason) {
+    if (isServerBound || listenRetryTimer) return;
+    if (listenRetries >= MAX_LISTEN_RETRIES) {
+        console.error(`[Gateway] Port ${port} still unavailable after ${MAX_LISTEN_RETRIES} retries (${reason}). Continuing retries without crashing...`);
+        listenRetries = 0;
+    }
+    listenRetries++;
+    console.warn(`[Gateway] Port ${port} in use (${reason}); retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`);
+    listenRetryTimer = setTimeout(() => {
+        listenRetryTimer = null;
+        startListening();
+    }, LISTEN_RETRY_MS);
+}
 
 function startListening() {
+    if (isServerBound || isListenInFlight) return;
+    clearRetryTimer();
+    isListenInFlight = true;
     httpServer.listen(port, bindHost, (err) => {
+        isListenInFlight = false;
         if (err) {
-            if (err.code === 'EADDRINUSE' && listenRetries < MAX_LISTEN_RETRIES) {
-                listenRetries++;
-                console.warn(`[Gateway] Port ${port} in use, retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`);
-                setTimeout(startListening, LISTEN_RETRY_MS);
+            if (err.code === 'EADDRINUSE') {
+                scheduleListenRetry('listen callback');
                 return;
             }
             console.error(`[Gateway] Failed to listen on port ${port}:`, err.message);
-            process.exit(1);
+            scheduleListenRetry(`listen callback ${err.code || 'error'}`);
             return;
         }
+        isServerBound = true;
+        listenRetries = 0;
         console.log(`> Gateway (auth-service-js) listening on http://${hostname}:${port} (bound to ${bindHost}, reachable on LAN)`);
 
         // Prepare Next.js in the background
@@ -453,18 +510,13 @@ function startListening() {
 
 // Handle server errors. 
 httpServer.on('error', (err) => {
+    isListenInFlight = false;
     if (err.code === 'EADDRINUSE') {
-        if (listenRetries < MAX_LISTEN_RETRIES) {
-            listenRetries++;
-            console.warn(`[Gateway] Port ${port} in use (error event); retry ${listenRetries}/${MAX_LISTEN_RETRIES} in ${LISTEN_RETRY_MS / 1000}s...`);
-            setTimeout(startListening, LISTEN_RETRY_MS);
-            return;
-        }
-        console.error(`[Gateway] Port ${port} still in use after ${MAX_LISTEN_RETRIES} retries. Free it: netstat -ano | findstr :${port} then taskkill /PID <pid> /F`);
-        process.exit(1);
+        scheduleListenRetry('error event');
+        return;
     }
     console.error('[Gateway] Server error:', err.message);
-    process.exit(1);
+    scheduleListenRetry(`server error ${err.code || 'unknown'}`);
 });
 
 startListening();

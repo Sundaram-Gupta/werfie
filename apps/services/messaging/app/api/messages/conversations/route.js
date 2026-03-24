@@ -25,8 +25,9 @@ export const GET = withAuth(async (request) => {
         return apiSuccess(conversations ?? [], 'Conversations fetched successfully')
     } catch (error) {
         console.error('GET /conversations Error:', error?.message || error)
-        // Return empty array on error so chat UI loads (graceful degradation)
-        return apiSuccess([], 'Conversations fetched successfully')
+        return apiError('Failed to fetch conversations', 500, {
+            details: error?.message || 'Unknown error'
+        })
     }
 }, { gracefulGet: true })
 
