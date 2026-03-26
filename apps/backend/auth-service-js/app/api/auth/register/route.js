@@ -91,9 +91,10 @@ export async function POST(request) {
             }
         }
 
-        // Generate tokens
-        const accessToken = await generateAccessToken(user.id, user.email)
-        const refreshToken = await generateRefreshToken(user.id, user.email)
+        // Generate tokens (include role for admin API / gateway-proxied routes)
+        const userRole = user.role || 'USER'
+        const accessToken = await generateAccessToken(user.id, user.email, userRole)
+        const refreshToken = await generateRefreshToken(user.id, user.email, userRole)
 
         // Store refresh token
         const expiresAt = new Date()

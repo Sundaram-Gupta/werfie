@@ -631,9 +631,9 @@ export default function Chat() {
 
     return (
         <>
-            <div className="grid grid-cols-[minmax(280px,30%)_1fr] h-screen max-h-screen">
+            <div className="grid grid-cols-[clamp(280px,30%,380px)_1fr] h-screen max-h-screen w-full overflow-hidden">
                 {/* Left Panel: Conversations */}
-                <div className="min-w-0 border-r border-border overflow-y-auto bg-black flex flex-col">
+                <div className="min-w-0 border-r border-border overflow-y-auto no-scrollbar bg-black flex flex-col">
                     {/* Header */}
                     <div className="sticky top-0 z-10 bg-black border-b border-border">
                         <div className="px-4 py-3 flex justify-between items-center">
@@ -770,11 +770,12 @@ export default function Chat() {
                     </div>
                 </div>
 
-                {/* Right Panel: Chat Window */}
-                <div className="flex-1 flex flex-col h-screen bg-black">
+                {/* Right panel fills space beside the inbox (no centered gap). Bubble max-width keeps messages readable. */}
+                <div className="flex-1 flex flex-col h-screen bg-black min-w-0 min-h-0 overflow-hidden">
                     {selectedChat ? (
                         <>
-                            <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md px-4 h-14 border-b border-border flex items-center justify-between">
+                            <div className="flex flex-col h-full w-full min-h-0 min-w-0">
+                            <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md px-4 h-14 border-b border-border flex items-center justify-between shrink-0">
                                 <button type="button"
                                     onClick={() => setShowUserInfoModal(true)}
                                     className="flex items-center gap-1"
@@ -790,7 +791,7 @@ export default function Chat() {
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar p-4 flex flex-col gap-4">
                                 {/* Profile Info in Chat */}
                                 <div className="flex flex-col items-center justify-center pt-10 pb-16 hover:bg-white/[0.03] transition-colors cursor-pointer border-b border-border" onClick={() => navigate(`/profile/${selectedChat.user.id}`)}>
                                     <Avatar className="w-[120px] h-[120px] mb-3 relative overflow-hidden bg-black">
@@ -828,13 +829,13 @@ export default function Chat() {
 
                                             <div
                                                 className={cn(
-                                                    "flex flex-col max-w-[70%]",
+                                                    "flex flex-col w-fit max-w-[min(100%,26rem)] min-w-0",
                                                     msg.sender === "me" ? "self-end items-end" : "self-start items-start"
                                                 )}
                                             >
                                                 <div
                                                     className={cn(
-                                                        "px-3.5 py-2.5 text-[15px] leading-[20px] relative group",
+                                                        "px-3.5 py-2.5 text-[15px] leading-[20px] relative group min-w-0 max-w-full",
                                                         msg.sender === "me"
                                                             ? "bg-[#1d9bf0] text-white rounded-[22px] rounded-br-[4px]"
                                                             : "bg-[#2f3336] text-[#e7e9ea] rounded-[22px] rounded-bl-[4px]"
@@ -868,8 +869,12 @@ export default function Chat() {
                                                         )
                                                     )}
 
-                                                    <div className="flex items-end gap-2 flex-wrap min-w-0 pointer-events-none">
-                                                        {msg.text ? <span className="whitespace-pre-wrap break-words">{msg.text}</span> : null}
+                                                    <div className="flex items-end gap-2 flex-wrap min-w-0 max-w-full pointer-events-none">
+                                                        {msg.text ? (
+                                                            <span className="whitespace-pre-wrap break-words min-w-0 max-w-full [overflow-wrap:anywhere]">
+                                                                {msg.text}
+                                                            </span>
+                                                        ) : null}
                                                         
                                                         {/* Timestamp next to text */}
                                                         <span className="shrink-0 text-[11px] text-white/70 ml-auto flex items-center gap-[3px] select-none h-[20px]">
@@ -921,7 +926,7 @@ export default function Chat() {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            <div className="p-3 border-t border-border bg-black relative">
+                            <div className="p-3 border-t border-border bg-black relative shrink-0">
                                 {/* Reply Preview */}
                                 {replyingTo && (
                                     <div className="flex items-center justify-between bg-[#16181c] p-3 border-b border-border animate-in slide-in-from-bottom-2 duration-200">
@@ -1034,6 +1039,7 @@ export default function Chat() {
                                     </div>
                                 </div>
                             </div>
+                            </div>
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
@@ -1085,7 +1091,7 @@ export default function Chat() {
                                 Create a group
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto border-t border-border max-h-[50vh]">
+                        <div className="flex-1 overflow-y-auto no-scrollbar border-t border-border max-h-[50vh]">
                             {modalDisplayUsers.length === 0 ? (
                                 <div className="p-8 text-center text-muted-foreground text-sm">
                                     {modalSearchQuery.trim() ? "No users found" : "No people to message yet. Follow someone first."}
@@ -1217,7 +1223,7 @@ export default function Chat() {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto no-scrollbar p-4">
                            <div className="space-y-4">
                                <p className="text-[#71767b] text-[15px] px-2">Select a conversation to forward this message to.</p>
                                {conversations.map(c => {

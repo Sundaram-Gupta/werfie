@@ -19,6 +19,9 @@ export default function BusinessProfile() {
         location: "",
         hours: ""
     })
+    const [verificationStatus, setVerificationStatus] = useState("idle")
+    const [isVerified, setIsVerified] = useState(false)
+    const [requestingVerification, setRequestingVerification] = useState(false)
     const [logoUrl, setLogoUrl] = useState("")
     const [bannerUrl, setBannerUrl] = useState("")
     const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -40,6 +43,8 @@ export default function BusinessProfile() {
                         location: data.location || "",
                         hours: data.hours || ""
                     })
+                    setVerificationStatus(data.status || "idle")
+                    setIsVerified(data.isVerified || false)
                 }
             } catch (err) {
                 console.error('Failed to fetch business profile:', err)
@@ -73,11 +78,13 @@ export default function BusinessProfile() {
 
         try {
             const result = await mediaService.uploadMedia(file)
-            const uploadedUrl = result?.url ?? result?.data?.url ?? result?.data?.mediaUrl
-            const finalUrl = typeof uploadedUrl === "string" ? uploadedUrl : (uploadedUrl?.url || "")
-            if (!finalUrl) throw new Error("Upload succeeded but URL missing")
-            if (type === "logo") setLogoUrl(finalUrl)
-            if (type === "banner") setBannerUrl(finalUrl)
+            // Robust extraction: media service might return { status, data: { url } } or { url }
+            const uploadedUrl = result?.data?.url || result?.url || result?.mediaUrl
+            
+            if (!uploadedUrl) throw new Error("Upload succeeded but URL missing")
+            
+            if (type === "logo") setLogoUrl(uploadedUrl)
+            if (type === "banner") setBannerUrl(uploadedUrl)
             toast.success(type === "logo" ? "Logo uploaded" : "Banner uploaded")
         } catch (err) {
             console.error("Image upload failed:", err)
@@ -124,6 +131,8 @@ export default function BusinessProfile() {
                         location: refreshed.location || "",
                         hours: refreshed.hours || ""
                     })
+                    setVerificationStatus(refreshed.status || "idle")
+                    setIsVerified(refreshed.isVerified || false)
                 }
                 if (user?.id) {
                     const me = await userService.getMyProfile()
@@ -136,6 +145,26 @@ export default function BusinessProfile() {
             toast.error(err.response?.data?.error || "Failed to save business profile")
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleRequestVerification = async () => {
+        if (!formData.companyName) {
+            toast.error("Please set a business name before requesting verification")
+            return
+        }
+        setRequestingVerification(true)
+        try {
+            const res = await businessService.requestVerification()
+            toast.success("Verification request submitted successfully!")
+            if (res.profile) {
+                setVerificationStatus(res.profile.status)
+            }
+        } catch (err) {
+            console.error('Failed to request verification:', err)
+            toast.error(err.response?.data?.error || "Failed to request verification")
+        } finally {
+            setRequestingVerification(false)
         }
     }
 
@@ -169,12 +198,33 @@ export default function BusinessProfile() {
                         </div>
                         <div>
                             <div className="font-bold text-blue-500">Business Verification</div>
-                            <div className="text-xs text-blue-300">Unlock advanced features and build trust.</div>
+                             <div className="text-xs text-blue-300">
+                                {isVerified ? "Your business is verified." : 
+                                 (verificationStatus?.toLowerCase() === "pending" || verificationStatus?.toLowerCase() === "under_review") ? 
+                                 "Your verification request is under review." : 
+                                 "Unlock advanced features and build trust."}
+                            </div>
                         </div>
                     </div>
-                    <Button variant="outline" size="sm" className="bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30 text-blue-400">
-                        Request Verification
-                    </Button>
+                    {isVerified ? (
+                        <Button disabled variant="outline" size="sm" className="bg-green-500/10 border-green-500/30 text-green-500">
+                            Verified
+                        </Button>
+                    ) : (verificationStatus?.toLowerCase() === "pending" || verificationStatus?.toLowerCase() === "under_review") ? (
+                        <Button disabled variant="outline" size="sm" className="bg-yellow-500/10 border-yellow-500/30 text-yellow-500">
+                            Pending Review
+                        </Button>
+                    ) : (
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={handleRequestVerification}
+                            disabled={requestingVerification || uploadingLogo || uploadingBanner || loading}
+                            className="bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30 text-blue-400"
+                        >
+                            {requestingVerification ? "Requesting..." : "Request Verification"}
+                        </Button>
+                    )}
                 </div>
 
                 {/* Main Form */}

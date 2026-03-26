@@ -19,6 +19,7 @@ function parseUrl(url, base = 'http://localhost') {
 }
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
+const cookieParser = require('cookie-parser');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
@@ -93,6 +94,7 @@ function corsOrigin(origin, cb) {
     cb(null, true);
 }
 
+mainServer.use(cookieParser());
 mainServer.use(cors({
     origin: corsOrigin,
     credentials: true,
@@ -105,6 +107,15 @@ const { gatewayLogin } = require('./lib/gateway-auth-login.cjs');
 mainServer.post('/api/auth/login', express.json({ limit: '512kb' }), async (req, res) => {
     try {
         const result = await gatewayLogin(req.body);
+        if (result.status === 200 && result.json?.data?.accessToken) {
+            res.cookie('accessToken', result.json.data.accessToken, { 
+                httpOnly: false, // browser/swagger can read for dev
+                secure: false, // insecure dev
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days matches accessToken expiry
+                sameSite: 'lax',
+                path: '/'
+            });
+        }
         return res.status(result.status).json(result.json);
     } catch (e) {
         console.error('[Gateway] /api/auth/login error:', e);
@@ -196,7 +207,13 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 // Helper: verify JWT and attach gateway user so proxyReq can set headers (http-proxy may not forward modified req.headers)
 function injectUserFromToken(req) {
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    const token = authHeader && typeof authHeader === 'string' && authHeader.match(/^Bearer\s+(.+)$/i)?.[1];
+    let token = authHeader && typeof authHeader === 'string' && authHeader.match(/^Bearer\s+(.+)$/i)?.[1];
+    
+    // Cookie fallback (helpful for browser/swagger dev)
+    if (!token && req.cookies && req.cookies.accessToken) {
+        token = req.cookies.accessToken;
+    }
+
     if (token) {
         try {
             console.log(`[Gateway] Verifying token for ${req.url}: ${token.substring(0, 20)}...`);

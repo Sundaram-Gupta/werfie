@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle, XCircle, ExternalLink, RefreshCw, Landmark } from 'lucide-react';
 import { toast } from 'sonner';
-import { getInstitutionalProfiles, reviewInstitutionalProfile } from '@/services/verificationService';
+import { getInstitutionalProfiles, reviewInstitutionalProfile, getVerificationRequests, reviewVerificationRequest } from '@/services/verificationService';
 import {
     Dialog,
     DialogContent,
@@ -23,6 +23,7 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 export default function VerificationPage() {
     const [loading, setLoading] = useState(false);
     const [institutionalRequests, setInstitutionalRequests] = useState([]);
+    const [businessRequests, setBusinessRequests] = useState([]);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
@@ -47,11 +48,24 @@ export default function VerificationPage() {
         }
     }, []);
 
+    const fetchBusiness = useCallback(async () => {
+        try {
+            const data = await getVerificationRequests('BUSINESS');
+            setBusinessRequests(Array.isArray(data) ? data : []);
+        } catch (error) {
+            toast.error('Failed to fetch business requests');
+        }
+    }, []);
+
     useEffect(() => {
         fetchInstitutional();
-    }, [fetchInstitutional]);
+        fetchBusiness();
+    }, [fetchInstitutional, fetchBusiness]);
 
-    useRefreshOnFocus(fetchInstitutional);
+    useRefreshOnFocus(() => {
+        fetchInstitutional();
+        fetchBusiness();
+    });
 
     const handleStandardAction = (id, action) => {
         setStandardRequests(standardRequests.map(r => r.id === id ? { ...r, status: action === 'approve' ? 'Approved' : 'Rejected' } : r));
@@ -66,6 +80,16 @@ export default function VerificationPage() {
             });
             toast.success(`Institutional request ${status === 'approved' ? 'approved' : 'rejected'}`);
             fetchInstitutional();
+        } catch (error) {
+            toast.error('Action failed');
+        }
+    };
+
+    const handleBusinessAction = async (id, status) => {
+        try {
+            await reviewVerificationRequest(id, { status });
+            toast.success(`Business request ${status === 'APPROVED' ? 'approved' : 'rejected'}`);
+            fetchBusiness();
         } catch (error) {
             toast.error('Action failed');
         }
@@ -87,6 +111,7 @@ export default function VerificationPage() {
             <Tabs defaultValue="pending" className="w-full">
                 <TabsList className="bg-muted/50 border border-border">
                     <TabsTrigger value="pending">Standard Requests</TabsTrigger>
+                    <TabsTrigger value="business">Business Requests</TabsTrigger>
                     <TabsTrigger value="institutional">Institutional Requests</TabsTrigger>
                 </TabsList>
 
@@ -157,6 +182,87 @@ export default function VerificationPage() {
                                             </TableCell>
                                         </TableRow>
                                     ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="business" className="mt-6">
+                    <Card className="bg-card border-border shadow-sm">
+                        <CardHeader>
+                            <CardTitle>Business Verification Requests</CardTitle>
+                            <CardDescription className="text-muted-foreground">Review registration and verification requests from company profiles.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="border-border hover:bg-transparent">
+                                        <TableHead className="text-muted-foreground">Business Name</TableHead>
+                                        <TableHead className="text-muted-foreground">User Handle</TableHead>
+                                        <TableHead className="text-muted-foreground">Type</TableHead>
+                                        <TableHead className="text-muted-foreground">Date</TableHead>
+                                        <TableHead className="text-muted-foreground">Status</TableHead>
+                                        <TableHead className="text-right text-muted-foreground">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {businessRequests.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                                No business requests found.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        businessRequests.map((req) => (
+                                            <TableRow key={req.id} className="border-border hover:bg-muted/50">
+                                                <TableCell>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs">
+                                                            {req.user?.businessProfile?.companyName?.[0] || 'B'}
+                                                        </div>
+                                                        <span className="font-medium text-foreground">{req.user?.businessProfile?.companyName || 'Business'}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground">@{req.user?.profile?.handle || 'user'}</TableCell>
+                                                <TableCell><Badge variant="outline">{req.type}</Badge></TableCell>
+                                                <TableCell className="text-muted-foreground">{new Date(req.createdAt).toLocaleDateString()}</TableCell>
+                                                <TableCell>
+                                                    <Badge 
+                                                        className={`
+                                                            ${req.status === 'APPROVED' ? 'bg-green-500/10 text-green-500 border-none' : ''}
+                                                            ${req.status === 'REJECTED' ? 'bg-red-500/10 text-red-500 border-none' : ''}
+                                                            ${req.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 border-none' : ''}
+                                                        `}
+                                                    >
+                                                        {req.status}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {req.status === 'PENDING' && (
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-8 w-8 p-0 text-green-500 hover:text-green-400"
+                                                                onClick={() => handleBusinessAction(req.id, 'APPROVED')}
+                                                            >
+                                                                <CheckCircle className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-8 w-8 p-0 text-red-500 hover:text-red-400"
+                                                                onClick={() => handleBusinessAction(req.id, 'REJECTED')}
+                                                            >
+                                                                <XCircle className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
                                 </TableBody>
                             </Table>
                         </CardContent>

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { LayoutDashboard, Store, Users, Settings, ArrowLeft, MoreHorizontal, Bell } from "lucide-react"
+import { LayoutDashboard, Store, Users, Settings, ArrowLeft, MoreHorizontal, Bell, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -8,6 +8,7 @@ import BusinessDashboard from "./BusinessDashboard"
 import BusinessProfile from "./BusinessProfile"
 import BusinessSettings from "./BusinessSettings"
 import TeamManagement from "./TeamManagement"
+import ProductManagement from "./ProductManagement"
 
 export default function BusinessLayout() {
     const navigate = useNavigate()
@@ -22,6 +23,7 @@ export default function BusinessLayout() {
 
     const tabs = [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { id: "products", label: "Products", icon: ShoppingBag },
         { id: "profile", label: "Profile", icon: Store },
         { id: "team", label: "Team", icon: Users },
         { id: "settings", label: "Settings", icon: Settings },
@@ -30,6 +32,7 @@ export default function BusinessLayout() {
     const renderContent = () => {
         switch (activeTab) {
             case "dashboard": return <BusinessDashboard />
+            case "products": return <ProductManagement />
             case "profile": return <BusinessProfile />
             case "team": return <TeamManagement />
             case "settings": return <BusinessSettings onSwitchTab={setActiveTab} />

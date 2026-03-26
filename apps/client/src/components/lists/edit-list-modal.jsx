@@ -19,11 +19,9 @@ export function EditListModal({ open, onOpenChange, list, onSuccess }) {
     const [description, setDescription] = useState("")
     const [isPrivate, setIsPrivate] = useState(false)
     const [banner, setBanner] = useState("")
-    const [avatar, setAvatar] = useState("")
     const [loading, setLoading] = useState(false)
     const [uploading, setUploading] = useState(false)
     const bannerInputRef = useRef(null)
-    const avatarInputRef = useRef(null)
 
     useEffect(() => {
         if (list) {
@@ -31,7 +29,6 @@ export function EditListModal({ open, onOpenChange, list, onSuccess }) {
             setDescription(list.description || "")
             setIsPrivate(!!list.isPrivate)
             setBanner(list.banner || "")
-            setAvatar(list.avatar || "")
         }
     }, [list, open])
 
@@ -54,25 +51,6 @@ export function EditListModal({ open, onOpenChange, list, onSuccess }) {
         }
     }
 
-    const handleAvatarUpload = async (e) => {
-        const file = e.target.files?.[0]
-        if (!file?.type?.startsWith("image/")) {
-            toast.error("Please select an image file")
-            return
-        }
-        setUploading(true)
-        try {
-            const result = await mediaService.uploadMedia(file)
-            const url = result?.url ?? result?.data?.url ?? result
-            if (url) setAvatar(typeof url === "string" ? url : url.url)
-        } catch (err) {
-            console.error("Avatar upload failed:", err)
-            toast.error("Failed to upload image")
-        } finally {
-            setUploading(false)
-        }
-    }
-
     const handleSubmit = async (e) => {
         e?.preventDefault()
         if (!list?.id || !name.trim()) {
@@ -86,7 +64,7 @@ export function EditListModal({ open, onOpenChange, list, onSuccess }) {
                 description: description.trim(),
                 isPrivate,
                 banner: banner || undefined,
-                avatar: avatar || undefined,
+                avatar: banner || undefined,
             })
             toast.success("List updated successfully")
             onOpenChange(false)
@@ -143,29 +121,6 @@ export function EditListModal({ open, onOpenChange, list, onSuccess }) {
                         </button>
                     </div>
 
-                    {/* Avatar */}
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground mb-2">List image</p>
-                        <input
-                            ref={avatarInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleAvatarUpload}
-                        />
-                        <button
-                            type="button"
-                            onClick={() => avatarInputRef.current?.click()}
-                            disabled={uploading}
-                            className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-muted-foreground/60 hover:bg-white/[0.03] transition-colors overflow-hidden"
-                        >
-                            {avatar ? (
-                                <img src={getMediaUrl(avatar)} alt="List" className="w-full h-full object-cover" />
-                            ) : (
-                                <Camera className="w-10 h-10 text-muted-foreground" />
-                            )}
-                        </button>
-                    </div>
 
                     <div className="space-y-2">
                         <Input

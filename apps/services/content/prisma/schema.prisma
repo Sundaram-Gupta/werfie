@@ -36,6 +36,7 @@ model User {
   following     Follow[]     @relation("UserFollowing")
   notifications Notification[] @relation("NotificationRecipient")
   triggeredNotifications Notification[] @relation("NotificationActor")
+  businessReviews        BusinessReview[]
   
   // Highlights & Articles
   highlights    Highlight[]
@@ -246,6 +247,12 @@ model Post {
   communityPosts CommunityPost[]
   highlightedIn Highlight[]
   
+  isPinned       Boolean         @default(false)
+  productId      String?
+  product        Product?        @relation(fields: [productId], references: [id])
+  ctaLink        String?
+  ctaLabel       String?
+
   @@index([userId, createdAt(sort: Desc)])
   @@index([replyToId])
   @@index([createdAt])
@@ -508,9 +515,55 @@ model BusinessProfile {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   adAccounts      AdAccount[]
   members         BusinessMember[]
+  products        Product[]
+  reviews         BusinessReview[]
+  ctas            BusinessCTA[]
+}
+
+model Product {
+  id          String          @id @default(uuid())
+  businessId  String
+  name        String
+  description String?
+  price       Float?
+  currency    String          @default("USD")
+  imageUrl    String?
+  ctaUrl      String?
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  posts       Post[]
+
+  @@index([businessId])
+}
+
+model BusinessReview {
+  id          String          @id @default(uuid())
+  businessId  String
+  userId      String
+  rating      Int
+  comment     String?
+  createdAt   DateTime        @default(now())
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+model BusinessCTA {
+  id          String          @id @default(uuid())
+  businessId  String
+  type        String          // e.g., "shop", "book", "contact", "subscribe"
+  label       String
+  url         String
+  createdAt   DateTime        @default(now())
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
 }
 
 model BusinessMember {
@@ -709,10 +762,12 @@ model ListFollower {
   listId          String
   userId          String
   followedAt      DateTime @default(now())
-  
+  /// Pinned for this follower only (List.isPinned is owner-global)
+  isPinned        Boolean  @default(false)
+
   list            List     @relation(fields: [listId], references: [id], onDelete: Cascade)
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@unique([listId, userId])
   @@index([listId])
   @@index([userId])

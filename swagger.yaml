@@ -17,6 +17,9 @@ info:
     4. Click **Authorize** (lock icon 🔒 at top right), paste the token (no "Bearer " prefix), click **Authorize**
     5. Close the dialog. Now Messaging and other protected endpoints will return 200 instead of 401
 
+    ## Admin (`/api/admin/*`) — 401 / 403?
+    Use **POST /api/auth/login** with an account whose `User.role` is **ADMIN** or **SUPER_ADMIN** (promote via `adminBackend`: `npm run promote-admin -- you@email.com`). The `accessToken` now includes `role` and works with **Authorize**. Alternatively, call **POST /api/admin/login** and paste the returned `data.token` in **Authorize**.
+
     ## Proxied endpoints (Users, Posts, etc.)
     Endpoints like /api/users/*, /api/posts/* are proxied to microservices. Ensure those services are running (see ecosystem.config.js) or you may get 5xx.
   version: 1.0.0
@@ -55,7 +58,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Paste the accessToken from /api/auth/login (no "Bearer " prefix)
+      description: Paste accessToken from POST /api/auth/login, or token from POST /api/admin/login (no "Bearer " prefix). Admin routes require ADMIN/SUPER_ADMIN role in the JWT (or use /api/admin/login token).
     cookieAuth:
       type: apiKey
       in: cookie

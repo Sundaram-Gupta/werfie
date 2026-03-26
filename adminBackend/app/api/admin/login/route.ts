@@ -3,7 +3,7 @@ import { SignJWT } from 'jose';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api-response';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here_secure_it';
+const JWT_SECRET = (process.env.JWT_SECRET || 'dev-secret').trim();
 
 const AUTH_GATEWAY_URL_RAW =
   process.env.AUTH_GATEWAY_URL ||
@@ -57,11 +57,13 @@ export async function POST(req: NextRequest) {
         //    This avoids needing bcrypt in adminBackend.
         let authOk = false;
         try {
+            // Verify credentials with Auth Gateway
             const r = await fetch(AUTH_LOGIN_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: normalizedEmail, password }),
             });
+
             if (!r.ok) {
                 const payload = await r.json().catch(() => null);
                 const msg = payload?.message || 'Invalid credentials';

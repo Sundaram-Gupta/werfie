@@ -14,6 +14,8 @@ import { userService, postService, highlightsService, articlesService } from "@/
 import { EditProfileModal } from "@/components/profile/edit-profile-modal"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SetupProgress } from "@/components/profile/setup-progress"
+import { BusinessProfileView } from "@/components/profile/business-profile-view"
+import { Briefcase, ShoppingBag, Zap } from "lucide-react"
 
 import { useTranslation } from "react-i18next"
 
@@ -458,12 +460,34 @@ export default function Profile() {
                     </div>
                 </div>
 
+                {/* Business Action Layer */}
+                {profile.businessProfile && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {profile.businessProfile.website && (
+                            <Button variant="outline" size="sm" className="rounded-full gap-2 border-primary/20 hover:bg-primary/5" onClick={() => window.open(`https://${profile.businessProfile.website}`, '_blank')}>
+                                <ShoppingBag className="w-4 h-4 text-primary" />
+                                {t('profile.shop_now', 'Shop Now')}
+                            </Button>
+                        )}
+                        <Button variant="outline" size="sm" className="rounded-full gap-2 border-primary/20 hover:bg-primary/5" onClick={() => navigate('/chat', { state: { userId: profile.id, userName: name, userHandle: handle } })}>
+                            <Mail className="w-4 h-4 text-primary" />
+                            {t('profile.contact_us', 'Contact Us')}
+                        </Button>
+                    </div>
+                )}
+
                 {/* User Info */}
                 <div className="mb-4">
                     <div className="flex items-center gap-1">
                         <h1 className="text-[20px] font-bold leading-6">{name}</h1>
-                        {userProfile?.verified && (
+                        {(userProfile?.verified || profile.businessProfile?.isVerified) && (
                             <BadgeCheck className="w-[18px] h-[18px] text-blue-500 fill-blue-500/10" />
+                        )}
+                        {profile.businessProfile && (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-[11px] font-bold text-muted-foreground ml-1">
+                                <Briefcase className="w-3 h-3" />
+                                BUSINESS
+                            </div>
                         )}
                     </div>
                     <div className="text-[15px] text-muted-foreground">@{handle}</div>
@@ -525,13 +549,16 @@ export default function Profile() {
             {/* Tabs */}
             <Tabs defaultValue="posts" className="w-full">
                 <TabsList className="w-full h-[53px] bg-transparent border-b border-border/50 p-0 overflow-x-auto justify-between no-scrollbar">
-                    {["posts", "replies", "highlights", "articles", "media", "likes"].map(tab => (
+                    {[
+                        "posts", "replies", "highlights", "articles", "media", "likes",
+                        ...(profile.businessProfile ? ["products", "reviews"] : [])
+                    ].map(tab => (
                         <TabsTrigger
                             key={tab}
                             value={tab.toLowerCase()}
                             className="flex-1 rounded-none border-b-[4px] border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent h-full text-[15px] hover:bg-muted/50 transition font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-bold"
                         >
-                            {t(`profile.tabs.${tab}`)}
+                            {t(`profile.tabs.${tab}`, tab.charAt(0).toUpperCase() + tab.slice(1))}
                         </TabsTrigger>
                     ))}
                 </TabsList>
@@ -710,6 +737,13 @@ export default function Profile() {
                         )}
                     </div>
                 </TabsContent>
+
+                {profile.businessProfile && (
+                    <BusinessProfileView 
+                        profile={profile} 
+                        currentUser={currentUser}
+                    />
+                )}
             </Tabs>
 
             {/* Media lightbox */}

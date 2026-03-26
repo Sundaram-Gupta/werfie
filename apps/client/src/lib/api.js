@@ -83,7 +83,18 @@ api.interceptors.response.use(
         // If 401 or 403 (sometimes used for expired) and we haven't tried to refresh yet
         // skip for login route to avoid redundant refresh attempts on bad credentials
         const isLoginRequest = originalRequest.url.includes('/api/auth/login')
-        if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry && !isLoginRequest) {
+        // 403 on list pin = permission (e.g. not following), not session — do not burn refresh token
+        const isListsPinPermission =
+            error.response?.status === 403 &&
+            typeof originalRequest.url === 'string' &&
+            originalRequest.url.includes('/api/lists/') &&
+            originalRequest.url.includes('/pin')
+        if (
+            (error.response?.status === 401 ||
+                (error.response?.status === 403 && !isListsPinPermission)) &&
+            !originalRequest._retry &&
+            !isLoginRequest
+        ) {
             originalRequest._retry = true
 
             try {

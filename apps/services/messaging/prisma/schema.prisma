@@ -766,6 +766,7 @@ model ListFollower {
   listId          String
   userId          String
   followedAt      DateTime @default(now())
+  isPinned        Boolean  @default(false)
   
   list            List     @relation(fields: [listId], references: [id], onDelete: Cascade)
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)

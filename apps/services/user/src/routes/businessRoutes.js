@@ -58,6 +58,63 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /request-verification: Request business profile verification
+router.post('/request-verification', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        console.log(`[Business] request-verification called for userId: ${userId}`);
+
+        let profile = await prisma.businessProfile.findUnique({ where: { userId } });
+        if (!profile) {
+            // Auto-create a minimal business profile so the user can request verification
+            console.log(`[Business] No profile found for userId ${userId} — creating minimal profile`);
+            profile = await prisma.businessProfile.create({
+                data: {
+                    userId,
+                    companyName: '',
+                    status: 'unverified'
+                }
+            });
+        }
+
+        const normalizedStatus = (profile.status || '').toLowerCase();
+
+        if (normalizedStatus === 'pending' || normalizedStatus === 'under_review') {
+            return res.status(400).json({ error: 'Verification is already in progress' });
+        }
+        if (normalizedStatus === 'approved' || profile.isVerified) {
+            return res.status(400).json({ error: 'Business is already verified' });
+        }
+
+        // Update the BusinessProfile status to PENDING
+        const updated = await prisma.businessProfile.update({
+            where: { userId },
+            data: { status: 'PENDING' }
+        });
+
+        // Check if a pending VerificationRequest already exists to avoid duplicates
+        const existingRequest = await prisma.verificationRequest.findFirst({
+            where: { userId, businessId: profile.id, status: 'PENDING' }
+        });
+
+        if (!existingRequest) {
+            await prisma.verificationRequest.create({
+                data: {
+                    userId,
+                    businessId: profile.id,
+                    type: 'BUSINESS',
+                    status: 'PENDING'
+                }
+            }).catch(err => console.error('Could not create verificationRequest record:', err));
+        }
+
+        res.json({ success: true, message: 'Verification requested successfully', profile: updated });
+    } catch (error) {
+        console.error('Error requesting verification:', error);
+        res.status(500).json({ error: 'Failed to request verification', details: error.message });
+    }
+});
+
 // GET /team: Fetch all team members
 router.get('/team', authenticateToken, async (req, res) => {
     try {
@@ -304,6 +361,140 @@ router.post('/boost', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error boosting post:', error);
         res.status(500).json({ error: 'Failed to boost post' });
+    }
+});
+
+// GET /:businessId/products: Fetch products for a business
+router.get('/:businessId/products', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const products = await prisma.product.findMany({
+            where: { businessId, active: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(products);
+    } catch (error) {
+        console.error('Error fetching products:', error);
+        res.status(500).json({ error: 'Failed to fetch products' });
+    }
+});
+
+// GET /:businessId/reviews: Fetch reviews for a business
+router.get('/:businessId/reviews', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const reviews = await prisma.businessReview.findMany({
+            where: { businessId },
+            include: { user: { include: { profile: { select: require('../constants').PROFILE_SELECT } } } },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(reviews);
+    } catch (error) {
+        console.error('Error fetching reviews:', error);
+        res.status(500).json({ error: 'Failed to fetch reviews' });
+    }
+});
+
+// POST /:businessId/reviews: Add a review
+router.post('/:businessId/reviews', authenticateToken, async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const userId = req.user.userId;
+        const { rating, comment } = req.body;
+
+        if (!rating || rating < 1 || rating > 5) {
+            return res.status(400).json({ error: 'Invalid rating (1-5)' });
+        }
+
+        const review = await prisma.businessReview.create({
+            data: { businessId, userId, rating: parseInt(rating), comment },
+            include: { user: { include: { profile: { select: require('../constants').PROFILE_SELECT } } } }
+        });
+        res.status(201).json(review);
+    } catch (error) {
+        console.error('Error adding review:', error);
+        res.status(500).json({ error: 'Failed to add review' });
+    }
+});
+
+// GET /products: Fetch products for current user's business
+router.get('/products', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const profile = await prisma.businessProfile.findUnique({ where: { userId } });
+        if (!profile) return res.json([]);
+
+        const products = await prisma.product.findMany({
+            where: { businessId: profile.id },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(products);
+    } catch (error) {
+        console.error('Fetch My Products Error:', error);
+        res.status(500).json({ error: 'Failed to fetch products' });
+    }
+});
+
+// POST /products: Add a new product
+router.post('/products', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const profile = await prisma.businessProfile.findUnique({ where: { userId } });
+        if (!profile) return res.status(404).json({ error: 'Business profile not found' });
+
+        const { name, description, price, currency, imageUrl, ctaUrl } = req.body;
+        const product = await prisma.product.create({
+            data: {
+                businessId: profile.id,
+                name,
+                description,
+                price: parseFloat(price),
+                currency: currency || 'USD',
+                imageUrl,
+                ctaUrl
+            }
+        });
+        res.status(201).json(product);
+    } catch (error) {
+        console.error('Add Product Error:', error);
+        res.status(500).json({ error: 'Failed to add product' });
+    }
+});
+
+// PUT /products/:id: Update a product
+router.put('/products/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, description, price, currency, imageUrl, ctaUrl, active } = req.body;
+        
+        const product = await prisma.product.update({
+            where: { id },
+            data: {
+                name,
+                description,
+                price: price != null ? parseFloat(price) : undefined,
+                currency,
+                imageUrl,
+                ctaUrl,
+                active
+            }
+        });
+        res.json(product);
+    } catch (error) {
+        console.error('Update Product Error:', error);
+        res.status(500).json({ error: 'Failed to update product' });
+    }
+});
+
+// DELETE /products/:id: Delete a product
+router.delete('/products/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        await prisma.product.delete({ where: { id } });
+        res.json({ message: 'Product deleted' });
+    } catch (error) {
+        console.error('Delete Product Error:', error);
+        res.status(500).json({ error: 'Failed to delete product' });
     }
 });
 

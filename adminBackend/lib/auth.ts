@@ -1,6 +1,6 @@
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here_secure_it';
+const JWT_SECRET = (process.env.JWT_SECRET || 'dev-secret').trim();
 
 export async function verifyAuthToken(token: string) {
     try {

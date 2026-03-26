@@ -5,21 +5,43 @@ const router = express.Router();
 
 const authenticateToken = require('../middleware/auth');
 
-// GET /pinned: Fetch pinned lists
+// GET /pinned: lists pinned by owner (List.isPinned) OR pinned as a follower (ListFollower.isPinned)
 router.get('/pinned', authenticateToken, async (req, res) => {
     try {
-        const pinned = await prisma.list.findMany({
-            where: { 
-                ownerId: req.user.id,
-                isPinned: true 
-            },
-            include: {
-                owner: { include: { profile: true } },
-                _count: { select: { members: true } }
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        const userId = String(req.user.userId || req.user.id);
+        const includeBlock = {
+            owner: { include: { profile: true } },
+            _count: { select: { members: true } }
+        };
+        const [ownedPinned, followedPinned] = await Promise.all([
+            prisma.list.findMany({
+                where: { ownerId: userId, isPinned: true },
+                include: includeBlock
+            }),
+            prisma.list.findMany({
+                where: {
+                    followers: { some: { userId, isPinned: true } }
+                },
+                include: includeBlock
+            })
+        ]);
+        const seen = new Set();
+        const merged = [];
+        for (const list of ownedPinned) {
+            if (!seen.has(list.id)) {
+                seen.add(list.id);
+                merged.push(list);
             }
-        });
+        }
+        for (const list of followedPinned) {
+            if (!seen.has(list.id)) {
+                seen.add(list.id);
+                merged.push(list);
+            }
+        }
 
-        const formatted = pinned.map(list => {
+        const formatted = merged.map(list => {
             const mc = list._count?.members ?? 0;
             return {
                 id: list.id,
@@ -51,19 +73,52 @@ router.get('/discover', async (req, res) => {
         if (token) {
             try {
                 const decoded = require('jsonwebtoken').decode(token);
-                currentUserId = decoded.sub || decoded.id || decoded.userId;
+                const raw = decoded?.sub || decoded?.id || decoded?.userId;
+                currentUserId = raw != null ? String(raw) : null;
             } catch (e) {}
         }
 
+        // Same scope as GET /yours: owned, following, or on the list as a member — hide from discover.
+        // Also exclude legacy auto-generated template lists so discover shows real user-created lists.
+        const discoverAndFilters = [
+            {
+                NOT: {
+                    OR: [
+                        { name: { startsWith: 'Important News for @' } },
+                        { name: { startsWith: 'Favorite Accounts of @' } },
+                        { name: { startsWith: 'Top Trends by @' } }
+                    ]
+                }
+            }
+        ];
+        if (currentUserId) {
+            discoverAndFilters.push({
+                NOT: {
+                    OR: [
+                        { ownerId: currentUserId },
+                        { followers: { some: { userId: currentUserId } } },
+                        { members: { some: { userId: currentUserId } } }
+                    ]
+                }
+            });
+        }
+        const discoverWhere = {
+            isPrivate: false,
+            AND: discoverAndFilters
+        };
+
         const discover = await prisma.list.findMany({
-            where: { isPrivate: false },
+            where: discoverWhere,
             take: limit,
             skip: offset,
-            orderBy: { createdAt: 'desc' },
+            orderBy: [
+                { followers: { _count: 'desc' } }, // Show popular first
+                { createdAt: 'desc' }             // Then newest
+            ],
             include: {
                 owner: { include: { profile: true } },
                 _count: { select: { members: true, followers: true } },
-                followers: currentUserId ? { where: { userId: currentUserId } } : false
+                followers: currentUserId ? { where: { userId: currentUserId } } : undefined
             }
         });
 
@@ -93,19 +148,35 @@ router.get('/discover', async (req, res) => {
     }
 });
 
-// GET /yours: Fetch user's lists
+// GET /yours: Fetch user's lists (owned, followed, or you're a member of)
 router.get('/yours', authenticateToken, async (req, res) => {
     try {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        const userId = String(req.user.userId || req.user.id);
         const yourLists = await prisma.list.findMany({
-            where: { ownerId: req.user.id },
+            where: {
+                OR: [
+                    { ownerId: userId },
+                    { followers: { some: { userId } } },
+                    { members: { some: { userId } } }
+                ]
+            },
             orderBy: { createdAt: 'desc' },
             include: {
                 owner: { include: { profile: true } },
-                _count: { select: { members: true, followers: true } }
+                _count: { select: { members: true, followers: true } },
+                followers: {
+                    where: { userId },
+                    select: { userId: true, isPinned: true }
+                },
+                members: {
+                    where: { userId },
+                    select: { userId: true }
+                }
             }
         });
 
-        res.json(yourLists.map(list => formatListWithOwner(list)));
+        res.json(yourLists.map(list => formatListWithOwner(list, userId)));
     } catch (error) {
         console.error('Error fetching your lists:', error);
         res.status(500).json({ error: 'Failed to fetch your lists' });
@@ -113,13 +184,37 @@ router.get('/yours', authenticateToken, async (req, res) => {
 });
 
 // Helper: format list with owner + counts
-function formatListWithOwner(list) {
+// viewerUserId: when set, isPinned = List.isPinned if viewer owns the list, else ListFollower.isPinned for that user
+function formatListWithOwner(list, viewerUserId = null) {
     const owner = list.owner || {};
     const profile = owner.profile || {};
     const ownerName = profile.name || owner.email?.split('@')[0] || 'User';
     const ownerHandle = profile.handle || owner.email?.split('@')[0] || 'user';
-    const memberCount = list._count?.members ?? (Array.isArray(list.members) ? list.members.length : 0);
-    const followerCount = list._count?.followers ?? (Array.isArray(list.followers) ? list.followers.length : 0);
+    const mc = list._count?.members ?? (Array.isArray(list.members) ? list.members.length : 0);
+    const fc = list._count?.followers ?? (Array.isArray(list.followers) ? list.followers.length : 0);
+
+    const viewerRowsFollowers = Array.isArray(list.followers)
+        ? list.followers.filter((f) => String(f.userId) === String(viewerUserId))
+        : [];
+    const viewerRowsMembers = Array.isArray(list.members)
+        ? list.members.filter((m) => String(m.userId) === String(viewerUserId))
+        : [];
+
+    let isPinned = !!list.isPinned;
+    if (viewerUserId) {
+        if (String(list.ownerId) === String(viewerUserId)) {
+            isPinned = !!list.isPinned;
+        } else {
+            const mine = viewerRowsFollowers[0] ?? null;
+            isPinned = !!(mine && mine.isPinned);
+        }
+    }
+
+    let isFollowing = false;
+    if (viewerUserId) {
+        isFollowing = viewerRowsFollowers.length > 0 || viewerRowsMembers.length > 0;
+    }
+
     return {
         id: list.id,
         name: list.name,
@@ -132,48 +227,80 @@ function formatListWithOwner(list) {
         ownerId: list.ownerId,
         ownerName,
         ownerHandle,
-        memberCount,
-        followerCount,
-        isPinned: !!list.isPinned,
+        memberCount: mc,
+        followerCount: fc,
+        members: `${mc} member${mc !== 1 ? 's' : ''}`,
+        isPinned,
+        isFollowing,
         owner: { id: owner.id, name: ownerName, handle: ownerHandle, profile },
-        ...(Array.isArray(list.members) && list.members.length > 0 ? { members: list.members } : {})
+        ...(Array.isArray(list.members) && list.members.length > 0 ? { membersData: list.members } : {})
     };
 }
 
-// GET /:id/members - must be before /:id
-router.get('/:id/members', async (req, res) => {
+
+// GET /:id/followers
+router.get('/:id/followers', async (req, res) => {
     try {
-        const listId = req.params.id;
-        const list = await prisma.list.findUnique({
-            where: { id: listId },
+        const listId = String(req.params.id);
+        const followers = await prisma.listFollower.findMany({
+            where: { listId },
             include: {
-                members: {
-                    include: {
-                        user: { include: { profile: true } }
-                    }
-                }
+                user: { include: { profile: true } }
             }
         });
-        if (!list) {
-            return res.status(404).json({ status: false, message: 'List not found', data: [] });
-        }
-        const data = list.members.map(m => {
-            const u = m.user || {};
-            const p = u.profile || {};
-            return {
-                id: u.id,
-                name: p.name || u.email?.split('@')[0] || 'User',
-                handle: p.handle || u.email?.split('@')[0] || 'user',
-                avatarUrl: p.avatar || null,
-                user: { id: u.id, profile: p }
-            };
+        
+        const data = followers
+            .filter(f => f.user)
+            .map(f => {
+                const u = f.user;
+                const p = u.profile || {};
+                return {
+                    id: u.id,
+                    name: p.name || u.email?.split('@')[0] || 'User',
+                    handle: p.handle || u.email?.split('@')[0] || 'user',
+                    avatarUrl: p.avatar || null,
+                    user: { id: u.id, profile: p }
+                };
+            });
+        res.status(200).json({ status: true, message: 'OK', data });
+    } catch (error) {
+        console.error('Error fetching list followers:', error);
+        res.status(500).json({ status: false, message: error.message || 'Failed to fetch followers', data: [] });
+    }
+});
+
+
+// GET /:id/members
+router.get('/:id/members', async (req, res) => {
+    try {
+        const listId = String(req.params.id);
+        const members = await prisma.listMember.findMany({
+            where: { listId },
+            include: {
+                user: { include: { profile: true } }
+            }
         });
+
+        const data = members
+            .filter(m => m.user)
+            .map(m => {
+                const u = m.user;
+                const p = u.profile || {};
+                return {
+                    id: u.id,
+                    name: p.name || u.email?.split('@')[0] || 'User',
+                    handle: p.handle || u.email?.split('@')[0] || 'user',
+                    avatarUrl: p.avatar || null,
+                    user: { id: u.id, profile: p }
+                };
+            });
         res.status(200).json({ status: true, message: 'OK', data });
     } catch (error) {
         console.error('Error fetching list members:', error);
         res.status(500).json({ status: false, message: error.message || 'Failed to fetch members', data: [] });
     }
 });
+
 
 // GET /:id/posts - must be before /:id
 router.get('/:id/posts', async (req, res) => {
@@ -207,13 +334,29 @@ router.get('/:id/posts', async (req, res) => {
             orderBy: { createdAt: 'desc' },
             take: limit
         });
-        const safePosts = posts.map(post => {
+        const shufflePosts = (posts) => {
+            const shuffled = [];
+            let lastUserId = null;
+            const remaining = [...posts];
+
+            while (remaining.length > 0) {
+                let index = remaining.findIndex(p => p.userId !== lastUserId);
+                if (index === -1) index = 0; // Fallback if only one user left
+                const [picked] = remaining.splice(index, 1);
+                shuffled.push(picked);
+                lastUserId = picked.userId;
+            }
+            return shuffled;
+        };
+
+        const safePosts = shufflePosts(posts).map(post => {
             if (post.user) {
                 const { passwordHash, ...safeUser } = post.user;
                 return { ...post, user: safeUser };
             }
             return post;
         });
+
         res.status(200).json({ status: true, message: 'OK', data: safePosts });
     } catch (error) {
         console.error('Error fetching list posts:', error);
@@ -224,19 +367,33 @@ router.get('/:id/posts', async (req, res) => {
 // GET /:id: Fetch a single list by id
 router.get('/:id', async (req, res) => {
     try {
+        let viewerId = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader) {
+            const token = authHeader.split(' ')[1];
+            try {
+                const decoded = require('jsonwebtoken').decode(token);
+                const raw = decoded?.sub || decoded?.id || decoded?.userId;
+                viewerId = raw != null ? String(raw) : null;
+            } catch (e) {}
+        }
+
         const list = await prisma.list.findUnique({
             where: { id: req.params.id },
             include: {
                 owner: { include: { profile: true } },
-                _count: { select: { members: true, followers: true } }
+                _count: { select: { members: true, followers: true } },
+                followers: viewerId ? { where: { userId: viewerId }, select: { userId: true, isPinned: true } } : undefined,
+                members: viewerId ? { where: { userId: viewerId }, select: { userId: true } } : undefined
             }
         });
         if (!list) {
             return res.status(404).json({ status: false, message: 'List not found', data: null });
         }
-        const data = formatListWithOwner(list);
+        const data = formatListWithOwner(list, viewerId);
         res.status(200).json({ status: true, message: 'List fetched successfully', data });
     } catch (error) {
+
         console.error('Error fetching list:', error);
         res.status(500).json({ status: false, message: error.message || 'Failed to fetch list', data: null });
     }
@@ -256,14 +413,16 @@ router.post('/', authenticateToken, async (req, res) => {
                 avatar: avatar || null
             }
         });
+        const uid = req.user.id;
         const full = await prisma.list.findUnique({
             where: { id: list.id },
             include: {
                 owner: { include: { profile: true } },
-                _count: { select: { members: true, followers: true } }
+                _count: { select: { members: true, followers: true } },
+                followers: { where: { userId: uid }, select: { userId: true, isPinned: true } }
             }
         });
-        const data = formatListWithOwner(full);
+        const data = formatListWithOwner(full, uid);
         res.status(201).json({ status: true, message: 'List created', data });
     } catch (error) {
         console.error('Error creating list:', error);
@@ -271,24 +430,60 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
-// PATCH /:id/pin: Pin/Unpin a list (owner only)
+// PATCH /:id/pin: Pin for owner (List.isPinned) or for a follower (ListFollower.isPinned)
 router.patch('/:id/pin', authenticateToken, async (req, res) => {
     try {
-        const listId = req.params.id;
+        const listId = String(req.params.id);
+        const userId = String(req.user.userId || req.user.id);
         const list = await prisma.list.findUnique({ where: { id: listId } });
-        if (!list || list.ownerId !== req.user.id) {
-            return res.status(403).json({ status: false, message: 'Not authorized or list not found', data: null });
+        if (!list) {
+            return res.status(404).json({ status: false, message: 'List not found', data: null });
         }
         const { pinned } = req.body;
-        const updated = await prisma.list.update({
+        const pinVal = !!pinned;
+
+        if (String(list.ownerId) === String(userId)) {
+            await prisma.list.update({
+                where: { id: listId },
+                data: { isPinned: pinVal }
+            });
+        } else {
+            const upd = await prisma.listFollower.updateMany({
+                where: { listId, userId },
+                data: { isPinned: pinVal }
+            });
+            if (upd.count === 0) {
+                const asMember = await prisma.listMember.findFirst({
+                    where: { listId, userId }
+                });
+                if (asMember) {
+                    await prisma.listFollower.upsert({
+                        where: { listId_userId: { listId, userId } },
+                        create: { listId, userId, isPinned: pinVal },
+                        update: { isPinned: pinVal }
+                    });
+                } else {
+                    return res.status(403).json({
+                        status: false,
+                        message: 'Follow this list before you can pin it to your profile',
+                        data: null
+                    });
+                }
+            }
+        }
+
+        const full = await prisma.list.findUnique({
             where: { id: listId },
-            data: { isPinned: !!pinned },
             include: {
                 owner: { include: { profile: true } },
-                _count: { select: { members: true, followers: true } }
+                _count: { select: { members: true, followers: true } },
+                followers: {
+                    where: { userId },
+                    select: { userId: true, isPinned: true }
+                }
             }
         });
-        const data = formatListWithOwner(updated);
+        const data = formatListWithOwner(full, userId);
         res.status(200).json({ status: true, message: `List ${pinned ? 'pinned' : 'unpinned'} successfully`, data });
     } catch (error) {
         console.error('Error toggling list pin:', error);
@@ -311,15 +506,17 @@ router.patch('/:id', authenticateToken, async (req, res) => {
         if (isPrivate !== undefined) updateData.isPrivate = !!isPrivate;
         if (banner !== undefined) updateData.banner = banner || null;
         if (avatar !== undefined) updateData.avatar = avatar || null;
+        const uid = req.user.id;
         const updated = await prisma.list.update({
             where: { id: listId },
             data: updateData,
             include: {
                 owner: { include: { profile: true } },
-                _count: { select: { members: true, followers: true } }
+                _count: { select: { members: true, followers: true } },
+                followers: { where: { userId: uid }, select: { userId: true, isPinned: true } }
             }
         });
-        const data = formatListWithOwner(updated);
+        const data = formatListWithOwner(updated, uid);
         res.status(200).json({ status: true, message: 'List updated', data });
     } catch (error) {
         console.error('Error editing list:', error);
@@ -366,14 +563,16 @@ router.post('/:id/members', authenticateToken, async (req, res) => {
         });
 
         // Return updated list with memberCount
+        const uid = req.user.id;
         const updated = await prisma.list.findUnique({
             where: { id: listId },
             include: {
                 owner: { include: { profile: true } },
-                _count: { select: { members: true, followers: true } }
+                _count: { select: { members: true, followers: true } },
+                followers: { where: { userId: uid }, select: { userId: true, isPinned: true } }
             }
         });
-        const data = formatListWithOwner(updated);
+        const data = formatListWithOwner(updated, uid);
         res.status(201).json({ status: true, message: 'Member added', data });
     } catch (error) {
         console.error('Error adding member to list:', error);

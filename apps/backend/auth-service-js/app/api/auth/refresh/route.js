@@ -41,7 +41,11 @@ export async function POST(request) {
         }
 
         // Generate new access token
-        const accessToken = await generateAccessToken(payload.sub, payload.email)
+        const accessToken = await generateAccessToken(
+            payload.sub,
+            payload.email,
+            payload.role || 'USER'
+        )
 
         return apiSuccess({ accessToken }, 'Token refreshed successfully')
 

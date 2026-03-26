@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "promote-admin": "node scripts/promote-admin.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

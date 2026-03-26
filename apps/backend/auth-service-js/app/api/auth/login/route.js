@@ -27,7 +27,7 @@ export async function POST(request) {
 
         // Find user - raw query to avoid Prisma schema/DB mismatch
         console.log(`[Login] Looking up user: ${email}`);
-        const rows = await prisma.$queryRaw`SELECT id, email, "passwordHash" FROM "User" WHERE LOWER(email) = LOWER(${email}) LIMIT 1`
+        const rows = await prisma.$queryRaw`SELECT id, email, "passwordHash", "role" FROM "User" WHERE LOWER(email) = LOWER(${email}) LIMIT 1`
         const user = rows[0] || null
         let profile = null
         if (user) {
@@ -60,8 +60,9 @@ export async function POST(request) {
 
         // Generate tokens
         console.log('[Login] Generating tokens');
-        const accessToken = await generateAccessToken(user.id, user.email)
-        const refreshToken = await generateRefreshToken(user.id, user.email)
+        const userRole = user.role || 'USER'
+        const accessToken = await generateAccessToken(user.id, user.email, userRole)
+        const refreshToken = await generateRefreshToken(user.id, user.email, userRole)
 
         // Store refresh token
         const expiresAt = new Date()
@@ -74,7 +75,7 @@ export async function POST(request) {
         `
 
         console.log('[Login] Login successful');
-        return apiSuccess({
+        const response = apiSuccess({
             accessToken,
             refreshToken,
             id: user.id,
@@ -84,6 +85,17 @@ export async function POST(request) {
             institutionalProfile: null,
             preferredLanguage: 'en'
         }, 'Login successful')
+
+        // Set cookie for browser/swagger dev convenience
+        response.cookies.set('accessToken', accessToken, {
+            httpOnly: false, // browser can access
+            secure: false, // dev
+            maxAge: 7 * 24 * 60 * 60, // 7 days (matching 7d expiry)
+            path: '/',
+            sameSite: 'lax'
+        })
+        
+        return response
 
     } catch (error) {
         if (error instanceof z.ZodError) {

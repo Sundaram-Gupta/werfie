@@ -37,9 +37,10 @@ function normalizeResponse(response) {
 api.interceptors.response.use(
     (response) => normalizeResponse(response),
     (error) => {
-        if (error.response && error.response.status === 401) {
-            // Handle unauthorized access (e.g., redirect to login)
-            // Handle unauthorized access (e.g., redirect to login)
+        const reqUrl = String(error.config?.url || '');
+        const isLoginAttempt = reqUrl.includes('admin/login');
+        // Failed login returns 401 — do not clear session or hard-redirect (user is already on /login).
+        if (error.response && error.response.status === 401 && !isLoginAttempt) {
             localStorage.removeItem('adminToken');
             localStorage.removeItem('adminUser');
             window.location.href = '/login';

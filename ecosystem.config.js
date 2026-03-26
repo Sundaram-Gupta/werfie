@@ -406,7 +406,8 @@ module.exports = {
                 NODE_ENV: 'development',
                 PORT: 3012,
                 DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
-                JWT_SECRET: "dev-secret"
+                JWT_SECRET: "dev-secret",
+                AUTH_GATEWAY_URL: "http://127.0.0.1:3001"
             }
         }
     ]

@@ -1,10 +1,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Link as RouterLink } from "react-router-dom"
-import { BadgeCheck } from "lucide-react"
+import { BadgeCheck, Pin, ShoppingBag, ExternalLink } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
 import { ArticlePreviewCard } from "./article-preview-card"
+import { ListPreviewCard } from "./list-preview-card"
 
 import { getMediaUrl } from "@/lib/utils"
 import { getApiBase } from "@/lib/api"
@@ -316,6 +317,16 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
         return match ? match[1] : null;
     }, [post.content]);
 
+    // Detect list links for preview cards
+    const listId = useMemo(() => {
+        const content = post.content ?? post.text ?? post.body ?? post.data?.content ?? '';
+        if (typeof content !== 'string') return null;
+        
+        // Match /lists/UUID or /lists/ID
+        const match = content.match(/\/lists\/([a-zA-Z0-9-]+)/);
+        return match ? match[1] : null;
+    }, [post.content]);
+
     const renderContentWithLinks = (text) => {
         if (!text) return null;
         
@@ -324,9 +335,20 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
         
         return parts.map((part, i) => {
             if (part.match(urlRegex)) {
-                const isInternal = part.includes(window.location.host) || part.startsWith('/');
+                const isInternal = part.includes(window.location.host) || part.startsWith('/') || part.includes('localhost:5173');
                 const isArticle = part.includes('/article/');
+                const isList = part.includes('/lists/');
                 
+                // If it's a list link and we are already rendering a card for it, hide the text link
+                if (isList && listId && part.includes(listId)) {
+                    return null;
+                }
+
+                // If it's an article link and we are already rendering a card for it, hide the text link
+                if (isArticle && articleId && part.includes(articleId)) {
+                    return null;
+                }
+
                 if (isInternal && isArticle) {
                     const path = part.includes(window.location.host) 
                         ? part.split(window.location.host)[1] 
@@ -368,12 +390,19 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
             <div className="flex-shrink-0 pt-1" onClick={handleUserClick}>
                 <Avatar className="w-10 h-10 hover:opacity-90 transition-opacity">
                     <AvatarImage src={getMediaUrl(user.avatar)} />
-                    <AvatarFallback>{user.name[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                    <AvatarFallback>{user.name?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
             </div>
 
             {/* Main content column */}
             <div className="flex-1 min-w-0">
+                {/* Pinned post indicator */}
+                {post.isPinned && (
+                    <div className="flex items-center gap-2 text-[13px] font-bold text-muted-foreground mb-1 -mt-1">
+                        <Pin className="w-4 h-4 text-blue-500 fill-blue-500" />
+                        <span>{t('feed.pinned_post', 'Pinned post')}</span>
+                    </div>
+                )}
                 {/* Header: user info and more options */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1 overflow-hidden text-[15px]" onClick={handleUserClick}>
@@ -441,6 +470,44 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                     )
                 })()}
 
+                {/* Product / CTA Layer */}
+                {(post.productId || post.ctaLink) && (
+                    <div className="mt-3 mb-2">
+                        {post.product ? (
+                            <div 
+                                className="flex border border-border/50 rounded-2xl overflow-hidden hover:bg-white/[0.05] transition-colors"
+                                onClick={(e) => { e.stopPropagation(); post.product.ctaUrl && window.open(post.product.ctaUrl, '_blank') }}
+                            >
+                                {post.product.imageUrl && (
+                                    <div className="w-24 h-24 flex-shrink-0">
+                                        <img src={getMediaUrl(post.product.imageUrl)} alt={post.product.name} className="w-full h-full object-cover" />
+                                    </div>
+                                )}
+                                <div className="p-3 flex-1 flex flex-col justify-center">
+                                    <div className="font-bold text-sm truncate">{post.product.name}</div>
+                                    <div className="text-xs text-muted-foreground line-clamp-1">{post.product.description}</div>
+                                    <div className="mt-1 font-bold text-primary text-sm">{post.product.currency} {post.product.price}</div>
+                                </div>
+                                <div className="p-3 flex items-center">
+                                    <Button size="sm" variant="secondary" className="rounded-full gap-2">
+                                        <ShoppingBag className="w-4 h-4" />
+                                        Buy
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : post.ctaLink && (
+                            <Button 
+                                className="w-full rounded-2xl gap-2 font-bold py-6 text-md" 
+                                variant={post.ctaVariant === 'primary' ? 'default' : 'secondary'}
+                                onClick={(e) => { e.stopPropagation(); window.open(post.ctaLink, '_blank') }}
+                            >
+                                {post.ctaLabel || 'Learn More'}
+                                <ExternalLink className="w-4 h-4" />
+                            </Button>
+                        )}
+                    </div>
+                )}
+
                 {/* Media Attachments */}
                 {post.media && post.media.length > 0 && (
                     <div className={`mt-3 rounded-2xl overflow-hidden border border-border ${
@@ -492,6 +559,11 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                 {/* Article Preview Card */}
                 {articleId && (
                     <ArticlePreviewCard articleId={articleId} />
+                )}
+
+                {/* List Preview Card */}
+                {listId && (
+                    <ListPreviewCard listId={listId} />
                 )}
 
                 {/* Fullscreen image viewer */}

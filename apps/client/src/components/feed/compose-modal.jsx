@@ -9,24 +9,34 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { Image, X, MapPin, Smile, FileBarChart2, CalendarClock, Globe } from "lucide-react"
+import { Image, X, MapPin, Smile, CalendarClock, Globe, Megaphone, Tag } from "lucide-react"
 import { useState, useRef, useEffect, useMemo } from "react"
 import { useAuth } from "@/context/AuthContext"
-import { postService } from "@/services/api"
+import { postService, businessService } from "@/services/api"
 import { getMediaUrl } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { ArticlePreviewCard } from "./article-preview-card"
+import { ListPreviewCard } from "./list-preview-card"
 
-export function ComposeModal({ children, initialContent = "" }) {
-    const [postContent, setPostContent] = useState(initialContent)
-    
-    // Update content when prop changes (e.g. sharing different articles)
+export function ComposeModal({ children, initialContent = "", open: openProp, onOpenChange: onOpenChangeProp }) {
+    const [postContent, setPostContent] = useState(initialContent || "")
+    const isControlled = openProp !== undefined
+    const [internalOpen, setInternalOpen] = useState(false)
+    const open = isControlled ? openProp : internalOpen
+
+    const setOpen = (next) => {
+        onOpenChangeProp?.(next)
+        if (!isControlled) setInternalOpen(next)
+    }
+
+    // Apply share text when the dialog opens (list/article links, etc.)
     useEffect(() => {
-        if (initialContent) setPostContent(initialContent)
-    }, [initialContent])
-
-    const [open, setOpen] = useState(false)
+        if (!open || !initialContent) return
+        setPostContent(initialContent)
+    }, [open, initialContent])
     const [isPosting, setIsPosting] = useState(false)
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
     const [selectedFiles, setSelectedFiles] = useState([])
@@ -34,6 +44,18 @@ export function ComposeModal({ children, initialContent = "" }) {
     const fileInputRef = useRef(null)
     const textareaRef = useRef(null)
     const { user } = useAuth()
+    const [ctaLink, setCtaLink] = useState("")
+    const [ctaLabel, setCtaLabel] = useState("Learn More")
+    const [selectedProductId, setSelectedProductId] = useState("")
+    const [isPinned, setIsPinned] = useState(false)
+    const [showAdTools, setShowAdTools] = useState(false)
+    const [businessProducts, setBusinessProducts] = useState([])
+
+    useEffect(() => {
+        if (user?.businessProfile) {
+            businessService.getProducts("me").then(setBusinessProducts).catch(() => {})
+        }
+    }, [user])
     const { t } = useTranslation()
 
     // Detect article links for preview cards
@@ -43,6 +65,15 @@ export function ComposeModal({ children, initialContent = "" }) {
         const match = postContent.match(/\/article\/([a-zA-Z0-9-]+)/);
         return match ? match[1] : null;
     }, [postContent]);
+
+    // Detect list links for preview cards
+    const listId = useMemo(() => {
+        if (typeof postContent !== 'string') return null;
+        // Match /lists/UUID or /lists/ID
+        const match = postContent.match(/\/lists\/([a-zA-Z0-9-]+)/);
+        return match ? match[1] : null;
+    }, [postContent]);
+
 
     const MAX_CHARS = 280
     const progress = (postContent.length / MAX_CHARS) * 100
@@ -116,10 +147,19 @@ export function ComposeModal({ children, initialContent = "" }) {
 
         setIsPosting(true)
         try {
-            await postService.createPost(postContent.trim(), selectedFiles)
+            const options = user?.businessProfile ? {
+                productId: selectedProductId,
+                ctaLink,
+                ctaLabel,
+                isPinned
+            } : {}
+            
+            await postService.createPost(postContent.trim(), selectedFiles, null, null, options)
             setPostContent("")
             setSelectedFiles([])
             setFilePreviews([])
+            setCtaLink("")
+            setSelectedProductId("")
             setOpen(false)
             window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
@@ -136,9 +176,11 @@ export function ComposeModal({ children, initialContent = "" }) {
 
     return (
         <Dialog onOpenChange={setOpen} open={open}>
-            <DialogTrigger asChild>
-                {children}
-            </DialogTrigger>
+            {children != null && !isControlled ? (
+                <DialogTrigger asChild>
+                    {children}
+                </DialogTrigger>
+            ) : null}
             <DialogContent className="sm:max-w-[600px] bg-black border-[rgb(47,51,54)] p-0 gap-0 top-[20%] translate-y-0 sm:top-[5%] sm:translate-y-0 text-white [&>button]:hidden">
                 <VisuallyHidden>
                     <DialogTitle>Compose Post</DialogTitle>
@@ -174,6 +216,13 @@ export function ComposeModal({ children, initialContent = "" }) {
                             {articleId && (
                                 <div className="mb-4">
                                     <ArticlePreviewCard articleId={articleId} />
+                                </div>
+                            )}
+
+                            {/* List Preview Card */}
+                            {listId && (
+                                <div className="mb-4">
+                                    <ListPreviewCard listId={listId} />
                                 </div>
                             )}
 
@@ -253,6 +302,16 @@ export function ComposeModal({ children, initialContent = "" }) {
                                     </div>
                                     <button className="p-2 hover:bg-blue-500/10 rounded-full transition-colors"><CalendarClock className="w-5 h-5" /></button>
                                     <button className="p-2 hover:bg-blue-500/10 rounded-full transition-colors"><MapPin className="w-5 h-5 opacity-50" /></button>
+                                    
+                                    {user?.businessProfile && (
+                                        <button 
+                                            onClick={() => setShowAdTools(!showAdTools)}
+                                            className={`p-2 rounded-full transition-colors ${showAdTools ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-blue-500/10'}`}
+                                            title="Ad Tools"
+                                        >
+                                            <Megaphone className="w-5 h-5" />
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center gap-4">
@@ -284,6 +343,69 @@ export function ComposeModal({ children, initialContent = "" }) {
                                     </Button>
                                 </div>
                             </div>
+
+                            {/* Business Ad Tools Section */}
+                            {showAdTools && user?.businessProfile && (
+                                <div className="mt-4 p-4 rounded-2xl bg-zinc-900/50 border border-blue-500/20 space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-sm font-bold flex items-center gap-2 text-blue-400">
+                                            <Megaphone className="w-4 h-4" />
+                                            Business Ad Tools
+                                        </h4>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Pin to profile</span>
+                                            <Switch checked={isPinned} onCheckedChange={setIsPinned} />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-3">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                                                <Tag className="w-3 h-3" /> Tag a Product
+                                            </label>
+                                            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                                                <SelectTrigger className="bg-black border-zinc-800 text-xs">
+                                                    <SelectValue placeholder="Select a product (none)" />
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-black border-zinc-800">
+                                                    <SelectItem value="none">None</SelectItem>
+                                                    {businessProducts.map(p => (
+                                                        <SelectItem key={p.id} value={p.id}>{p.name} - {p.currency} {p.price}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CTA URL</label>
+                                                <Input 
+                                                    placeholder="https://..." 
+                                                    value={ctaLink} 
+                                                    onChange={e => setCtaLink(e.target.value)}
+                                                    className="bg-black border-zinc-800 text-xs h-9"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CTA Label</label>
+                                                <Select value={ctaLabel} onValueChange={setCtaLabel}>
+                                                    <SelectTrigger className="bg-black border-zinc-800 text-xs h-9">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-black border-zinc-800">
+                                                        <SelectItem value="Learn More">Learn More</SelectItem>
+                                                        <SelectItem value="Shop Now">Shop Now</SelectItem>
+                                                        <SelectItem value="Book Now">Book Now</SelectItem>
+                                                        <SelectItem value="Subscribe">Subscribe</SelectItem>
+                                                        <SelectItem value="Sign Up">Sign Up</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 </div>

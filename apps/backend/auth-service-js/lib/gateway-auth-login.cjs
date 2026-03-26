@@ -38,7 +38,7 @@ async function gatewayLogin(body) {
   }
 
   const p = getPrisma();
-  const rows = await p.$queryRaw`SELECT id, email, "passwordHash" FROM "User" WHERE LOWER(email) = LOWER(${email}) LIMIT 1`;
+  const rows = await p.$queryRaw`SELECT id, email, "passwordHash", "role" FROM "User" WHERE LOWER(email) = LOWER(${email}) LIMIT 1`;
   const user = rows[0] || null;
   let profile = null;
   if (user) {
@@ -65,13 +65,24 @@ async function gatewayLogin(body) {
   const { SignJWT } = await import('jose');
   const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret');
 
-  const accessToken = await new SignJWT({ sub: user.id, email: user.email, type: 'access' })
+  const userRole = user.role || 'USER';
+  const accessToken = await new SignJWT({
+    sub: user.id,
+    email: user.email,
+    role: userRole,
+    type: 'access',
+  })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(process.env.JWT_ACCESS_EXPIRY || '15m')
     .sign(JWT_SECRET);
 
-  const refreshToken = await new SignJWT({ sub: user.id, email: user.email, type: 'refresh' })
+  const refreshToken = await new SignJWT({
+    sub: user.id,
+    email: user.email,
+    role: userRole,
+    type: 'refresh',
+  })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setJti(randomUUID())

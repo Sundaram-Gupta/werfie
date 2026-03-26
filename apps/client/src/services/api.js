@@ -189,7 +189,8 @@ export const postService = {
 
     // Create post (with optional media, replyToId, scheduledAt)
     // Use JSON for text-only (polls, etc.) to avoid FormData/multipart parsing issues
-    createPost: async (content, files = [], replyToId = null, scheduledAt = null) => {
+    createPost: async (content, files = [], replyToId = null, scheduledAt = null, options = {}) => {
+        const { productId, ctaLink, ctaLabel, isPinned } = options;
         const fileList = files || [];
         const contentStr = typeof content === 'string' ? content : (content != null ? String(content) : '');
 
@@ -197,6 +198,11 @@ export const postService = {
             const payload = { content: contentStr };
             if (replyToId) payload.replyToId = replyToId;
             if (scheduledAt) payload.scheduledAt = typeof scheduledAt === 'string' ? scheduledAt : scheduledAt.toISOString();
+            if (productId) payload.productId = productId;
+            if (ctaLink) payload.ctaLink = ctaLink;
+            if (ctaLabel) payload.ctaLabel = ctaLabel;
+            if (isPinned) payload.isPinned = isPinned;
+            
             const { data } = await api.post('/api/posts', payload);
             return data;
         }
@@ -205,6 +211,11 @@ export const postService = {
         formData.append('content', contentStr);
         if (replyToId) formData.append('replyToId', replyToId);
         if (scheduledAt) formData.append('scheduledAt', typeof scheduledAt === 'string' ? scheduledAt : scheduledAt.toISOString());
+        if (productId) formData.append('productId', productId);
+        if (ctaLink) formData.append('ctaLink', ctaLink);
+        if (ctaLabel) formData.append('ctaLabel', ctaLabel);
+        if (isPinned) formData.append('isPinned', 'true');
+        
         fileList.forEach((file) => formData.append('media', file));
 
         const { data } = await api.post('/api/posts', formData);
@@ -692,6 +703,35 @@ export const businessService = {
     removeTeamMember: async (memberId) => {
         const { data } = await api.delete(`/api/business/team/${memberId}`)
         return data
+    },
+    requestVerification: async () => {
+        const { data } = await api.post('/api/business/request-verification')
+        return data
+    },
+    getProducts: async (businessId) => {
+        const id = businessId === 'me' ? 'products' : `${businessId}/products`
+        const { data } = await api.get(`/api/business/${id}`)
+        return data
+    },
+    addProduct: async (payload) => {
+        const { data } = await api.post('/api/business/products', payload)
+        return data
+    },
+    updateProduct: async (id, payload) => {
+        const { data } = await api.put(`/api/business/products/${id}`, payload)
+        return data
+    },
+    deleteProduct: async (id) => {
+        const { data } = await api.delete(`/api/business/products/${id}`)
+        return data
+    },
+    getReviews: async (businessId) => {
+        const { data } = await api.get(`/api/business/${businessId}/reviews`)
+        return data
+    },
+    addReview: async (businessId, rating, comment) => {
+        const { data } = await api.post(`/api/business/${businessId}/reviews`, { rating, comment })
+        return data
     }
 }
 
@@ -738,16 +778,18 @@ export const monetizationService = {
 // List Services
 export const listService = {
     getPinned: async () => {
-        const { data } = await api.get('/api/lists/pinned')
-        return data
+        const res = await api.get('/api/lists/pinned')
+        const payload = res.data
+        return Array.isArray(payload) ? payload : (payload?.data ?? [])
     },
     getDiscover: async () => {
         const { data } = await api.get('/api/lists/discover')
         return data
     },
     getYours: async () => {
-        const { data } = await api.get('/api/lists/yours')
-        return data
+        const res = await api.get('/api/lists/yours')
+        const payload = res.data
+        return Array.isArray(payload) ? payload : (payload?.data ?? [])
     },
     getList: async (listId) => {
         const { data } = await api.get(`/api/lists/${listId}`)
@@ -757,6 +799,11 @@ export const listService = {
         const { data } = await api.get(`/api/lists/${listId}/members`)
         return Array.isArray(data) ? data : (data?.data ?? [])
     },
+    getFollowers: async (listId) => {
+        const { data } = await api.get(`/api/lists/${listId}/followers`)
+        return Array.isArray(data) ? data : (data?.data ?? [])
+    },
+
     getPosts: async (listId, params = {}) => {
         const { data } = await api.get(`/api/lists/${listId}/posts`, { params })
         return Array.isArray(data) ? data : (data?.data ?? [])
@@ -786,8 +833,9 @@ export const listService = {
         return data
     },
     togglePin: async (listId, pinned) => {
-        const { data } = await api.patch(`/api/lists/${listId}/pin`, { pinned })
-        return data?.data ?? data
+        const res = await api.patch(`/api/lists/${listId}/pin`, { pinned })
+        const body = res.data
+        return body?.data ?? body
     },
     followList: async (listId) => {
         const { data } = await api.post(`/api/lists/${listId}/follow`)

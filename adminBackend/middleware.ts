@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here_secure_it';
+// Must match auth gateway / auth-service-js (`dev-secret` in local PM2 ecosystem).
+const JWT_SECRET = (process.env.JWT_SECRET || 'dev-secret').trim();
 
 // Define allowed origins securely
 const allowedOrigins = [
@@ -62,17 +63,24 @@ export async function middleware(req: NextRequest) {
                     new TextEncoder().encode(JWT_SECRET)
                 );
 
-                const role = (payload.role as string) || 'USER';
+                const roleRaw = ((payload.role as string) || 'USER').trim();
+                const role = roleRaw || 'USER';
+                const userId = String(payload.userId || payload.sub || '').trim();
 
-                if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+                if (!userId) {
                     response = NextResponse.json(
-                        { status: false, message: 'Forbidden: Insufficient permissions', data: null },
+                        { status: false, message: 'Unauthorized: Invalid token payload', data: null },
+                        { status: 401 }
+                    );
+                } else if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+                    response = NextResponse.json(
+                        { status: false, message: 'Forbidden: Insufficient permissions (use an ADMIN account accessToken, or POST /api/admin/login)', data: null },
                         { status: 403 }
                     );
                 } else {
                     // Success logic
                     const requestHeaders = new Headers(req.headers);
-                    requestHeaders.set('x-admin-id', payload.userId as string);
+                    requestHeaders.set('x-admin-id', userId);
                     requestHeaders.set('x-admin-role', role);
 
                     response = NextResponse.next({

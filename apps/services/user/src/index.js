@@ -11,10 +11,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const businessRoutes = require('./routes/businessRoutes');
 const institutionalRoutes = require('./routes/institutionalRoutes');
 const worldLeaderRoutes = require('./routes/worldLeaderRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 app.use(cors({
-    origin: true, // Reflects the request origin
-    credentials: true
+    origin: true,
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-verified-gateway', 'x-user-id', 'x-user-email', 'x-api-version']
 }));
 app.use(express.json());
 app.use(require('./middleware/api-response'));
@@ -46,11 +48,11 @@ const DEFAULT_SETTINGS = {
 function normalizeUserRecord(user) {
     if (!user) return null;
     const { passwordHash, ...safeUser } = user;
-    
+
     const inst = safeUser.institutionalProfile;
     const defaultHandle = safeUser.email ? safeUser.email.split('@')[0] : 'user';
     const isAutoFallbackHandle = (h) => /^user_[0-9a-f]{8}_[0-9a-f]{4}$/i.test(String(h || ''));
-    
+
     // If institutional, prioritize institutional name
     let fallbackName = defaultHandle.charAt(0).toUpperCase() + defaultHandle.slice(1);
     if (inst) {
@@ -81,11 +83,11 @@ function normalizeUserRecord(user) {
                 ? defaultHandle
                 : handleFromDb;
         const currentName = safeUser.profile.name;
-        
+
         // If profile name is default/missing, try institutional name first
         let name = currentName;
         const isDefaultName = !currentName || currentName.trim() === '' || currentName === 'User';
-        
+
         if (isDefaultName || handle !== handleFromDb) {
             if (inst) {
                 name = inst.publicDisplayName || inst.institutionName;
@@ -93,7 +95,7 @@ function normalizeUserRecord(user) {
                 name = handle.charAt(0).toUpperCase() + handle.slice(1);
             }
         }
-        
+
         safeUser.profile = {
             ...safeUser.profile,
             name: name,
@@ -104,13 +106,13 @@ function normalizeUserRecord(user) {
             bio: safeUser.profile.bio || (inst ? (inst.publicBio || inst.description) : null)
         };
     }
-    
+
     // Virtual fields for backward compatibility at root level
     safeUser.name = safeUser.profile.name;
     safeUser.handle = safeUser.profile.handle;
     safeUser.avatar = safeUser.profile.avatar;
     safeUser.verified = safeUser.profile.verified;
-    
+
     return safeUser;
 }
 
@@ -187,7 +189,7 @@ app.get('/api/users/suggestions', async (req, res) => {
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
             currentUserId = decoded.sub || decoded.id || decoded.userId;
-        } catch (e) {}
+        } catch (e) { }
     }
     try {
         let excludeIds = [];
@@ -293,7 +295,11 @@ app.use((req, res, next) => {
 app.use('/api/institutional', institutionalRoutes);
 app.use('/institutional', institutionalRoutes);
 
-// 2. Other Routes
+// 2. Admin Routes
+app.use('/api/admin', adminRoutes);
+app.use('/admin', adminRoutes);
+
+// 3. Other Routes
 app.use('/api/business', businessRoutes);
 app.use('/business', businessRoutes);
 app.use('/api/leaders', worldLeaderRoutes);
@@ -329,7 +335,8 @@ app.get('/profile', authenticateToken, async (req, res) => {
             where: { id: req.user.userId },
             include: {
                 profile: { select: PROFILE_SELECT },
-                institutionalProfile: true
+                institutionalProfile: true,
+                businessProfile: true
             }
         });
         res.json(normalizeUserRecord(user));
@@ -346,7 +353,8 @@ app.get('/profile/:id', async (req, res) => {
             where: { id: req.params.id },
             include: {
                 profile: { select: PROFILE_SELECT },
-                institutionalProfile: true
+                institutionalProfile: true,
+                businessProfile: true
             }
         });
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -604,7 +612,7 @@ app.get('/search', async (req, res) => {
                 where: {
                     AND: andConditions
                 },
-                include: { 
+                include: {
                     profile: { select: PROFILE_SELECT },
                     institutionalProfile: true
                 },
@@ -618,7 +626,7 @@ app.get('/search', async (req, res) => {
                 }));
                 users = await prisma.user.findMany({
                     where: { AND: emailConditions },
-                    include: { 
+                    include: {
                         profile: { select: PROFILE_SELECT },
                         institutionalProfile: true
                     },

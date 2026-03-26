@@ -21,3 +21,25 @@ export const reviewInstitutionalProfile = async (id, data) => {
         throw error;
     }
 };
+
+export const getVerificationRequests = async (type = 'BUSINESS') => {
+    try {
+        const response = await api.get('/admin/verifications', {
+            params: { type }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching verification requests:', error);
+        return [];
+    }
+};
+
+export const reviewVerificationRequest = async (id, data) => {
+    try {
+        const response = await api.patch(`/admin/verifications/${id}`, data);
+        return response.data;
+    } catch (error) {
+        console.error('Error reviewing verification request:', error);
+        throw error;
+    }
+};
