@@ -7,6 +7,7 @@ import { getMediaUrl } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import api from "@/lib/api"
+import { ModernSearch } from "./modern-search"
 
 function PostSearchResult({ post, navigate }) {
     const userLabel = post?.user?.profile?.name || post?.user?.name || post?.user?.email?.split?.('@')?.[0] || post?.user || 'Unknown'
@@ -183,12 +184,6 @@ export function RightSidebar() {
     const { t } = useTranslation()
     const [suggestions, setSuggestions] = useState([])
     const [loading, setLoading] = useState(true)
-    const [query, setQuery] = useState('')
-    const [searchOpen, setSearchOpen] = useState(false)
-    const [searchLoading, setSearchLoading] = useState(false)
-    const [searchTab, setSearchTab] = useState('users') // 'users' | 'posts'
-    const [userResults, setUserResults] = useState([])
-    const [postResults, setPostResults] = useState([])
     const suggestionsCtrlRef = useRef(null)
 
     const fetchSuggestions = useCallback(async () => {
@@ -227,132 +222,20 @@ export function RightSidebar() {
         return () => window.removeEventListener('follow-state-changed', fetchSuggestions)
     }, [fetchSuggestions])
 
-    const handleSearch = (e) => {
-        if (e.key === 'Enter') {
-            const q = (e.target.value || '').toString().trim()
-            if (q) navigate(`/search?q=${encodeURIComponent(q)}`)
-            setSearchOpen(false)
-        }
-    }
-
-    useEffect(() => {
-        const q = query.trim()
-        if (!q) {
-            setSearchLoading(false)
-            setUserResults([])
-            setPostResults([])
-            return
-        }
-
-        let isActive = true
-        setSearchLoading(true)
-
-        const tmr = setTimeout(async () => {
-            try {
-                const [users, posts] = await Promise.all([
-                    searchService.searchUsers(q, { limit: 5 }),
-                    searchService.searchPosts(q, { limit: 5 }),
-                ])
-                if (!isActive) return
-                setUserResults(Array.isArray(users) ? users : (users?.users || []))
-                setPostResults(Array.isArray(posts) ? posts : (posts?.posts || []))
-            } catch (err) {
-                if (!isActive) return
-                setUserResults([])
-                setPostResults([])
-            } finally {
-                if (isActive) setSearchLoading(false)
-            }
-        }, 300)
-
-        return () => {
-            isActive = false
-            clearTimeout(tmr)
-        }
-    }, [query])
+    // Search logic is now handled in ModernSearch component
 
     return (
         <aside className="hidden lg:block w-[350px] pl-8 py-4 h-screen sticky top-0 overflow-y-auto no-scrollbar">
             {/* Search */}
-            <div className="group sticky top-0 bg-background z-10 pb-1 pt-1">
-                <div className="bg-muted/50 rounded-full py-2.5 px-4 mb-1 flex items-center gap-3 focus-within:bg-background focus-within:ring-1 ring-primary transition text-muted-foreground focus-within:text-primary border border-transparent focus-within:border-primary">
-                    <Search className="w-5 h-5" />
-                    <input
-                        type="text"
-                        placeholder={t('right_sidebar.search_placeholder')}
-                        className="bg-transparent border-none outline-none text-[15px] text-foreground placeholder-muted-foreground w-full h-full"
-                        value={query}
-                        onChange={(e) => {
-                            setQuery(e.target.value)
-                            setSearchOpen(true)
-                        }}
-                        onFocus={() => setSearchOpen(true)}
-                        onKeyDown={handleSearch}
-                    />
-                </div>
-                {searchOpen && query.trim().length > 0 && (
-                    <div
-                        className="mb-4 bg-background border border-border/40 rounded-[16px] overflow-hidden shadow-xl"
-                        onMouseDown={(e) => e.preventDefault()}
-                    >
-                        <div className="flex items-center gap-2 px-2 pt-2">
-                            <button
-                                type="button"
-                                className={`px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${searchTab === 'users' ? 'bg-foreground text-background' : 'hover:bg-muted/60 text-muted-foreground'}`}
-                                onClick={() => setSearchTab('users')}
-                            >
-                                Users
-                            </button>
-                            <button
-                                type="button"
-                                className={`px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${searchTab === 'posts' ? 'bg-foreground text-background' : 'hover:bg-muted/60 text-muted-foreground'}`}
-                                onClick={() => setSearchTab('posts')}
-                            >
-                                Posts
-                            </button>
-                            <div className="ml-auto pr-2 text-[12px] text-muted-foreground">
-                                {searchLoading ? 'Searching…' : ''}
-                            </div>
-                        </div>
-
-                        {searchTab === 'users' ? (
-                            <div className="pt-1">
-                                {searchLoading ? (
-                                    <div className="p-4 text-center text-muted-foreground text-[13px]">Searching users…</div>
-                                ) : userResults.length === 0 ? (
-                                    <div className="p-4 text-center text-muted-foreground text-[13px]">No users found</div>
-                                ) : (
-                                    userResults.map((u) => <UserSearchResult key={u.id} user={u} navigate={navigate} />)
-                                )}
-                            </div>
-                        ) : (
-                            <div className="pt-1">
-                                {searchLoading ? (
-                                    <div className="p-4 text-center text-muted-foreground text-[13px]">Searching posts…</div>
-                                ) : postResults.length === 0 ? (
-                                    <div className="p-4 text-center text-muted-foreground text-[13px]">No posts found</div>
-                                ) : (
-                                    postResults.map((p) => <PostSearchResult key={p.id} post={p} navigate={navigate} />)
-                                )}
-                            </div>
-                        )}
-
-                        <div
-                            className="text-primary text-[15px] px-4 py-3 cursor-pointer hover:bg-white/[0.03] transition border-t border-border/30"
-                            onClick={() => {
-                                navigate(`/search?q=${encodeURIComponent(query.trim())}`)
-                                setSearchOpen(false)
-                            }}
-                        >
-                            Show all results
-                        </div>
-                    </div>
-                )}
+            <div className="sticky top-0 bg-background z-20 pb-1 pt-1">
+                <ModernSearch />
             </div>
 
-            {/* Trends Widget */}
-            <div className="bg-muted/30 border border-border/40 rounded-[16px] overflow-hidden mb-4">
-                <h2 className="font-bold text-[20px] px-4 py-3 leading-6">{t('right_sidebar.whats_happening')}</h2>
+            {/* Widgets Section */}
+            <div className="bg-muted/30 border border-border/40 rounded-[16px] overflow-hidden mb-4 mt-2">
+                <h2 className="font-bold text-[20px] px-4 py-3 leading-6">
+                    {t('right_sidebar.whats_happening')}
+                </h2>
                 <TrendsList navigate={navigate} />
                 <div
                     className="text-primary text-[15px] p-4 cursor-pointer hover:bg-white/[0.03] transition rounded-b-[16px]"

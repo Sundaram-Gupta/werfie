@@ -86,15 +86,23 @@ exports.getLeader = async (req, res) => {
 
 exports.listLeaders = async (req, res) => {
     try {
-        const { region, country, verifiedStatus } = req.query;
+        const { region, country, verifiedStatus, limit, offset } = req.query;
         let filter = {};
         if (region) filter.region = region;
         if (country) filter.country = country;
-        if (verifiedStatus !== undefined) filter.verifiedStatus = verifiedStatus === 'true';
+        // Default: only approved (verified) leaders.
+        const effectiveVerifiedStatus =
+            verifiedStatus !== undefined ? verifiedStatus === 'true' : true;
+        filter.verifiedStatus = effectiveVerifiedStatus;
+
+        const take = Math.max(Math.min(parseInt(limit, 10) || 50, 100), 1);
+        const skip = Math.max(parseInt(offset, 10) || 0, 0);
 
         const leaders = await prisma.worldLeader.findMany({
             where: filter,
             orderBy: { priorityRank: 'desc' },
+            take,
+            skip,
             include: {
                 institution: true
             }

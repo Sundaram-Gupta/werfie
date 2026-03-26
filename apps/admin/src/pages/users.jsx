@@ -186,13 +186,23 @@ export default function UsersPage() {
                                                 <AvatarFallback>{user.profile?.name?.charAt(0) || user.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex flex-col">
-                                                <span>{(() => {
+                                                <span className="font-semibold">{(() => {
+                                                    const instName = user.institutionalProfile?.institutionName || user.institutionalProfile?.publicDisplayName;
+                                                    if (instName) return instName;
+                                                    
                                                     const currentName = user.profile?.name;
                                                     const handle = user.profile?.handle || user.email?.split('@')[0];
                                                     const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User' && currentName !== 'Unknown';
-                                                    return hasRealName ? currentName : (handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : 'User');
+                                                    return hasRealName ? currentName : (handle ? (handle.charAt(0).toUpperCase() + handle.slice(1)) : 'User');
                                                 })()}</span>
-                                                <span className="text-xs text-muted-foreground">{user.profile?.handle || user.email}</span>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <span className="text-xs text-muted-foreground">@{user.profile?.handle || user.email?.split('@')[0] || user.id?.slice(0, 8)}</span>
+                                                    {user.institutionalProfile && (
+                                                        <Badge variant="secondary" className="px-1 py-0 h-4 text-[10px] uppercase font-bold bg-blue-100 text-blue-700 hover:bg-blue-100 border-none">
+                                                            INSTITUTION
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </TableCell>
@@ -200,11 +210,18 @@ export default function UsersPage() {
                                     <TableCell>{getRoleBadge(user.role)}</TableCell>
                                     <TableCell>{getStatusBadge(user.status)}</TableCell>
                                     <TableCell>
-                                        {user.isVerified ? (
-                                            <CheckCircle className="h-4 w-4 text-green-500" />
-                                        ) : (
-                                            <span className="text-muted-foreground text-xs">No</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {user.isVerified || user.institutionalProfile?.isVerified ? (
+                                                <CheckCircle className="h-4 w-4 text-blue-500 fill-blue-500/10" title="Verified Account" />
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">No</span>
+                                            )}
+                                            {user.institutionalProfile?.badgeType && (
+                                                <Badge variant="outline" className="text-[10px] h-4 px-1 uppercase bg-muted/50">
+                                                    {user.institutionalProfile.badgeType}
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                                     <TableCell className="text-right">

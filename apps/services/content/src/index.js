@@ -52,7 +52,9 @@ app.get('/api/posts/liked', optionalAuth, async (req, res) => {
             include: { post: { include: postInclude } }
         });
         const now = new Date();
-        const posts = likes.map((l) => l.post).filter((p) => p && (!p.scheduledAt || new Date(p.scheduledAt) <= now));
+        const posts = backfillMediaUrls(
+            likes.map((l) => l.post).filter((p) => p && (!p.scheduledAt || new Date(p.scheduledAt) <= now))
+        );
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.json({ posts });
     } catch (err) {
@@ -64,7 +66,11 @@ app.get('/api/posts/liked', optionalAuth, async (req, res) => {
 // Generic Rewrite Middleware - MOVED TO TOP for consistent routing
 app.use((req, res, next) => {
     // console.log(`[ContentService] Incoming: ${req.method} ${req.url}`);
-    if (req.path.startsWith('/api/posts')) {
+    // Skip rewrite for socket.io paths to avoid breaking polling/handshakes
+    if (req.url && (req.url.includes('/ws/live') || req.url.includes('/api/posts/ws'))) {
+        return next();
+    }
+    if (req.url.startsWith('/api/posts')) {
         let newUrl = req.url.replace('/api/posts', '');
         if (!newUrl.startsWith('/')) newUrl = '/' + newUrl;
         req.url = newUrl;
@@ -284,19 +290,25 @@ app.get('/media/library', authenticateToken, async (req, res) => {
 
 // Search Posts (route at /search - gateway rewrite strips /api/posts from /api/posts/search)
 app.get('/search', async (req, res) => {
-    const { q, limit = 20, offset = 0 } = req.query;
+    const { q, limit = 20, offset = 0, hasMedia } = req.query;
 
     if (!q || q.trim().length === 0) {
         return res.json([]);
     }
 
+    // Split query for multi-keyword processing
+    const terms = q.trim().split(/\s+/).filter(t => t.length > 0);
+
     try {
+        // Build an 'AND' query: ALL terms must be present in the content
+        const andConditions = terms.map(term => ({
+            content: { contains: term, mode: 'insensitive' }
+        }));
+
         const posts = await prisma.post.findMany({
             where: {
-                content: {
-                    contains: q,
-                    mode: 'insensitive'
-                }
+                AND: andConditions,
+                ...(hasMedia === 'true' ? { media: { some: {} } } : {})
             },
             include: {
                 user: {
@@ -328,7 +340,7 @@ app.get('/search', async (req, res) => {
             };
         });
 
-        res.json(safePosts);
+        res.json(backfillMediaUrls(safePosts));
     } catch (error) {
         console.error('Search Posts Error:', error);
         res.status(500).json({ error: 'Failed to search posts', details: error.message });
@@ -383,12 +395,22 @@ async function handleCreatePost(req, res, body, files) {
         const mediaPromises = fileList.map(async (file) => {
             try {
                 let processedMedia;
-                if (file.mimetype.startsWith('image/')) {
+                const mimetype = (file.mimetype || '').toLowerCase();
+                const ext = path.extname(file.originalname || '').toLowerCase();
+                
+                const isGeneric = !mimetype || mimetype === 'application/octet-stream' || mimetype === 'binary/octet-stream';
+                const isVideo = mimetype.startsWith('video/') || ['.mp4', '.webm', '.mov', '.m4v'].includes(ext);
+                const isAudio = mimetype.startsWith('audio/') || ['.mp3', '.wav', '.ogg', '.m4a'].includes(ext);
+                const isImage = mimetype.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext);
+
+                if (isImage && !isVideo && !isAudio) {
                     processedMedia = await MediaService.processImage(file);
-                } else if (file.mimetype.startsWith('video/')) {
+                } else if (isVideo) {
                     processedMedia = await MediaService.processVideo(file);
-                } else if (file.mimetype.startsWith('audio/')) {
+                } else if (isAudio) {
                     processedMedia = await MediaService.processAudio(file);
+                } else {
+                    processedMedia = await MediaService.processFile(file);
                 }
 
                 if (processedMedia) {
@@ -406,6 +428,26 @@ async function handleCreatePost(req, res, body, files) {
         });
 
         await Promise.all(mediaPromises);
+
+        // 2b. Update mediaUrls on the Post row (JSON array of URLs) so the column is never null when media exists
+        if (fileList.length > 0) {
+            try {
+                const savedMedia = await prisma.postMedia.findMany({
+                    where: { postId: post.id },
+                    select: { mediaUrl: true }
+                });
+                if (savedMedia.length > 0) {
+                    const urls = savedMedia.map(m => m.mediaUrl);
+                    await prisma.post.update({
+                        where: { id: post.id },
+                        data: { mediaUrls: JSON.stringify(urls) }
+                    });
+                }
+            } catch (mediaUrlErr) {
+                // Non-fatal: mediaUrls column update failed, media array is still accessible
+                console.error('[ContentService] Failed to update mediaUrls column:', mediaUrlErr);
+            }
+        }
 
         // 3. Fetch full post with media (and replyTo when it's a reply)
         const includeObj = {
@@ -566,7 +608,7 @@ app.get('/scheduled', authenticateToken, async (req, res) => {
             orderBy: { scheduledAt: 'asc' },
             include: { user: { include: { profile: true } }, media: true }
         })
-        res.json(posts)
+        res.json(backfillMediaUrls(posts))
     } catch (err) {
         console.error('Scheduled posts error:', err)
         res.status(500).json({ error: err.message })
@@ -599,25 +641,17 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
 
         // Random feed mode: return a different set on each refresh (no cursor pagination)
         if (random && !cursor) {
-            const idsRows = await prisma.$queryRaw`
-                SELECT "id"
-                FROM "Post"
-                WHERE ("scheduledAt" IS NULL OR "scheduledAt" <= NOW())
-                ORDER BY RANDOM()
-                LIMIT ${limit}
-            `;
-            const ids = (Array.isArray(idsRows) ? idsRows : []).map(r => r.id).filter(Boolean);
-            if (ids.length === 0) return res.json({ posts: [], nextCursor: null, hasMore: false });
-
-
-
-            const fetched = await prisma.post.findMany({
-                where: { id: { in: ids } },
-                include
+            const count = await prisma.post.count({ where });
+            const randomOffset = Math.floor(Math.random() * Math.max(0, count - limit));
+            
+            const rawPosts = await prisma.post.findMany({
+                where,
+                include,
+                take: limit,
+                skip: randomOffset,
             });
-            const byId = new Map(fetched.map(p => [p.id, p]));
-            const rawPosts = ids.map(id => byId.get(id)).filter(Boolean);
-            const posts = interleaveRandomFeed(rawPosts);
+            
+            const posts = backfillMediaUrls(interleaveRandomFeed(rawPosts));
             return res.json({ posts, nextCursor: null, hasMore: false });
         }
 
@@ -629,7 +663,7 @@ app.get('/timeline/home', authenticateToken, async (req, res) => {
             include
         });
         const nextCursor = rawPosts.length === limit ? rawPosts[rawPosts.length - 1].id : null;
-        const posts = interleaveRandomFeed(rawPosts);
+        const posts = backfillMediaUrls(interleaveRandomFeed(rawPosts));
         res.json({ posts, nextCursor, hasMore: !!nextCursor });
     } catch (error) {
         console.error('Timeline Error:', error);
@@ -662,7 +696,26 @@ function shuffleInPlace(arr) {
  * consecutive posts from the same user (unless unavoidable due to small user pool).
  * Also randomizes the order within each batch for a fresh "Discovery" feel.
  */
-function interleaveRandomFeed(items) {
+function interleaveRandomFeed(items, options = {}) {
+    const { stable = false, seed = null } = options;
+    
+    // Seeded pseudo-random helper
+    const seededRandom = (s) => {
+        const x = Math.sin(s) * 10000;
+        return x - Math.floor(x);
+    };
+
+    const seededShuffle = (arr, s) => {
+        let m = arr.length, t, i;
+        let currSeed = s;
+        while (m) {
+            i = Math.floor(seededRandom(currSeed++) * m--);
+            t = arr[m];
+            arr[m] = arr[i];
+            arr[i] = t;
+        }
+        return arr;
+    };
     const list = Array.isArray(items) ? items.slice() : [];
     if (list.length <= 2) return list;
 
@@ -676,38 +729,71 @@ function interleaveRandomFeed(items) {
 
     const keys = Array.from(groups.keys());
     // Randomize within each user's internal list
-    for (const k of keys) shuffleInPlace(groups.get(k));
+    if (!stable && seed === null) {
+        for (const k of keys) shuffleInPlace(groups.get(k));
+    } else if (seed !== null) {
+        // Seeded shuffle for stable variety
+        let s = seed;
+        for (const k of keys) seededShuffle(groups.get(k), s++);
+    }
 
     const out = [];
     let prevKey = null;
 
     while (out.length < list.length) {
-        // Find maximum remaining count among buckets to prioritize larger buckets
+        let total = 0;
         let max = 0;
         for (const k of keys) {
             const c = groups.get(k).length;
             if (c > max) max = c;
+            total += c;
         }
-        if (max === 0) break;
+        if (total === 0) break;
 
-        // Candidates: keys with max remaining posts, excluding the previous key to avoid back-to-back
+        const criticalLimit = Math.ceil(total / 2);
         let candidates = [];
-        for (const k of keys) {
-            const c = groups.get(k).length;
-            if (c === max && k !== prevKey) {
-                candidates.push(k);
+        
+        // If one bucket dominates (>50%), they MUST be picked to prevent back-to-back clumping later
+        if (max >= criticalLimit) {
+            for (const k of keys) {
+                if (groups.get(k).length >= criticalLimit && k !== prevKey) {
+                    candidates.push(k);
+                }
             }
         }
 
-        // If forced to repeat (unavoidable), allow selection from all max-count buckets
+        // Proportional probability selection for fairer top-post randomization
         if (candidates.length === 0) {
             for (const k of keys) {
-                if (groups.get(k).length === max) candidates.push(k);
+                const c = groups.get(k).length;
+                if (c > 0 && k !== prevKey) {
+                    for (let i = 0; i < c; i++) candidates.push(k);
+                }
             }
         }
 
-        // Pick random candidate among equals to maintain entropy
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        // If forced to repeat (unavoidable), allow selection from all remaining buckets
+        if (candidates.length === 0) {
+            for (const k of keys) {
+                if (groups.get(k).length > 0) candidates.push(k);
+            }
+        }
+
+        // Pick candidate among equals
+        let pick;
+        if (!stable && seed === null) {
+            // maintain entropy for discovery/random feeds
+            pick = candidates[Math.floor(Math.random() * candidates.length)];
+        } else if (seed !== null) {
+            // Seeded pick for stable following variety
+            candidates.sort();
+            const pickIndex = Math.floor(seededRandom(seed + out.length) * candidates.length);
+            pick = candidates[pickIndex];
+        } else {
+            // strictly deterministic
+            candidates.sort();
+            pick = candidates[0];
+        }
         const bucket = groups.get(pick);
         const nextItem = bucket.shift();
         if (nextItem) {
@@ -771,7 +857,7 @@ app.get('/trends', async (req, res) => {
             }
         }
 
-        const scored = [];
+        let scored = [];
         for (const [topic, s] of tagStats) {
             const baseline = Math.max(s.baselineCount, 1);
             const uniqueUsers = s.recentUserIds.size;
@@ -787,6 +873,35 @@ app.get('/trends', async (req, res) => {
             }
         }
         scored.sort((a, b) => b.spikeScore - a.spikeScore);
+
+        // Fallback: If no results in the 24-hour window, search entire history for top hashtags
+        if (scored.length === 0) {
+            const allTimePosts = await prisma.post.findMany({
+                where: { content: { contains: '#' } },
+                select: { id: true, content: true, userId: true },
+                take: 5000,
+                orderBy: { createdAt: 'desc' }
+            });
+            const allTimeStats = new Map();
+            for (const post of allTimePosts) {
+                const tags = extractHashtags(post.content);
+                for (const tag of tags) {
+                    if (!tag || tag === '#') continue;
+                    allTimeStats.set(tag, (allTimeStats.get(tag) || 0) + 1);
+                }
+            }
+            for (const [topic, count] of allTimeStats) {
+                scored.push({
+                    topic,
+                    category: categoryLabel,
+                    posts: count,
+                    uniqueUsers: 1,
+                    spikeScore: count
+                });
+            }
+            scored.sort((a, b) => b.posts - a.posts);
+        }
+
         const top = scored.slice(0, limit).map((item, i) => ({
             id: `trend-${i}-${item.topic.replace('#', '')}`,
             category: item.category,
@@ -816,6 +931,18 @@ app.get('/explore', async (req, res) => {
             orderBy: { posts: 'desc' },
             take: parseInt(limit)
         });
+
+        // Fallback: If trend table is empty, return some default categories and popular hashtags formatted as trends
+        if (items.length === 0) {
+             const fallbackTrends = [
+                 { id: 'exp-1', category: 'Technology', topic: '#Programming', posts: 12500 },
+                 { id: 'exp-2', category: 'News', topic: '#WorldEvents', posts: 8900 },
+                 { id: 'exp-3', category: 'Entertainment', topic: '#Movies', posts: 45000 },
+                 { id: 'exp-4', category: 'Sports', topic: '#ChampionsLeague', posts: 32000 }
+             ];
+             return res.json(fallbackTrends);
+        }
+
         res.json(items);
 
     } catch (error) {
@@ -877,6 +1004,30 @@ app.get('/communities', async (req, res) => {
                 avatar: member.user.profile?.avatar
             }))
         }));
+
+        // Fallback: If no communities exist, return some default ones to keep UI populated
+        if (transformedCommunities.length === 0) {
+            return res.json([
+                {
+                    id: 'comm-1',
+                    name: 'Technology',
+                    description: 'Latest in tech and gadgets',
+                    membersCount: '1.2M',
+                    isJoined: false,
+                    posts: [],
+                    members: []
+                },
+                {
+                    id: 'comm-2',
+                    name: 'News',
+                    description: 'Global news and updates',
+                    membersCount: '850K',
+                    isJoined: false,
+                    posts: [],
+                    members: []
+                }
+            ]);
+        }
 
         res.json(transformedCommunities);
     } catch (error) {
@@ -1056,7 +1207,9 @@ app.get('/liked', optionalAuthenticateToken, async (req, res) => {
             include: { post: { include: postInclude } }
         });
         const now = new Date();
-        const posts = likes.map((l) => l.post).filter((p) => p && (!p.scheduledAt || new Date(p.scheduledAt) <= now));
+        const posts = backfillMediaUrls(
+            likes.map((l) => l.post).filter((p) => p && (!p.scheduledAt || new Date(p.scheduledAt) <= now))
+        );
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.json({ posts });
     } catch (err) {
@@ -1064,6 +1217,48 @@ app.get('/liked', optionalAuthenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch liked posts', posts: [] });
     }
 });
+
+// Derive legacy `mediaUrls` (JSON string array) from `media` rows when DB column is empty; recurse into replyTo.
+function urlsFromPostMedia(post) {
+    if (!post || !Array.isArray(post.media) || post.media.length === 0) return null;
+    // Some records return `mediaUrl`, others use legacy `url`.
+    const urls = post.media
+        .map((m) => m && (m.mediaUrl || m.url))
+        .filter(Boolean);
+    return urls.length ? urls : null;
+}
+
+function needsMediaUrlsBackfill(post, urls) {
+    if (!urls || urls.length === 0) return false;
+    const mu = post.mediaUrls;
+    if (mu == null || mu === undefined) return true;
+    if (typeof mu === 'string') {
+        const t = mu.trim();
+        if (!t || t === '[]' || t === 'null') return true;
+    }
+    return false;
+}
+
+function normalizePostMediaUrlsInTree(post) {
+    if (!post) return post;
+    const urls = urlsFromPostMedia(post);
+    let next = post;
+    if (needsMediaUrlsBackfill(post, urls)) {
+        next = { ...post, mediaUrls: JSON.stringify(urls) };
+    }
+    if (next.replyTo) {
+        const nested = normalizePostMediaUrlsInTree(next.replyTo);
+        if (nested !== next.replyTo) {
+            next = { ...next, replyTo: nested };
+        }
+    }
+    return next;
+}
+
+function backfillMediaUrls(posts) {
+    if (!Array.isArray(posts)) return posts;
+    return posts.map((p) => normalizePostMediaUrlsInTree(p));
+}
 
 // Get All Posts (Feed compatible) - public when no auth; with auth includes bookmarks
 app.get('/', optionalAuthenticateToken, async (req, res) => {
@@ -1075,7 +1270,7 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
         res.setHeader('Expires', '0');
         res.setHeader('Surrogate-Control', 'no-store');
 
-        const { userId, repliesOnly, excludeReplies, topLevelOnly, limit, offset, skip, cursor } = req.query;
+        const { userId, repliesOnly, excludeReplies, topLevelOnly, limit, offset, skip, cursor, seed } = req.query;
         const currentUserId = req.user?.userId || req.user?.id || null;
 
         const where = { ...publishedPostFilter() };
@@ -1156,28 +1351,137 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
              
              // Shuffle only for discovery/general feeds (not specific users/communities)
              const shouldShuffle = !userId && !req.query.communityId && !req.query.search;
-             const posts = shouldShuffle ? interleaveRandomFeed(fetchedPosts) : fetchedPosts;
+             const posts = backfillMediaUrls(shouldShuffle ? interleaveRandomFeed(fetchedPosts, { seed: seed ? parseInt(seed, 10) : null }) : fetchedPosts);
              
              return res.json({ posts, nextCursor, hasMore });
         }
+        // Optimized Retrieval Strategy: Discovery/For-You Mix (50% Recent, 30% Popular, 20% Random)
+        const isDiscovery = !userId && !req.query.communityId && !req.query.search;
+        
+        if (isDiscovery && seed) {
+            const recentLimit = Math.ceil(take * 0.5);
+            const popularLimit = Math.ceil(take * 0.3);
+            const randomLimit = Math.max(1, take - recentLimit - popularLimit);
 
-        // Standard Offset pagination (default and more reliable for "newest first" hard reloads)
-        const offsetRows = await prisma.post.findMany({
+            // 1. Decode Fused Cursor
+            let cursors = { recentOffset: 0, popularOffset: 0, randomOffset: 0 };
+            if (cursor) {
+                try {
+                    const decoded = Buffer.from(String(cursor), 'base64').toString();
+                    cursors = { ...cursors, ...JSON.parse(decoded) };
+                } catch (e) {
+                    console.error('[ContentService] Cursor Parse Error:', e);
+                }
+            }
+
+            const seedInt = parseInt(String(seed).replace(/[^0-9]/g, '').slice(0, 8), 10) || 0;
+            console.log(`[ContentService] DISCOVERY FEED: seed=${seed}, seedInt=${seedInt}, cursor=${cursor ? 'YES' : 'NO'}`);
+
+            // 2. Fetch Streams
+            const lastMonth = new Date();
+            lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+            const totalCount = await prisma.post.count({ where });
+            const driftLimit = Math.min(totalCount, 5000);
+
+            // Use seed to drift the starting point of "Recent" and "Popular" for variety
+            const recentStart = cursors.recentOffset || (seedInt % Math.max(1, driftLimit)); // Drift within top 5000
+            const popularStart = cursors.popularOffset || (seedInt % Math.max(1, driftLimit)); // Drift within top 5000
+
+            const [recentRows, popularRows] = await Promise.all([
+                prisma.post.findMany({
+                    where,
+                    take: recentLimit + 1,
+                    skip: recentStart,
+                    orderBy: { createdAt: 'desc' },
+                    include: includeOpt
+                }),
+                prisma.post.findMany({
+                    where: {
+                        ...where,
+                        createdAt: { gte: lastMonth } // Limit popularity scan to recent posts
+                    },
+                    take: popularLimit + 1,
+                    skip: popularStart,
+                    orderBy: [
+                        { likes: { _count: 'desc' } },
+                        { createdAt: 'desc' }
+                    ],
+                    include: includeOpt
+                })
+            ]);
+
+            // Random stream uses a stable offset derived from seed + session progress
+            const initialRandomOffset = seedInt % Math.max(1, totalCount - take);
+            const currentRandomOffset = (initialRandomOffset + (cursors.randomOffset || 0)) % Math.max(1, totalCount);
+
+            const randomRows = await prisma.post.findMany({
+                where,
+                take: randomLimit + 1,
+                skip: currentRandomOffset,
+                orderBy: { id: 'asc' }, // Stable order for offset pagination
+                include: includeOpt
+            });
+
+            // 3. Merge and Deduplicate
+            const seenIds = new Set();
+            const merged = [];
+            const addBatch = (batch, limit) => {
+                let count = 0;
+                for (const p of batch) {
+                    if (count >= limit) break;
+                    if (!seenIds.has(p.id)) {
+                        seenIds.add(p.id);
+                        merged.push(p);
+                        count++;
+                    }
+                }
+            };
+
+            addBatch(recentRows, recentLimit);
+            addBatch(popularRows, popularLimit);
+            addBatch(randomRows, randomLimit);
+
+            // 4. Update Cursors
+            const nextCursors = {
+                recentOffset: recentStart + recentLimit,
+                popularOffset: popularStart + popularLimit,
+                randomOffset: (cursors.randomOffset || 0) + randomLimit
+            };
+
+            hasMore = recentRows.length > recentLimit || popularRows.length > popularLimit || (nextCursors.randomOffset < totalCount);
+            nextCursor = hasMore ? Buffer.from(JSON.stringify(nextCursors)).toString('base64') : null;
+
+            // Re-shuffle to prevent grouping same types or same users
+            const shuffled = backfillMediaUrls(interleaveRandomFeed(merged, { seed: seedInt }));
+            
+            return res.json({ 
+                posts: shuffled, 
+                nextCursor, 
+                hasMore 
+            });
+        }
+
+        // Fallback: Standard Pagination (Profiles, Searches, Bookmarks, or No Seed)
+        fetchedPosts = [];
+        nextCursor = null;
+        hasMore = false;
+        const orderByCombined = [{ createdAt: 'desc' }, { id: 'desc' }];
+
+        const rows = await prisma.post.findMany({
             where,
             take: take + 1,
-            skip: skipCount,
-            orderBy,
+            ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : { skip: skipCount }),
+            orderBy: orderByCombined,
             include: includeOpt
         });
-        hasMore = offsetRows.length > take;
-        fetchedPosts = hasMore ? offsetRows.slice(0, take) : offsetRows;
+
+        hasMore = rows.length > take;
+        fetchedPosts = hasMore ? rows.slice(0, take) : rows;
         nextCursor = hasMore && fetchedPosts.length ? fetchedPosts[fetchedPosts.length - 1].id : null;
 
-        // Shuffle only for discovery/general feeds
-        const shouldShuffle = !userId && !req.query.communityId && !req.query.search;
-        const posts = shouldShuffle ? interleaveRandomFeed(fetchedPosts) : fetchedPosts;
-
-        res.json({ posts, nextCursor, hasMore });
+        const resultPosts = backfillMediaUrls(isDiscovery ? interleaveRandomFeed(fetchedPosts, { seed: seed ? parseInt(seed, 10) : null }) : fetchedPosts);
+        res.json({ posts: resultPosts, nextCursor, hasMore });
     } catch (error) {
         console.error('[ContentService] Feed Error:', error);
         if (error && error.code === 'P2022') {
@@ -1197,7 +1501,7 @@ app.get('/following', authenticateToken, async (req, res) => {
         res.setHeader('Surrogate-Control', 'no-store');
 
         const currentUserId = req.user.userId;
-        const { limit, offset, skip, excludeReplies, topLevelOnly } = req.query;
+        const { limit, offset, skip, cursor, excludeReplies, topLevelOnly, seed } = req.query;
 
         console.log(`[ContentService] Following Feed Params:`, { excludeReplies, query: req.query });
 
@@ -1210,8 +1514,9 @@ app.get('/following', authenticateToken, async (req, res) => {
         const followingIds = following.map(f => f.followingId);
 
         const takeRaw = parseInt(limit, 10);
-        const take = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 20;
-        const skipRaw = parseInt(offset ?? skip, 10);
+        const requestedLimit = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 20;
+        
+        const skipRaw = parseInt(cursor ?? offset ?? skip, 10);
         const skipCount = Number.isFinite(skipRaw) && skipRaw > 0 ? skipRaw : 0;
 
         const publishedFilter = publishedPostFilter();
@@ -1232,11 +1537,32 @@ app.get('/following', authenticateToken, async (req, res) => {
 
         const orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
 
-        const fetchedPosts = await prisma.post.findMany({
+        // Optimized Retrieval Strategy:
+        // Use a single query with the composite index [userId, createdAt]
+        // This is much faster than 50 parallel queries and handles large follow lists efficiently.
+        const rawBatch = await prisma.post.findMany({
             where,
-            take,
+            take: 1000,
             skip: skipCount,
             orderBy,
+            select: { id: true, userId: true, createdAt: true }
+        });
+
+        // Step 2 - Interleave the IDs to ensure user variety (stable order for following tab if seed provided)
+        const interleavedRaw = interleaveRandomFeed(rawBatch, { 
+            seed: seed ? parseInt(seed, 10) : null,
+            stable: !seed // if no seed, use strict deterministic mode
+        });
+        
+        // Step 3 - Take the top N IDs and fetch their full content
+        const targetIds = interleavedRaw.slice(0, requestedLimit).map(p => p.id);
+        
+        // hasMore is true if we have more interleaved posts left, OR if the rawBatch was full (suggesting more in DB)
+        const hasMore = interleavedRaw.length > requestedLimit || rawBatch.length >= 1000;
+        const nextCursor = hasMore ? (skipCount + requestedLimit) : null;
+
+        const posts = await prisma.post.findMany({
+            where: { id: { in: targetIds } },
             include: {
                 user: { include: { profile: true } },
                 media: true,
@@ -1254,12 +1580,12 @@ app.get('/following', authenticateToken, async (req, res) => {
             }
         });
 
-        // Apply interleaving to Following feed as well for professional look
-        const posts = interleaveRandomFeed(fetchedPosts);
+        // Re-apply interleaving order to the final result
+        const postMap = new Map(posts.map(p => [p.id, p]));
+        const orderedPosts = targetIds.map(id => postMap.get(id)).filter(Boolean);
 
-
-        // Sanitize users in posts (remove passwordHash)
-        const safePosts = posts.map(post => {
+        // Sanitize users in posts
+        const safePosts = orderedPosts.map(post => {
             if (post.user) {
                 const { passwordHash, ...safeUser } = post.user;
                 post.user = safeUser;
@@ -1267,7 +1593,7 @@ app.get('/following', authenticateToken, async (req, res) => {
             return post;
         });
 
-        res.json({ posts: safePosts });
+        res.json({ posts: backfillMediaUrls(safePosts), nextCursor, hasMore });
     } catch (error) {
         console.error('Following Feed Error:', error);
         res.status(500).json({ error: 'Failed to fetch following feed' });
@@ -1459,7 +1785,7 @@ app.get('/:id/replies', async (req, res) => {
                 _count: { select: { replies: true, likes: true, retweets: true } }
             }
         });
-        res.json(replies);
+        res.json(backfillMediaUrls(replies));
     } catch (error) {
         console.error('Get Replies Error:', error);
         res.status(500).json({ error: 'Failed to fetch replies' });
@@ -1536,43 +1862,72 @@ app.delete('/:id/bookmark', authenticateToken, async (req, res) => {
 // Get Bookmarks
 app.get('/bookmarks', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
-    const { limit = 20, offset = 0 } = req.query;
+    const { limit = 20, offset = 0, cursor, search } = req.query;
 
     try {
-        const bookmarks = await prisma.bookmark.findMany({
-            where: { userId },
-            include: {
-                post: {
-                    include: {
-                        user: { include: { profile: true } },
-                        media: true,
-                        _count: {
-                            select: { likes: true, retweets: true, replies: true }
-                        }
+        const take = parseInt(limit) || 20;
+        const skipCount = parseInt(offset) || 0;
+
+        let where;
+
+        if (search && search.trim()) {
+            const s = search.trim();
+            // Must be bookmarked by user AND match search across content/author name/handle
+            where = {
+                AND: [
+                    { bookmarks: { some: { userId } } },
+                    {
+                        OR: [
+                            { content: { contains: s, mode: 'insensitive' } },
+                            { user: { profile: { name: { contains: s, mode: 'insensitive' } } } },
+                            { user: { profile: { handle: { contains: s, mode: 'insensitive' } } } }
+                        ]
                     }
-                }
+                ]
+            };
+        } else {
+            where = { bookmarks: { some: { userId } } };
+        }
+
+        const posts = await prisma.post.findMany({
+            where,
+            include: {
+                user: { include: { profile: true } },
+                media: true,
+                _count: {
+                    select: { likes: true, retweets: true, replies: true }
+                },
+                likes: { where: { userId }, select: { id: true } },
+                bookmarks: { where: { userId }, select: { id: true } }
             },
-            take: parseInt(limit),
-            skip: parseInt(offset),
+            take: take + 1,
+            ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : { skip: skipCount }),
             orderBy: { createdAt: 'desc' }
         });
 
-        const posts = bookmarks
-            .map(b => b.post)
-            .filter(Boolean)
-            .map(post => {
-                if (post.user) {
-                    const { passwordHash, ...safeUser } = post.user;
-                    return { ...post, user: safeUser };
-                }
-                return post;
-            });
-        res.json({ posts });
+        const hasMore = posts.length > take;
+        const fetchedPosts = hasMore ? posts.slice(0, take) : posts;
+        const nextCursor = hasMore && fetchedPosts.length ? fetchedPosts[fetchedPosts.length - 1].id : null;
+
+        const safePosts = backfillMediaUrls(fetchedPosts.map(post => {
+            if (post.user) {
+                const { passwordHash, ...safeUser } = post.user;
+                return { ...post, user: safeUser };
+            }
+            return post;
+        }));
+
+        res.json({ 
+            posts: safePosts,
+            nextCursor,
+            hasMore
+        });
     } catch (error) {
         console.error('Get Bookmarks Error:', error);
-        res.json({ posts: [] });
+        res.status(500).json({ posts: [], hasMore: false, nextCursor: null, error: error.message });
     }
 });
+
 
 // Get Notifications
 app.get('/notifications', authenticateToken, async (req, res) => {
@@ -1717,7 +2072,7 @@ app.get('/:id', optionalAuthenticateToken, async (req, res) => {
             include: postInclude
         });
         if (!post) return res.status(404).json({ error: `Post not found (ID: ${req.params.id})` });
-        res.json(post);
+        res.json(normalizePostMediaUrlsInTree(post));
     } catch (error) {
         console.error('Get Post Error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -1739,18 +2094,110 @@ app.put('/notifications/read-all', authenticateToken, async (req, res) => {
     }
 });
 
-const http = require('http');
-// Create server with manual request handler to bypass Express middleware for WebSockets
-const server = http.createServer((req, res) => {
-    // If it's a socket.io request (polling or upgrade), don't pass to Express
-    // This avoids URL rewrite and global Auth middleware interference
-    if (req.url && (req.url.includes('/api/posts/ws') || req.url.includes('/ws/live'))) {
-        return; // Let socket.io handle it
+// GET /:postId/analytics - per-post analytics (owner only)
+app.get('/:postId/analytics', authenticateToken, async (req, res) => {
+    const { postId } = req.params;
+    const currentUserId = req.user?.userId || req.user?.id || null;
+
+    if (!currentUserId) {
+        return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
     }
-    app(req, res);
+
+    try {
+        const post = await prisma.post.findUnique({
+            where: { id: postId },
+            include: {
+                user: { include: { profile: true } },
+                media: true,
+                _count: {
+                    select: {
+                        likes: true,
+                        retweets: true,
+                        replies: true,
+                        bookmarks: true,
+                    }
+                },
+                likes: { where: { userId: currentUserId }, select: { id: true } },
+                bookmarks: { where: { userId: currentUserId }, select: { id: true } },
+            }
+        });
+
+        if (!post) {
+            return res.status(404).json({ status: false, message: 'Post not found', data: null });
+        }
+
+        // Only the post owner can view analytics
+        if (post.userId !== currentUserId) {
+            return res.status(403).json({ status: false, message: 'You can only view analytics for your own posts', data: null });
+        }
+
+
+        // Fetch recent likers (up to 5) so the modal can show faces
+        const recentLikers = await prisma.like.findMany({
+            where: { postId },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        profile: { select: { handle: true, name: true, avatar: true, verified: true } }
+                    }
+                }
+            }
+        });
+
+        const likes = post._count.likes;
+        const reposts = post._count.retweets;
+        const replies = post._count.replies;
+        const bookmarks = post._count.bookmarks;
+        const engagements = likes + reposts + replies + bookmarks;
+
+        const data = {
+            postId: post.id,
+            author: {
+                id: post.user?.id,
+                name: post.user?.profile?.name || post.user?.handle || 'Unknown',
+                handle: post.user?.profile?.handle || 'unknown',
+                avatar: post.user?.profile?.avatar || null,
+                verified: post.user?.profile?.verified || false,
+            },
+            content: post.content || '',
+            createdAt: post.createdAt,
+            media: post.media || [],
+            metrics: {
+                likes,
+                reposts,
+                replies,
+                bookmarks,
+                engagements,
+                // Views tracked via `views` field if it exists, or fallback to 0
+                impressions: post.views || 0,
+                profileVisits: 0,   // Not tracked per-post yet
+                detailExpands: 0,   // Not tracked per-post yet
+                linkClicks: 0,      // Not tracked per-post yet
+            },
+            recentLikers: recentLikers.map(l => ({
+                id: l.user?.id,
+                name: l.user?.profile?.name || l.user?.handle || 'User',
+                handle: l.user?.profile?.handle || 'unknown',
+                avatar: l.user?.profile?.avatar || null,
+                verified: l.user?.profile?.verified || false,
+            }))
+        };
+
+        return res.json({ status: true, message: 'Analytics fetched', data });
+    } catch (err) {
+        console.error('[ContentService] Post analytics error:', err);
+        return res.status(500).json({ status: false, message: 'Failed to fetch analytics', data: null });
+    }
 });
+
+const http = require('http');
 const websocketService = require('./services/websocket.service');
 const { startScheduledPostPublisher } = require('./scheduledPostPublisher');
+
+const server = http.createServer(app);
 websocketService.init(server);
 
 const bindHost = process.env.BIND_HOST || '0.0.0.0';

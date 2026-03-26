@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { authService } from '@/services/api'
+import { authService, userService } from '@/services/api'
 
 import i18n from '@/i18n'
 
@@ -16,6 +16,12 @@ export function AuthProvider({ children }) {
                 try {
                     const userData = await authService.getCurrentUser()
                     if (userData) {
+                        try {
+                            const fullProfile = await userService.getMyProfile()
+                            if (fullProfile) Object.assign(userData, fullProfile)
+                        } catch (e) {
+                            console.warn('Could not fetch full user profile during auth check:', e)
+                        }
                         setUser(userData)
                         if (userData.preferredLanguage) {
                             i18n.changeLanguage(userData.preferredLanguage)

@@ -14,7 +14,7 @@ import { getMediaUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
 
-export function ShareModal({ isOpen, onClose, postUrl }) {
+export function ShareModal({ isOpen, onClose, post, postUrl }) {
     const { user: authUser } = useAuth()
     const [searchQuery, setSearchQuery] = useState("")
     const [conversations, setConversations] = useState([])
@@ -100,8 +100,31 @@ export function ShareModal({ isOpen, onClose, postUrl }) {
         
         try {
             setSendingId(recipientId)
+            
+            // Prepare shared post data
+            const sharedPostData = {
+                id: post.id,
+                text: post.text,
+                createdAt: post.createdAt,
+                user: {
+                    id: post.user?.id,
+                    name: post.user?.profile?.name || post.user?.name,
+                    handle: post.user?.profile?.handle || post.user?.handle,
+                    avatar: post.user?.profile?.avatar,
+                    verified: post.user?.profile?.verified
+                },
+                media: post.media?.[0] ? {
+                    url: post.media[0].url || post.media[0].mediaUrl || post.media[0],
+                    type: post.media[0].type || post.media[0].mediaType || 'image',
+                    thumbnailUrl: post.media[0].thumbnailUrl
+                } : null,
+                postUrl: postUrl || `${window.location.origin}/post/${post.id}`
+            }
+
+            const messageContent = `[SHARED_POST:${JSON.stringify(sharedPostData)}]`
+
             // Use REST fallback for sharing as we don't necessarily have a socket here
-            await messagingService.sendMessage(recipientId, postUrl)
+            await messagingService.sendMessage(recipientId, messageContent)
             
             setSentIds(prev => new Set([...prev, recipientId]))
             toast.success("Shared successfully")

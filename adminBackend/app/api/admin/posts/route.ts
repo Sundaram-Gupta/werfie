@@ -13,74 +13,88 @@ export async function GET(req: NextRequest) {
         let posts: any[];
         let totalPosts: number;
 
+        // Build where clause
+        const search = searchParams.get('search') || '';
+        const hasMedia = searchParams.get('hasMedia') === 'true';
+
+        const whereClause: any = {};
+        if (search) {
+            whereClause.content = { contains: search, mode: 'insensitive' };
+        }
+        if (hasMedia) {
+            whereClause.media = { some: {} };
+        }
+
         if (filter === 'reported') {
-            // Get post IDs that have at least one report
             const reportedRows = await prisma.report.findMany({
                 where: { targetType: 'post' },
                 select: { targetId: true },
                 distinct: ['targetId']
             });
             const reportedPostIds = reportedRows.map(r => r.targetId);
-            totalPosts = reportedPostIds.length;
-
+            whereClause.id = { in: reportedPostIds };
+            
             if (reportedPostIds.length === 0) {
                 posts = [];
+                totalPosts = 0;
             } else {
-                try {
-                    posts = await prisma.post.findMany({
-                        where: { id: { in: reportedPostIds } },
-                        include: {
-                            user: {
-                                include: { profile: true }
+                [posts, totalPosts] = await Promise.all([
+                    (async () => {
+                        try {
+                            return prisma.post.findMany({
+                                where: whereClause,
+                                include: {
+                                    user: { include: { profile: true } },
+                                    media: true
+                                },
+                                orderBy: { createdAt: 'desc' },
+                                skip,
+                                take: limit,
+                            });
+                        } catch (err: any) {
+                            if (err?.code === 'P2022') {
+                                return prisma.post.findMany({
+                                    where: whereClause,
+                                    include: { user: true, media: true },
+                                    orderBy: { createdAt: 'desc' },
+                                    skip,
+                                    take: limit,
+                                });
                             }
-                        },
-                        orderBy: { createdAt: 'desc' },
-                        skip,
-                        take: limit,
-                    });
-                } catch (profileErr: any) {
-                    if (profileErr?.code === 'P2022') {
-                        posts = await prisma.post.findMany({
-                            where: { id: { in: reportedPostIds } },
-                            include: { user: true },
-                            orderBy: { createdAt: 'desc' },
-                            skip,
-                            take: limit,
-                        });
-                        posts = posts.map((p: any) => ({ ...p, user: { ...p.user, profile: null } }));
-                    } else {
-                        throw profileErr;
-                    }
-                }
+                            throw err;
+                        }
+                    })(),
+                    prisma.post.count({ where: whereClause })
+                ]);
             }
         } else {
             [posts, totalPosts] = await Promise.all([
                 (async () => {
                     try {
                         return prisma.post.findMany({
+                            where: whereClause,
                             include: {
-                                user: {
-                                    include: { profile: true }
-                                }
+                                user: { include: { profile: true } },
+                                media: true
                             },
                             orderBy: { createdAt: 'desc' },
                             skip,
                             take: limit,
                         });
-                    } catch (profileErr: any) {
-                        if (profileErr?.code === 'P2022') {
-                            const p = await prisma.post.findMany({
-                                include: { user: true },
+                    } catch (err: any) {
+                        if (err?.code === 'P2022') {
+                            return prisma.post.findMany({
+                                where: whereClause,
+                                include: { user: true, media: true },
                                 orderBy: { createdAt: 'desc' },
                                 skip,
                                 take: limit,
                             });
-                            return p.map((u: any) => ({ ...u, user: { ...u.user, profile: null } }));
                         }
-                        throw profileErr;
+                        throw err;
                     }
                 })(),
-                prisma.post.count()
+                prisma.post.count({ where: whereClause })
             ]);
         }
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle, ChevronRight, ShieldAlert, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { getCrises } from '@/services/crisis.api';
-import { io } from 'socket.io-client';
+import { createSocketWithRecovery } from '@/lib/socketWithRecovery';
 import { getGatewayUrl } from '@/lib/api';
 
 const CrisisBanner = () => {
@@ -24,8 +24,7 @@ const CrisisBanner = () => {
 
         // Socket for real-time alerts
         const token = localStorage.getItem('accessToken');
-        const crisisSocket = io(`${getGatewayUrl()}/crisis-live`, {
-            path: '/ws/live',
+        const crisisSocket = createSocketWithRecovery(`${getGatewayUrl()}/crisis-live`, {
             auth: { token }
         });
 

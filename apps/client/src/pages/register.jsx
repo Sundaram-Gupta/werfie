@@ -80,9 +80,9 @@ export default function Register() {
                 {/* Logo */}
                 <div className="flex justify-center mb-8">
                     <img
-                        src="/websplash.png"
+                        src="/werfie.png"
                         alt="Werfie Logo"
-                        className="w-12 h-12 dark:invert"
+                        className="w-12 h-12"
                     />
                 </div>
 

@@ -68,4 +68,4 @@ const AvatarFallback = React.forwardRef(({ className, children, ...props }, ref)
 })
 AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
 
-export { Avatar, AvatarImage, AvatarFallback }
+export { Avatar, AvatarImage, AvatarFallback, getAvatarColor }

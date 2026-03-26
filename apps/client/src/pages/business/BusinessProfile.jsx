@@ -1,11 +1,14 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Save, Building, MapPin, Globe, Mail, Clock, ShieldCheck, Upload } from "lucide-react"
-import { businessService } from "@/services/api"
+import { businessService, userService, mediaService } from "@/services/api"
 import { toast } from "sonner"
+import { useAuth } from "@/context/AuthContext"
+import { getMediaUrl } from "@/lib/utils"
 
 export default function BusinessProfile() {
+    const { user, updateUser } = useAuth()
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
     const [formData, setFormData] = useState({
@@ -16,6 +19,13 @@ export default function BusinessProfile() {
         location: "",
         hours: ""
     })
+    const [logoUrl, setLogoUrl] = useState("")
+    const [bannerUrl, setBannerUrl] = useState("")
+    const [uploadingLogo, setUploadingLogo] = useState(false)
+    const [uploadingBanner, setUploadingBanner] = useState(false)
+
+    const logoInputRef = useRef(null)
+    const bannerInputRef = useRef(null)
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -41,16 +51,86 @@ export default function BusinessProfile() {
         fetchProfile()
     }, [])
 
+    useEffect(() => {
+        if (!user) return
+        setLogoUrl(user.profile?.avatar || user.avatar || "")
+        setBannerUrl(user.profile?.banner || user.banner || "")
+    }, [user])
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value })
+    }
+
+    const handleImageUpload = async (file, type) => {
+        if (!file) return
+        if (!file.type?.startsWith("image/")) {
+            toast.error("Please select an image file")
+            return
+        }
+
+        if (type === "logo") setUploadingLogo(true)
+        if (type === "banner") setUploadingBanner(true)
+
+        try {
+            const result = await mediaService.uploadMedia(file)
+            const uploadedUrl = result?.url ?? result?.data?.url ?? result?.data?.mediaUrl
+            const finalUrl = typeof uploadedUrl === "string" ? uploadedUrl : (uploadedUrl?.url || "")
+            if (!finalUrl) throw new Error("Upload succeeded but URL missing")
+            if (type === "logo") setLogoUrl(finalUrl)
+            if (type === "banner") setBannerUrl(finalUrl)
+            toast.success(type === "logo" ? "Logo uploaded" : "Banner uploaded")
+        } catch (err) {
+            console.error("Image upload failed:", err)
+            toast.error("Failed to upload image")
+        } finally {
+            if (type === "logo") setUploadingLogo(false)
+            if (type === "banner") setUploadingBanner(false)
+        }
     }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         setLoading(true)
         try {
-            await businessService.updateProfile(formData)
+            // Only send fields that the backend actually supports.
+            const businessPayload = {
+                companyName: (formData.companyName || "").trim(),
+                industry: formData.industry?.trim() || undefined,
+                location: formData.location?.trim() || undefined,
+                website: formData.website?.trim() || undefined
+            }
+
+            await businessService.updateProfile(businessPayload)
+
+            // Persist branding (logo/banner) to the user's public Profile.
+            if (user?.id) {
+                await userService.updateProfile(user.id, {
+                    avatarUrl: logoUrl || undefined,
+                    bannerUrl: bannerUrl || undefined
+                })
+            }
+
             toast.success("Business profile saved successfully!")
+
+            // Refresh UI from backend so previews stay in sync.
+            try {
+                const refreshed = await businessService.getProfile()
+                if (refreshed) {
+                    setFormData({
+                        companyName: refreshed.companyName || "",
+                        industry: refreshed.industry || "",
+                        email: refreshed.email || "",
+                        website: refreshed.website || "",
+                        location: refreshed.location || "",
+                        hours: refreshed.hours || ""
+                    })
+                }
+                if (user?.id) {
+                    const me = await userService.getMyProfile()
+                    if (me) updateUser(me)
+                }
+                // eslint-disable-next-line no-empty
+            } catch (_) {}
         } catch (err) {
             console.error('Failed to save business profile:', err)
             toast.error(err.response?.data?.error || "Failed to save business profile")
@@ -65,17 +145,22 @@ export default function BusinessProfile() {
 
     return (
         <div className="max-w-2xl mx-auto">
-            <div className="mb-6 flex justify-between items-center">
-                <div>
-                    <h2 className="text-xl font-bold">Business Profile</h2>
-                    <p className="text-sm text-muted-foreground">Manage your public business information</p>
+            <form onSubmit={handleSubmit}>
+                <div className="mb-6 flex justify-between items-center">
+                    <div>
+                        <h2 className="text-xl font-bold">Business Profile</h2>
+                        <p className="text-sm text-muted-foreground">Manage your public business information</p>
+                    </div>
+                    <Button
+                        className="rounded-full bg-blue-500 text-white"
+                        disabled={loading || uploadingLogo || uploadingBanner}
+                        type="submit"
+                    >
+                        {loading ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
+                    </Button>
                 </div>
-                <Button className="rounded-full bg-blue-500 text-white" disabled={loading} onClick={handleSubmit}>
-                    {loading ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
-                </Button>
-            </div>
 
-            <div className="space-y-6">
+                <div className="space-y-6">
                 {/* Verification Status */}
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -140,17 +225,69 @@ export default function BusinessProfile() {
                 <div className="bg-zinc-900/50 border border-border/50 rounded-xl p-6">
                     <h3 className="font-bold mb-4">Branding</h3>
                     <div className="flex gap-4">
-                        <div className="w-24 h-24 bg-zinc-800 rounded-full flex flex-col items-center justify-center border border-dashed border-muted-foreground/50 hover:border-primary cursor-pointer transition-colors">
-                            <Upload className="w-6 h-6 mb-1 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground">Logo</span>
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => logoInputRef.current?.click()}
+                            onKeyDown={(e) => e.key === "Enter" && logoInputRef.current?.click()}
+                            className="w-24 h-24 bg-zinc-800 rounded-full flex items-center justify-center border border-dashed border-muted-foreground/50 hover:border-primary cursor-pointer transition-colors overflow-hidden"
+                        >
+                            {logoUrl ? (
+                                <img src={getMediaUrl(logoUrl)} alt="Logo" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center">
+                                    <Upload className="w-6 h-6 mb-1 text-muted-foreground" />
+                                    <span className="text-[10px] text-muted-foreground">Logo</span>
+                                </div>
+                            )}
                         </div>
+                        <input
+                            ref={logoInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                void handleImageUpload(file, "logo")
+                                // allow re-uploading the same file
+                                e.target.value = ""
+                            }}
+                        />
                         <div className="flex-1 h-24 bg-zinc-800 rounded-xl flex flex-col items-center justify-center border border-dashed border-muted-foreground/50 hover:border-primary cursor-pointer transition-colors">
-                            <Upload className="w-6 h-6 mb-1 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground">Banner Image</span>
+                            <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => bannerInputRef.current?.click()}
+                                onKeyDown={(e) => e.key === "Enter" && bannerInputRef.current?.click()}
+                                className="w-full h-full flex items-center justify-center"
+                            >
+                                {bannerUrl ? (
+                                    <img src={getMediaUrl(bannerUrl)} alt="Banner" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center">
+                                        <Upload className="w-6 h-6 mb-1 text-muted-foreground" />
+                                        <span className="text-[10px] text-muted-foreground">Banner Image</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+                        <input
+                            ref={bannerInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                void handleImageUpload(file, "banner")
+                                e.target.value = ""
+                            }}
+                        />
                     </div>
                 </div>
             </div>
+            </form>
         </div>
     )
 }

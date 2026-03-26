@@ -21,6 +21,8 @@ export const POST = withAuth(async (request) => {
         return apiSuccess(message, 'Message sent successfully')
     } catch (error) {
         console.error(error)
-        return apiError('Failed to send message', 500)
+        const message = error?.message || 'Failed to send message'
+        const status = /not accepting messages|unauthorized/i.test(message) ? 403 : 500
+        return apiError(message, status)
     }
 })

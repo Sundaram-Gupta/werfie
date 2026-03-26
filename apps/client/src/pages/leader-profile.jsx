@@ -51,6 +51,25 @@ export default function LeaderProfilePage() {
         );
     }
 
+    if (!leader.verifiedStatus) {
+        return (
+            <div className="flex-1 w-[600px] min-h-screen border-x border-border/50 bg-background pb-20 sm:pb-0">
+                <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border/50 px-4 py-3 flex items-center gap-6">
+                    <button onClick={() => navigate(-1)} className="p-2 hover:bg-muted rounded-full transition">
+                        <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <div>
+                        <h1 className="text-xl font-bold">World Leader</h1>
+                        <p className="text-xs text-muted-foreground">Approval pending</p>
+                    </div>
+                </header>
+                <div className="p-8 text-center text-muted-foreground">
+                    This institutional request has not been approved yet, so official posts are not available.
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="flex-1 w-[600px] min-h-screen border-x border-border/50 bg-background pb-20 sm:pb-0">
             {/* Header */}

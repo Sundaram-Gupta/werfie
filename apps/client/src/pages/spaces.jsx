@@ -17,9 +17,19 @@ export default function Spaces() {
         const fetchSpaces = async () => {
             try {
                 const data = await searchService.getSpaces()
-                setSpacesData(data)
+
+                // Normalize response shape so render never crashes.
+                // Expected by UI: { upcoming: [...] }
+                const upcomingList = Array.isArray(data?.upcoming)
+                    ? data.upcoming
+                    : Array.isArray(data)
+                      ? data
+                      : []
+
+                setSpacesData({ upcoming: upcomingList })
             } catch (error) {
                 console.error("Failed to load spaces", error)
+                setSpacesData({ upcoming: [] })
             } finally {
                 setLoading(false)
             }
@@ -27,7 +37,7 @@ export default function Spaces() {
         fetchSpaces()
     }, [])
 
-    const { upcoming } = spacesData
+    const upcoming = Array.isArray(spacesData?.upcoming) ? spacesData.upcoming : []
 
 
     // State
@@ -51,9 +61,15 @@ export default function Spaces() {
     const fetchSpaces = async () => {
         try {
             const data = await spaceService.getAll()
-            setSpacesData(data)
+            const upcomingList = Array.isArray(data?.upcoming)
+                ? data.upcoming
+                : Array.isArray(data)
+                  ? data
+                  : []
+            setSpacesData({ upcoming: upcomingList })
         } catch (error) {
             console.error("Failed to load spaces", error)
+            setSpacesData({ upcoming: [] })
         } finally {
             setLoading(false)
         }
@@ -416,7 +432,7 @@ export default function Spaces() {
                                 <div className="relative">
                                     <Avatar className="w-14 h-14 rounded-2xl border-2 border-transparent group-hover:border-primary/50 transition">
                                         <AvatarImage src={space.avatar} />
-                                        <AvatarFallback>{space.host[0]}</AvatarFallback>
+                                        <AvatarFallback>{space?.host?.[0] || 'U'}</AvatarFallback>
                                     </Avatar>
                                     {i === 0 && (
                                         <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-md px-1.5 py-0.5 border-2 border-black flex items-center gap-1 shadow-lg">

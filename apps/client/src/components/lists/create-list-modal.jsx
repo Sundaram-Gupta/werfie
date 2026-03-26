@@ -8,16 +8,60 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Camera } from "lucide-react"
-import { useState } from "react"
-import { listService } from "@/services/api"
+import { Camera, ImagePlus } from "lucide-react"
+import { useState, useRef } from "react"
+import { listService, mediaService } from "@/services/api"
 import { toast } from "sonner"
+import { getMediaUrl } from "@/lib/utils"
 
 export function CreateListModal({ open, onOpenChange, onSuccess }) {
     const [name, setName] = useState("")
     const [description, setDescription] = useState("")
     const [isPrivate, setIsPrivate] = useState(false)
+    const [banner, setBanner] = useState("")
+    const [avatar, setAvatar] = useState("")
     const [loading, setLoading] = useState(false)
+    const [uploading, setUploading] = useState(false)
+    const bannerInputRef = useRef(null)
+    const avatarInputRef = useRef(null)
+
+    const handleBannerUpload = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file?.type?.startsWith("image/")) {
+            toast.error("Please select an image file")
+            return
+        }
+        setUploading(true)
+        try {
+            const result = await mediaService.uploadMedia(file)
+            const url = result?.url ?? result?.data?.url ?? result
+            if (url) setBanner(typeof url === "string" ? url : url.url)
+        } catch (err) {
+            console.error("Banner upload failed:", err)
+            toast.error("Failed to upload banner")
+        } finally {
+            setUploading(false)
+        }
+    }
+
+    const handleAvatarUpload = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file?.type?.startsWith("image/")) {
+            toast.error("Please select an image file")
+            return
+        }
+        setUploading(true)
+        try {
+            const result = await mediaService.uploadMedia(file)
+            const url = result?.url ?? result?.data?.url ?? result
+            if (url) setAvatar(typeof url === "string" ? url : url.url)
+        } catch (err) {
+            console.error("Avatar upload failed:", err)
+            toast.error("Failed to upload image")
+        } finally {
+            setUploading(false)
+        }
+    }
 
     const handleSubmit = async (e) => {
         e?.preventDefault()
@@ -27,11 +71,19 @@ export function CreateListModal({ open, onOpenChange, onSuccess }) {
         }
         setLoading(true)
         try {
-            await listService.createList({ name: name.trim(), description: description.trim(), isPrivate })
+            await listService.createList({
+                name: name.trim(),
+                description: description.trim(),
+                isPrivate,
+                banner: banner || undefined,
+                avatar: avatar || undefined,
+            })
             toast.success("List created successfully")
             setName("")
             setDescription("")
             setIsPrivate(false)
+            setBanner("")
+            setAvatar("")
             onOpenChange(false)
             onSuccess?.()
         } catch (error) {
@@ -47,6 +99,8 @@ export function CreateListModal({ open, onOpenChange, onSuccess }) {
             setName("")
             setDescription("")
             setIsPrivate(false)
+            setBanner("")
+            setAvatar("")
         }
         onOpenChange(isOpen)
     }
@@ -56,24 +110,64 @@ export function CreateListModal({ open, onOpenChange, onSuccess }) {
             <DialogContent className="max-w-md bg-background border-border">
                 <DialogHeader className="flex flex-row items-center justify-between gap-4 pb-4">
                     <DialogTitle>Create a new List</DialogTitle>
-                    <DialogDescription className="sr-only">Create a new list with name and description</DialogDescription>
+                    <DialogDescription className="sr-only">Create a new list with name, description, banner and image</DialogDescription>
                     <Button
                         onClick={handleSubmit}
-                        disabled={loading}
+                        disabled={loading || uploading}
                         className="rounded-full bg-foreground text-background hover:bg-foreground/90 px-4"
                     >
-                        {loading ? "Creating..." : "Next"}
+                        {loading ? "Creating..." : uploading ? "Uploading..." : "Next"}
                     </Button>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Image placeholder */}
-                    <div className="flex justify-center">
+                    {/* Banner (cover) */}
+                    <div>
+                        <p className="text-sm font-medium text-muted-foreground mb-2">Banner</p>
+                        <input
+                            ref={bannerInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleBannerUpload}
+                        />
                         <button
                             type="button"
-                            className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-muted-foreground/60 hover:bg-white/[0.03] transition-colors"
+                            onClick={() => bannerInputRef.current?.click()}
+                            disabled={uploading}
+                            className="w-full h-24 rounded-xl border-2 border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-muted-foreground/60 hover:bg-white/[0.03] transition-colors overflow-hidden"
                         >
-                            <Camera className="w-10 h-10 text-muted-foreground" />
+                            {banner ? (
+                                <img src={getMediaUrl(banner)} alt="Banner" className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="flex items-center gap-2 text-muted-foreground">
+                                    <ImagePlus className="w-6 h-6" /> Add cover image
+                                </span>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Avatar (list image) */}
+                    <div>
+                        <p className="text-sm font-medium text-muted-foreground mb-2">List image</p>
+                        <input
+                            ref={avatarInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleAvatarUpload}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => avatarInputRef.current?.click()}
+                            disabled={uploading}
+                            className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-muted-foreground/60 hover:bg-white/[0.03] transition-colors overflow-hidden"
+                        >
+                            {avatar ? (
+                                <img src={getMediaUrl(avatar)} alt="List" className="w-full h-full object-cover" />
+                            ) : (
+                                <Camera className="w-10 h-10 text-muted-foreground" />
+                            )}
                         </button>
                     </div>
 

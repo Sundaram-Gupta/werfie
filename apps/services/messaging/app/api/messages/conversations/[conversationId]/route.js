@@ -5,7 +5,7 @@ import { apiSuccess, apiError } from '@/lib/api-response'
 export const GET = withAuth(async (request, { params }) => {
     try {
         const { conversationId } = params
-        const user = getUserFromRequest(request)
+        const user = await getUserFromRequest(request)
         const userId = user.userId
 
         if (!userId) {

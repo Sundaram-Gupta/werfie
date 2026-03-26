@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const AnnouncementService = require('../services/announcement.service');
+const axios = require('axios');
 
 exports.getWorldLeadersFeed = async (req, res) => {
     try {
@@ -11,6 +12,8 @@ exports.getWorldLeadersFeed = async (req, res) => {
             status: 'published'
         };
 
+        // Note: we still keep announcement region filtering (if provided),
+        // but we also enforce approved-only via leaderId list from user service.
         if (region) {
             where.regions = {
                 path: [],
@@ -25,6 +28,24 @@ exports.getWorldLeadersFeed = async (req, res) => {
 
         const take = parseInt(limit);
         const skip = (parseInt(page) - 1) * take;
+
+        // Approved-only filter:
+        // Fetch verified leaders from user service and restrict announcements by leaderId.
+        const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+        let verifiedLeaderIds = [];
+        try {
+            const leadersRes = await axios.get(`${USER_SERVICE_URL}/api/leaders`, {
+                params: { verifiedStatus: 'true', limit: 100 }
+            });
+            const leadersPayload = leadersRes.data?.data ?? leadersRes.data ?? [];
+            verifiedLeaderIds = Array.isArray(leadersPayload) ? leadersPayload.map(l => l.id).filter(Boolean) : [];
+        } catch (e) {
+            console.error('[WorldLeadersFeed] Failed to fetch verified leaders:', e?.message || e);
+            return res.status(200).json([]);
+        }
+
+        if (verifiedLeaderIds.length === 0) return res.status(200).json([]);
+        where.leaderId = { in: verifiedLeaderIds };
 
         let posts;
         try {
@@ -66,6 +87,18 @@ exports.getLeaderPosts = async (req, res) => {
 
         const take = parseInt(limit);
         const skip = (parseInt(page) - 1) * take;
+
+        // Approved-only: ensure leader is verified in user service.
+        const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+        try {
+            const leaderRes = await axios.get(`${USER_SERVICE_URL}/api/leaders/${id}`, { timeout: 5000 });
+            const leaderPayload = leaderRes.data?.data ?? leaderRes.data;
+            if (!leaderPayload?.verifiedStatus) return res.status(200).json([]);
+        } catch (e) {
+            // Fail closed: if we can't verify status, don't show posts.
+            console.error('[WorldLeadersFeed] Failed to verify leader status:', e?.message || e);
+            return res.status(200).json([]);
+        }
 
         const posts = await prisma.announcement.findMany({
             where: {

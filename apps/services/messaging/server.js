@@ -37,7 +37,103 @@ expressApp.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' })
 })
 
-// 3. Handle Next.js Requests
+import multer from 'multer';
+import { uploadToR2 } from './lib/r2.js';
+import { processImage, processVideo, processAudio } from './lib/media-processor.js';
+import { getUserFromRequest } from './lib/auth.js';
+
+// Setup Multer (memoryStorage) for File Uploads as requested for Flutter
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 100 * 1024 * 1024 }, // Allows up to 100MB for video, 10MB checked in handlers
+});
+
+// 3. File Upload Pipeline (Express Route) before Next.js
+expressApp.post('/api/messages/upload', upload.any(), async (req, res) => {
+    try {
+        console.log("📝 [Express Upload] Request received from Flutter/Client");
+
+        // Auth check headers/JWT
+        const user = await getUserFromRequest(req);
+        if (!user.userId) {
+             console.error("❌ [Express Upload] Unauthorized: No userId");
+             return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
+        }
+
+        // Multer puts files in req.files
+        if (!req.files || req.files.length === 0) {
+            console.error("❌ [Express Upload] No file in req.files! Keys in body:", Object.keys(req.body));
+            return res.status(400).json({ status: false, message: 'No file uploaded', data: null });
+        }
+
+        const file = req.files[0];
+        const buffer = file.buffer;
+        const type = file.mimetype || '';
+        const size = file.size;
+
+        console.log(`📂 [Express Upload] File received. Field: ${file.fieldname}, Type: ${type}, Size: ${size} bytes`);
+
+        if (type.startsWith('image/')) {
+            if (size > 10 * 1024 * 1024) throw new Error('Image too large (max 10MB)');
+            
+            console.log("🖼️ [Express Upload] Processing Image from Buffer...");
+            // processImage returns { buffer, filename, mimeType, size } - NO DISK STORAGE
+            const result = await processImage(buffer);
+            console.log("🚀 [Express Upload] Uploading optimized buffer to R2...");
+            
+            const url = await uploadToR2(result.buffer, result.mimeType, 'chat/images');
+            console.log(`✅ [Express Upload] Success: ${url}`);
+            
+            return res.status(200).json({ 
+                 status: true, 
+                 message: 'Media uploaded successfully', 
+                 data: { url, mimeType: result.mimeType, size: result.size } 
+            });
+        }
+        
+        // Handle other types (Video/Audio) using existing functions (which may use temp disk storage but that's handled by them)
+        if (type.startsWith('video/')) {
+             if (size > 100 * 1024 * 1024) throw new Error('Video too large (max 100MB)');
+             console.log("🎥 [Express Upload] Processing Video...");
+             
+             // processVideo needs a file path. We write temp file manually.
+             const fs = await import('fs');
+             const path = await import('path');
+             const os = await import('os');
+             const { v4: uuidv4 } = await import('uuid');
+             
+             const tempPath = path.join(os.tmpdir(), `${uuidv4()}_input.mp4`);
+             fs.writeFileSync(tempPath, buffer);
+             
+             try {
+                 const result = await processVideo(tempPath);
+                 if (result.cleanup) result.cleanup();
+                 if (!fs.existsSync(result.video.path)) throw new Error('Processed video file not found');
+                 
+                 const videoContent = fs.readFileSync(result.video.path);
+                 const videoUrl = await uploadToR2(videoContent, result.video.mimeType, 'chat/videos');
+                 
+                 const thumbContent = fs.readFileSync(result.thumbnail.path);
+                 const thumbUrl = await uploadToR2(thumbContent, result.thumbnail.mimeType, 'chat/thumbnails');
+                 
+                 return res.status(200).json({
+                     status: true, message: 'Media uploaded successfully',
+                     data: { url: videoUrl, thumbnailUrl: thumbUrl, duration: result.duration, mimeType: result.video.mimeType }
+                 });
+             } finally {
+                 try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch(e){}
+             }
+        }
+        
+        throw new Error(`Unsupported file type: ${type}`);
+        
+    } catch (error) {
+        console.error("❌ [Express Upload] Failed:", error);
+        return res.status(500).json({ status: false, message: `Processing error: ${error.message}`, data: null });
+    }
+});
+
+// 4. Handle Next.js Requests
 expressApp.all('*', (req, res, nextCallback) => {
     if (req.url.includes('/api/messages/ws')) {
         return; // Let Socket.io handle this

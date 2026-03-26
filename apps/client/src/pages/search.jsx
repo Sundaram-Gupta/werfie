@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, ArrowLeft, BadgeCheck } from "lucide-react"
+import { Loader2, ArrowLeft, BadgeCheck, Copy } from "lucide-react"
 import { getMediaUrl } from "@/lib/utils"
 
 export default function SearchPage() {
@@ -16,6 +16,7 @@ export default function SearchPage() {
 
     const [posts, setPosts] = useState([])
     const [users, setUsers] = useState([])
+    const [mediaPosts, setMediaPosts] = useState([])
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
@@ -27,8 +28,8 @@ export default function SearchPage() {
             // Fetch posts
             try {
                 const postsData = await searchService.searchPosts(query)
-                console.log('Search Debug - Posts:', postsData);
-                setPosts(postsData || [])
+                const postsList = Array.isArray(postsData) ? postsData : (postsData?.posts ?? postsData?.data ?? [])
+                setPosts(postsList || [])
             } catch (error) {
                 console.error("Search posts error:", error)
                 setPosts([]) // Fallback
@@ -37,11 +38,21 @@ export default function SearchPage() {
             // Fetch users
             try {
                 const usersData = await searchService.searchUsers(query)
-                console.log('Search Debug - Users:', usersData);
-                setUsers(usersData || [])
+                const usersList = Array.isArray(usersData) ? usersData : (usersData?.users ?? usersData?.data ?? [])
+                setUsers(usersList || [])
             } catch (error) {
                 console.error("Search users error:", error)
-                setUsers([]) // Fallback
+                setUsers([])
+            }
+
+            // Fetch media posts
+            try {
+                const mediaData = await searchService.searchPosts(query, { hasMedia: true })
+                const mediaList = Array.isArray(mediaData) ? mediaData : (mediaData?.posts ?? mediaData?.data ?? [])
+                setMediaPosts(mediaList || [])
+            } catch (error) {
+                console.error("Search media posts error:", error)
+                setMediaPosts([])
             }
 
             setLoading(false)
@@ -120,8 +131,13 @@ export default function SearchPage() {
                                         </Avatar>
                                         <div className="flex flex-col min-w-0">
                                             <div className="flex items-center gap-1">
-                                                <span className="font-bold hover:underline truncate">{user.profile?.name}</span>
+                                                <span className="font-bold hover:underline truncate">{user.profile?.name || user.name}</span>
                                                 {user.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                                                {user.institutionalProfile && (
+                                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-1">
+                                                        {user.institutionalProfile.institutionType?.replace('_', ' ') || 'INSTITUTION'}
+                                                    </span>
+                                                )}
                                             </div>
                                             <span className="text-muted-foreground truncate">@{user.profile?.handle}</span>
                                             {user.profile?.bio && <span className="text-muted-foreground text-sm line-clamp-1">{user.profile.bio}</span>}
@@ -139,7 +155,32 @@ export default function SearchPage() {
                 </TabsContent>
 
                 <TabsContent value="media" className="mt-0">
-                    <div className="p-8 text-center text-muted-foreground">Media search coming soon</div>
+                    {loading ? (
+                        <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+                    ) : mediaPosts.length > 0 ? (
+                        <div className="grid grid-cols-3 gap-1 p-1">
+                            {mediaPosts.map(post => (
+                                <div 
+                                    key={post.id} 
+                                    className="aspect-square relative cursor-pointer hover:opacity-90 transition group"
+                                    onClick={() => navigate(`/profile/${post.userId}/status/${post.id}`)}
+                                >
+                                    <img 
+                                        src={getMediaUrl(post.media[0]?.thumbnailUrl || post.media[0]?.mediaUrl)} 
+                                        alt="" 
+                                        className="w-full h-full object-cover" 
+                                    />
+                                    {post.media.length > 1 && (
+                                        <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-sm backdrop-blur-sm">
+                                            <Copy className="w-3.5 h-3.5 text-white" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center text-muted-foreground">No media found for "{query}"</div>
+                    )}
                 </TabsContent>
             </Tabs>
         </div>

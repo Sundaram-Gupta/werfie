@@ -83,4 +83,27 @@
     /* 275 + 600 + 350 + padding roughly */
     min-height: 100vh;
   }
+
+  @keyframes progress-indeterminate {
+    0% { transform: translateX(-100%) scaleX(0.2); }
+    50% { transform: translateX(0%) scaleX(0.5); }
+    100% { transform: translateX(100%) scaleX(0.2); }
+  }
+
+  .animate-progress-indeterminate {
+    animation: progress-indeterminate 1.5s infinite linear;
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
 }

@@ -11,6 +11,7 @@ import ChatSettings from "@/pages/chat-settings"
 import Explore from "@/pages/explore"
 import Profile from "@/pages/profile"
 import Lists from "@/pages/lists"
+import ListDetail from "@/pages/list-detail"
 import Business from "@/pages/business"
 import Ads from "@/pages/ads"
 import Spaces from "@/pages/spaces"
@@ -83,6 +84,7 @@ function App() {
                 <Route path="/post/:id" element={<PostDetail />} />
 
                 <Route path="/lists" element={<Lists />} />
+                <Route path="/lists/:id" element={<ListDetail />} />
                 <Route path="/spaces" element={<Spaces />} />
                 <Route path="/werfie-ai" element={<WerfieAI />} />
                 <Route path="/settings" element={<Settings />} />

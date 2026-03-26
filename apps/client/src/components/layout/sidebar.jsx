@@ -41,13 +41,15 @@ export function Sidebar({ forceCollapsed = false } = {}) {
         if (location.pathname === "/") {
             e?.preventDefault?.()
             try {
-                window.dispatchEvent(new Event("feed-refresh"))
+                window.dispatchEvent(new Event("feed-full-refresh"))
             } catch {
                 // ignore
             }
-            // UX: bring user to top like common social apps
+            // UX: bring user to the post composer box.
             try {
-                window.scrollTo({ top: 0, behavior: "smooth" })
+                const el = document.getElementById('home-post-composer')
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+                else window.scrollTo({ top: 0, behavior: "smooth" })
             } catch {
                 window.scrollTo(0, 0)
             }
@@ -91,9 +93,9 @@ export function Sidebar({ forceCollapsed = false } = {}) {
                     onClick={triggerHomeRefresh}
                 >
                     <img
-                        src="/websplash.png"
-                        alt="W"
-                        className={cn("w-7 h-7 min-w-7 invert")}
+                        src="/werfie.png"
+                        alt="Werfie"
+                        className={cn("w-7 h-7 min-w-7")}
                     />
                 </Link>
 

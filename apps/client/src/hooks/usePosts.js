@@ -1,9 +1,10 @@
-import { io } from 'socket.io-client'
+import axios from 'axios'
+import { createSocketWithRecovery } from '@/lib/socketWithRecovery'
 import api from '@/lib/api'
 import { postService, userService, authService, announcementService } from '@/services/api'
 import { getGatewayUrl } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 // Use same-origin when unset so Vite proxies /api (REST). WebSockets use getGatewayUrl() to hit gateway directly.
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -65,6 +66,35 @@ function writeOffset(v) {
     }
 }
 
+const POSTS_STORAGE_PREFIX = 'werfie:posts:v1:'
+
+function readPersistedPosts(tab, userId) {
+    if (tab === 'for-you' || tab === 'following') {
+        try {
+            // On hard browser reload, we NO LONGER wipe the stale 'for-you' cache.
+            // This allows the feed to load "instantly" from sessionStorage.
+            // A background refresh will later pull fresh posts.
+            
+            const val = sessionStorage.getItem(POSTS_STORAGE_PREFIX + tab)
+            let parsed = val ? JSON.parse(val) : []
+            if (tab === 'for-you' && Array.isArray(parsed) && parsed.length > 0) {
+                // Shuffle the cached posts on reload for a fresh layout instantly
+                parsed = interleaveRandomNoAdjacent(shuffleInPlace(parsed), postUserKey)
+            }
+            return parsed
+        } catch { return [] }
+    }
+    return []
+}
+
+function writePersistedPosts(tab, userId, items) {
+    if (tab === 'for-you' || tab === 'following') {
+        try {
+            sessionStorage.setItem(POSTS_STORAGE_PREFIX + tab, JSON.stringify((items || []).slice(0, 50)))
+        } catch {}
+    }
+}
+
 function shuffleInPlace(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
@@ -100,28 +130,39 @@ function interleaveRandomNoAdjacent(items, getKey, opts = {}) {
     const out = []
 
     while (out.length < list.length) {
-        // Find max remaining count
+        let total = 0
         let max = 0
         for (const k of keys) {
             const c = groups.get(k)?.length || 0
             if (c > max) max = c
+            total += c
         }
-        if (max === 0) break
+        if (total === 0) break
 
-        // Candidates: keys with max remaining, excluding prevKey when possible
+        const criticalLimit = Math.ceil(total / 2)
         const candidates = []
-        for (const k of keys) {
-            const c = groups.get(k)?.length || 0
-            if (c !== max) continue
-            if (k === prevKey) continue
-            candidates.push(k)
+
+        // If one bucket dominates (>50%), they MUST be picked to prevent back-to-back clumping later
+        if (max >= criticalLimit) {
+            for (const k of keys) {
+                if ((groups.get(k)?.length || 0) >= criticalLimit && k !== prevKey) candidates.push(k)
+            }
+        }
+
+        // Proportional probability selection for fairer top-post randomization
+        if (candidates.length === 0) {
+            for (const k of keys) {
+                const c = groups.get(k)?.length || 0
+                if (c > 0 && k !== prevKey) {
+                    for (let i = 0; i < c; i++) candidates.push(k)
+                }
+            }
         }
 
         // If we must, allow prevKey (unavoidable)
         if (candidates.length === 0) {
             for (const k of keys) {
-                const c = groups.get(k)?.length || 0
-                if (c === max) candidates.push(k)
+                if ((groups.get(k)?.length || 0) > 0) candidates.push(k)
             }
         }
 
@@ -257,30 +298,59 @@ async function hydratePosts(fetchedPosts) {
 
 export function usePosts(params = {}) {
     const { user: currentUser } = useAuth()
-    const [posts, setPosts] = useState([])
-    const [loading, setLoading] = useState(true)
+    const { noFetch } = params
+    const [posts, setPosts] = useState(() => readPersistedPosts(params.tab, params.userId))
+    const [loading, setLoading] = useState(() => {
+        const cached = readPersistedPosts(params.tab, params.userId)
+        return cached.length === 0
+    })
     const [error, setError] = useState(null)
     const [nextCursor, setNextCursor] = useState(null)
     const [hasMore, setHasMore] = useState(false)
     const [loadingMore, setLoadingMore] = useState(false)
+    const followingSeedRef = useRef(Math.floor(Math.random() * 1000000))
+    const forYouSeedRef = useRef(Math.floor(Math.random() * 1000000))
+    const [pendingPosts, setPendingPosts] = useState([])
+
+    const isMounted = useRef(true)
+    useEffect(() => {
+        isMounted.current = true
+        return () => { isMounted.current = false }
+    }, [])
 
     const seenIdsRef = useRef(null)
     const offsetRef = useRef(0)
     const fetchCtrlRef = useRef(null)
+    const pinnedPostIdRef = useRef(null)
     const warnedTimeoutRef = useRef(false)
-    if (seenIdsRef.current == null) seenIdsRef.current = readSeenIds()
-    if (!offsetRef.current) offsetRef.current = readOffset()
+    const hasMoreRef = useRef(false)
+    const nextCursorRef = useRef(null)
+    const isLoadingRef = useRef(false)
+    const isLoadingMoreRef = useRef(false)
 
-    const markSeen = (items) => {
+    // Destructure params to ensure stable dependencies for useCallback
+    const tabVal = params.tab
+    const userIdVal = params.userId
+    const excludeRepliesVal = params.excludeReplies
+    const limitVal = params.limit
+    const communityIdVal = params.communityId
+    const searchVal = params.search
+    const topLevelOnlyVal = params.topLevelOnly
+    if (seenIdsRef.current == null) seenIdsRef.current = readSeenIds()
+    // We no longer read the offset from sessionStorage on mount to ensure 
+    // that every browser refresh starts fresh at the top of the feed.
+    if (!offsetRef.current) offsetRef.current = 0
+
+    const markSeen = useCallback((items) => {
         const seen = seenIdsRef.current
         for (const it of items || []) {
             const id = it?.id
             if (id != null) seen.add(String(id))
         }
         writeSeenIds(seen)
-    }
+    }, [])
 
-    const filterUnseen = (items) => {
+    const filterUnseen = useCallback((items) => {
         const seen = seenIdsRef.current
         return (items || []).filter(it => {
             const id = it?.id
@@ -288,43 +358,50 @@ export function usePosts(params = {}) {
             const key = String(id)
             return !seen.has(key)
         })
-    }
+    }, [])
 
     // Initial load: fetch an unseen page and REPLACE feed state.
     // Guarantees: after a browser reload, feed shows different posts (if available),
     // by using persisted `seenPostIds` + `offset` as a best-effort cursor.
-    const fetchPosts = async (silent = false) => {
+    const fetchPosts = useCallback(async (isSilent = false) => {
+        if (!tabVal) return
         try {
-            // Avoid overlapping requests piling up (common cause of Axios 30s timeout spam)
-            try { fetchCtrlRef.current?.abort?.() } catch {}
+            // Avoid overlapping requests
+            if (fetchCtrlRef.current) fetchCtrlRef.current.abort()
             const ctrl = new AbortController()
             fetchCtrlRef.current = ctrl
 
-            if (!silent) setLoading(true)
-            if (!silent) setPosts([]) // browser reload: new session state, so OK to reset UI here
+            if (!isSilent) setLoading(true)
             setError(null)
-            setNextCursor(null)
-            setHasMore(false)
+
+            const baseParams = {
+                tab: tabVal,
+                userId: userIdVal,
+                excludeReplies: excludeRepliesVal,
+                topLevelOnly: topLevelOnlyVal,
+                communityId: communityIdVal,
+                search: searchVal
+            }
+
             let data;
             let announcementsData = [];
-            // Home feed should be top-level only by default (replyToId IS NULL)
-            const baseParams = (params.tab === 'for-you' || params.tab === 'following')
-                ? { ...params, excludeReplies: params.excludeReplies ?? true }
-                : { ...params }
 
-            if (params.tab === 'bookmarks') {
-                const res = await postService.getBookmarks({ limit: 50 })
+            if (tabVal === 'bookmarks') {
+                const res = await postService.getBookmarks({ ...baseParams, limit: 50 })
                 data = Array.isArray(res) ? res : (res?.posts || [])
-            } else if (params.tab === 'following') {
-                data = await postService.getFollowingPosts({ limit: FEED_PAGE_SIZE, _ts: Date.now() })
-            } else if (params.tab === 'for-you') {
-                // For "For you" we want: different posts on every browser refresh + no repeats.
-                // Use offset cursor (persisted in sessionStorage) + seenPostIds to page through unseen content.
-                const startOffset = offsetRef.current || 0
-
+            } else if (tabVal === 'following') {
+                data = await postService.getFollowingPosts({ 
+                    limit: FEED_PAGE_SIZE, 
+                    seed: followingSeedRef.current,
+                    _ts: Date.now() 
+                })
+            } else if (tabVal === 'for-you') {
+                // Generate a fresh seed for every new starting fetch
+                forYouSeedRef.current = Math.floor(Math.random() * 1000000)
+                
                 data = await api.get('/api/posts', {
-                    params: { ...baseParams, limit: FEED_PAGE_SIZE, offset: startOffset, _ts: Date.now() },
-                    timeout: 20000,
+                    params: { ...baseParams, limit: FEED_PAGE_SIZE, seed: forYouSeedRef.current, _ts: Date.now() },
+                    timeout: 10000,
                     signal: ctrl.signal,
                 }).then(r => r.data)
 
@@ -335,11 +412,14 @@ export function usePosts(params = {}) {
                 }).then(r => r.data).then(d => (Array.isArray(d) ? d : (d?.posts || []))).catch(() => [])
             } else {
                 data = await api.get('/api/posts', {
-                    params: { ...baseParams, limit: params.limit ?? FEED_PAGE_SIZE, offset: offsetRef.current || 0, _ts: Date.now() },
+                    params: { ...baseParams, limit: limitVal ?? FEED_PAGE_SIZE, offset: offsetRef.current || 0, _ts: Date.now() },
                     timeout: 20000,
                     signal: ctrl.signal,
                 }).then(r => r.data)
             }
+
+            if (!isMounted.current) return
+
             let fetchedPosts = [];
             let next = null;
             let more = false;
@@ -347,195 +427,196 @@ export function usePosts(params = {}) {
                 fetchedPosts = data;
             } else if (data && Array.isArray(data.posts)) {
                 fetchedPosts = data.posts;
-                if (data.nextCursor != null) next = data.nextCursor;
-                if (data.hasMore != null) more = data.hasMore;
+                next = data.nextCursor ?? null;
+                more = !!data.hasMore;
             }
 
-            // For "For you": enforce no-repeat + randomized order (no consecutive same-user).
-            if (params.tab === 'for-you') {
-                let unseen = filterUnseen(fetchedPosts)
-                let attempts = 0
-                while (unseen.length < FEED_PAGE_SIZE && attempts < 6) {
-                    if (unseen.length >= FEED_PAGE_SIZE) break
-                    offsetRef.current = (offsetRef.current || 0) + FEED_PAGE_SIZE
-                    writeOffset(offsetRef.current)
-                    const nextPage = await api.get('/api/posts', {
-                        params: { ...baseParams, limit: FEED_PAGE_SIZE, offset: offsetRef.current, _ts: Date.now() },
-                        timeout: 20000,
-                        signal: ctrl.signal,
-                    }).then(r => r.data)
-                    const nextRaw = nextPage?.posts ?? (Array.isArray(nextPage) ? nextPage : [])
-                    const nextUnseen = filterUnseen(nextRaw)
-                    unseen = dedupeById([...(unseen || []), ...(nextUnseen || [])])
-                    attempts++
-                    if (nextRaw.length < FEED_PAGE_SIZE) break
+            if (tabVal === 'for-you') {
+                const unseen = filterUnseen(fetchedPosts)
+                if (unseen.length < 5 && fetchedPosts.length >= FEED_PAGE_SIZE) {
+                    setTimeout(() => refreshNewPosts(), 500)
                 }
-
-                fetchedPosts = interleaveRandomNoAdjacent(unseen.slice(0, FEED_PAGE_SIZE), postUserKey)
+                fetchedPosts = interleaveRandomNoAdjacent(fetchedPosts, postUserKey)
             }
 
-            // For bookmarks tab, each post is already bookmarked (mark for UI)
-            if (params.tab === 'bookmarks') {
+            if (tabVal === 'bookmarks') {
                 fetchedPosts = fetchedPosts.map(p => ({ ...p, bookmarks: p.bookmarks?.length ? p.bookmarks : [{ id: 'bookmarked' }] }))
             }
 
-            // Merge with announcements (skip for bookmarks tab)
-            const annotatedAnnouncements = announcementsData.map(ann => ({
-                ...ann,
-                isOfficialAnnouncement: true
-            }));
-            if (params.tab !== 'bookmarks') {
+            const annotatedAnnouncements = announcementsData.map(ann => ({ ...ann, isOfficialAnnouncement: true }));
+            if (tabVal !== 'bookmarks') {
                 fetchedPosts = [...fetchedPosts, ...annotatedAnnouncements];
-                
-                // Only sort chronologically if NOT the random "For You" feed
-                if (params.tab !== 'for-you') {
-                    fetchedPosts.sort((a, b) =>
-                        new Date(b.createdAt) - new Date(a.createdAt)
-                    );
+                if (tabVal !== 'for-you') {
+                    fetchedPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                 }
             } else {
                 fetchedPosts = [...fetchedPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             }
 
-            fetchedPosts = dedupeById(fetchedPosts)
-            // Enforce "different posts on every reload" for normal feeds:
-            // filter out already-seen posts, and if none left, advance offset until we find unseen.
-            if (params.tab !== 'bookmarks' && params.tab !== 'for-you') {
-                let unseen = filterUnseen(fetchedPosts.filter(p => !p?.isOfficialAnnouncement))
-                let attempts = 0
-                while (unseen.length === 0 && attempts < 5) {
-                    offsetRef.current = (offsetRef.current || 0) + FEED_PAGE_SIZE
-                    writeOffset(offsetRef.current)
-                    const nextPage = await api.get('/api/posts', {
-                        params: {
-                            ...baseParams,
-                        limit: params.limit ?? FEED_PAGE_SIZE,
-                        offset: offsetRef.current,
-                        _ts: Date.now(),
-                        },
-                        timeout: 20000,
-                        signal: ctrl.signal,
-                    }).then(r => r.data)
-                    const nextRaw = nextPage?.posts ?? (Array.isArray(nextPage) ? nextPage : [])
-                    unseen = filterUnseen(nextRaw)
-                    attempts++
-                }
-
-                // Keep announcements (optional) + unseen posts only
-                const onlyUnseen = dedupeById([
-                    ...annotatedAnnouncements,
-                    ...unseen,
-                ])
-                fetchedPosts = onlyUnseen
-            }
-
-            fetchedPosts = await hydratePosts(fetchedPosts);
+            fetchedPosts = await hydratePosts(dedupeById(fetchedPosts));
             fetchedPosts = ensureNoConsecutiveSameUser(fetchedPosts, postUserKey);
 
-            setPosts(fetchedPosts)
+            if (!isMounted.current) return
+            setPosts(prev => {
+                const prevList = Array.isArray(prev) ? prev : []
+                // If we already have posts (e.g. from cache) and it's the discovery feed,
+                // merging unseen posts prevents the DOM from completely replacing and jumping.
+                if (tabVal === 'for-you' && prevList.length > 0) {
+                    const unseenNew = filterUnseen(fetchedPosts)
+                    if (unseenNew.length === 0) return prevList
+                    const newBatch = interleaveRandomNoAdjacent(unseenNew, postUserKey)
+                    return ensureNoConsecutiveSameUser(dedupeById([...newBatch, ...prevList]), postUserKey)
+                }
+                return fetchedPosts
+            })
             markSeen(fetchedPosts.filter(p => !p?.isOfficialAnnouncement))
             setNextCursor(next)
-            setHasMore(!!more)
+            nextCursorRef.current = next
+            setHasMore(more)
+            hasMoreRef.current = more
         } catch (err) {
-            // Request cancellation is expected in dev (React StrictMode double-invokes effects)
-            // and when we abort previous in-flight requests. Do not surface as an error UI.
-            const isCanceled =
-                String(err?.name || '') === 'CanceledError' ||
-                String(err?.code || '') === 'ERR_CANCELED' ||
-                /canceled|cancelled/i.test(String(err?.message || '')) ||
-                String(err?.name || '') === 'AbortError'
-            if (isCanceled) return
-
-            const msg = err?.response?.data?.details || err?.message || 'Failed to load feed'
-            setError(msg)
-
-            const isTimeout = String(err?.code || '').toUpperCase() === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''))
-            if (isTimeout) {
-                if (!warnedTimeoutRef.current) {
-                    warnedTimeoutRef.current = true
-                    console.warn('[usePosts] API timeout (30s). This happens when the gateway/services are down, or many overlapping requests were triggered while scrolling/refreshing. We now abort old requests and keep the UI stable.')
-                }
-            } else if (String(err?.name || '') !== 'CanceledError') {
-                console.error('Error fetching posts:', err)
-            }
+            if (axios.isCancel(err)) return
+            if (!isMounted.current) return
+            setError(err?.response?.data?.details || err?.message || 'Failed to load feed')
+            console.error('[usePosts] fetchPosts error:', err)
         } finally {
-            if (!silent) setLoading(false)
+            if (isMounted.current) {
+                if (!isSilent) {
+                    setLoading(false)
+                    isLoadingRef.current = false
+                }
+            }
         }
-    }
+    }, [tabVal, userIdVal, excludeRepliesVal, limitVal, communityIdVal, searchVal, topLevelOnlyVal, filterUnseen, markSeen])
 
     // Refresh: fetch latest, PREPEND only unseen posts.
     // If no unseen posts exist, optionally fetch older pages using offset to still show different content.
+    const refresh = useCallback(async () => {
+        forYouSeedRef.current = Math.floor(Math.random() * 1000000)
+        followingSeedRef.current = Math.floor(Math.random() * 1000000)
+        offsetRef.current = 0
+        return fetchPosts()
+    }, [fetchPosts])
+
     const refreshNewPosts = async () => {
         try {
-            setError(null)
+            // If already loading or fetching, don't spam background refreshes
+            if (loading || loadingMore) return;
+            // Avoid overwriting bookmarks/search results with generic post publication updates.
+            // Bookmarks should be updated via bookmark/unbookmark actions and reload.
+            if (params.tab === 'bookmarks') return;
 
             // 1) Try latest first
-            const res = await postService.getPosts({ ...params, limit: FEED_PAGE_SIZE, offset: 0, _ts: Date.now() })
+            let res;
+            const fetchParams = { ...params, limit: FEED_PAGE_SIZE, _ts: Date.now() };
+            
+            if (params.tab === 'following') {
+                res = await postService.getFollowingPosts({ ...fetchParams, seed: followingSeedRef.current })
+            } else if (params.tab === 'for-you') {
+                res = await api.get('/api/posts', { 
+                    params: { ...fetchParams, seed: forYouSeedRef.current } 
+                }).then(r => r.data)
+            } else {
+                res = await postService.getPosts({ ...fetchParams, offset: 0 })
+            }
+            
             const raw = res?.posts ?? (Array.isArray(res) ? res : [])
             let unseen = filterUnseen(raw)
-
-            // 2) If none, advance offset until we find unseen (best-effort)
-            let attempts = 0
-            while (unseen.length === 0 && attempts < 3) {
-                offsetRef.current = (offsetRef.current || 0) + FEED_PAGE_SIZE
-                writeOffset(offsetRef.current)
-                const older = await postService.getPosts({
-                    ...params,
-                    limit: FEED_PAGE_SIZE,
-                    offset: offsetRef.current,
-                    _ts: Date.now()
-                })
-                const olderRaw = older?.posts ?? (Array.isArray(older) ? older : [])
-                unseen = filterUnseen(olderRaw)
-                attempts++
-            }
 
             if (unseen.length === 0) return
 
             // Default: newest-first. For "for-you", we randomize with constraint.
             unseen.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
             const hydrated = await hydratePosts(unseen)
-
-            setPosts(prev => {
-                const prevList = Array.isArray(prev) ? prev : []
-                let nextList
-                if (params.tab === 'for-you') {
-                    const firstPrevKey = prevList[0] ? postUserKey(prevList[0]) : null
-                    let newBatch = interleaveRandomNoAdjacent(hydrated || [], postUserKey)
-                    newBatch = avoidBoundarySameUser(newBatch, firstPrevKey, postUserKey)
-                    nextList = dedupeById([...(newBatch || []), ...(prevList || [])])
-                } else {
-                    nextList = dedupeById([...(hydrated || []), ...(prevList || [])])
-                }
-                return ensureNoConsecutiveSameUser(nextList, postUserKey)
-            })
-            markSeen(unseen)
+            
+            setPendingPosts(prev => dedupeById([...(hydrated || []), ...(prev || [])]))
         } catch (err) {
             console.error('[usePosts] refreshNewPosts error:', err)
         }
     }
 
-    const loadMore = async () => {
-        if (!nextCursor || loadingMore || !hasMore) return
+    const showPendingPosts = () => {
+        if (pendingPosts.length === 0) return
+        
+        setPosts(prev => {
+            const prevList = Array.isArray(prev) ? prev : []
+            let nextList
+            if (params.tab === 'for-you') {
+                const firstPrevKey = prevList[0] ? postUserKey(prevList[0]) : null
+                let newBatch = interleaveRandomNoAdjacent(pendingPosts || [], postUserKey)
+                newBatch = avoidBoundarySameUser(newBatch, firstPrevKey, postUserKey)
+                nextList = dedupeById([...(newBatch || []), ...(prevList || [])])
+            } else {
+                nextList = dedupeById([...(pendingPosts || []), ...(prevList || [])])
+            }
+            const ensured = ensureNoConsecutiveSameUser(nextList, postUserKey)
+
+            // Preserve the pinned newly-created post at index 0 (if user just created one)
+            const pinId = pinnedPostIdRef.current
+            if (pinId) {
+                const idx = (ensured || []).findIndex(p => String(p?.id) === pinId)
+                if (idx > 0) {
+                    const pinned = ensured[idx]
+                    ensured.splice(idx, 1)
+                    ensured.unshift(pinned)
+                }
+            }
+
+            return ensured
+        })
+        
+        markSeen(pendingPosts)
+        setPendingPosts([])
+        // Scroll to top is handled by the component
+    }
+
+    const loadMore = useCallback(async () => {
+        const currentCursor = nextCursorRef.current
+        const canLoadMore = hasMoreRef.current
+        if (!currentCursor || isLoadingMoreRef.current || !canLoadMore) return
+        
+        isLoadingMoreRef.current = true
         setLoadingMore(true)
         try {
             let data;
-            if (params.tab === 'for-you') {
-                data = await authService.getFeed({ limit: FEED_PAGE_SIZE, cursor: nextCursor })
-            } else if (params.tab === 'following') {
-                data = await postService.getFollowingPosts({ limit: FEED_PAGE_SIZE, cursor: nextCursor })
+            if (tabVal === 'for-you') {
+                data = await api.get('/api/posts', { 
+                    params: { limit: FEED_PAGE_SIZE, cursor: currentCursor, seed: forYouSeedRef.current } 
+                }).then(r => r.data)
+            } else if (tabVal === 'following') {
+                data = await postService.getFollowingPosts({ 
+                    limit: FEED_PAGE_SIZE, 
+                    cursor: currentCursor,
+                    seed: followingSeedRef.current
+                })
+            } else if (tabVal === 'bookmarks') {
+                data = await postService.getBookmarks({
+                    limit: FEED_PAGE_SIZE,
+                    cursor: currentCursor,
+                    search: searchVal,
+                    // Backend derives userId from auth token; extra fields are harmless.
+                    tab: tabVal,
+                    userId: userIdVal,
+                })
             } else {
-                data = await postService.getPosts({ ...params, limit: FEED_PAGE_SIZE, cursor: nextCursor })
+                data = await postService.getPosts({ 
+                    tab: tabVal, userId: userIdVal, 
+                    limit: FEED_PAGE_SIZE, cursor: currentCursor 
+                })
             }
+
+            if (!isMounted.current) return
+
             const raw = data?.posts ?? (Array.isArray(data) ? data : [])
             const unseen = filterUnseen(raw)
             const hydrated = await hydratePosts(unseen)
             const next = data?.nextCursor ?? null
             const more = !!data?.hasMore
+            
             setPosts(prev => {
                 const prevList = Array.isArray(prev) ? prev : []
                 let nextList
-                if (params.tab === 'for-you') {
+                if (tabVal === 'for-you') {
                     const lastPrevKey = prevList.length ? postUserKey(prevList[prevList.length - 1]) : null
                     const batch = interleaveRandomNoAdjacent(hydrated || [], postUserKey, { prevKey: lastPrevKey })
                     nextList = dedupeById([...(prevList || []), ...(batch || [])])
@@ -546,17 +627,49 @@ export function usePosts(params = {}) {
             })
             markSeen(unseen)
             setNextCursor(next)
+            nextCursorRef.current = next
             setHasMore(more)
+            hasMoreRef.current = more
         } catch (err) {
-            console.error('Load more posts error:', err)
+            console.error('[usePosts] loadMore error:', err)
         } finally {
-            setLoadingMore(false)
+            if (isMounted.current) {
+                setLoadingMore(false)
+                isLoadingMoreRef.current = false
+            }
         }
-    }
+    }, [tabVal, userIdVal, fetchPosts, searchVal])
 
+    // 1. Tab/User/Search change: reset feed or load from cache (SWR start)
     useEffect(() => {
-        fetchPosts()
-    }, [JSON.stringify(params)])
+        // If we have a search query, we don't load from general cache as it's inaccurate.
+        const cached = !searchVal ? readPersistedPosts(tabVal, userIdVal) : []
+        setPosts(cached)
+        setLoading(cached.length === 0)
+        setError(null)
+        setNextCursor(null)
+        setHasMore(false)
+        setPendingPosts([])
+    }, [tabVal, userIdVal, searchVal])
+
+    // 2. Initial/Tab-change/Search-change Fetch
+    useEffect(() => {
+        // We always trigger a fetch to keep things fresh.
+        // If we have cached posts, this will be a "silent" background fetch that
+        // prepends/merges new content without a full skeleton flash.
+        // searchVal is included so typing in search fires a new request immediately.
+        if (!noFetch) {
+            fetchPosts()
+        }
+    }, [tabVal, userIdVal, excludeRepliesVal, noFetch, fetchPosts, searchVal])
+
+    // 3. Persist state changes back to storage
+    // We only react to posts changing to avoid overwrite race conditions during tab transition
+    useEffect(() => {
+        if (posts.length > 0) {
+            writePersistedPosts(tabVal, userIdVal, posts)
+        }
+    }, [posts, tabVal, userIdVal])
 
     const fetchRef = useRef(fetchPosts)
     fetchRef.current = fetchPosts
@@ -566,9 +679,19 @@ export function usePosts(params = {}) {
         return () => window.removeEventListener('feed-refresh', onRefresh)
     }, [])
 
+    // Full refresh: always re-fetch/rebuild the feed state (even if no unseen posts exist).
+    // Used for UX actions like clicking the sidebar Home button while already on "/".
+    useEffect(() => {
+        const onFullRefresh = () => refresh()
+        window.addEventListener('feed-full-refresh', onFullRefresh)
+        return () => window.removeEventListener('feed-full-refresh', onFullRefresh)
+    }, [])
+
     // Feed live updates use Socket.IO (Engine.IO `EIO=4`), not a plain WebSocket.
     // Connect directly to the gateway to avoid proxy/WebSocket upgrade quirks.
     useEffect(() => {
+        if (noFetch) return
+        
         const raw = localStorage.getItem('accessToken')
         const token = raw ? raw.trim().replace(/\s+/g, ' ') : null
 
@@ -576,17 +699,10 @@ export function usePosts(params = {}) {
         if (!token) return
 
         const gateway = getGatewayUrl()
-        const socket = io(`${gateway}/feed`, {
-            path: '/ws/live',
+        const socket = createSocketWithRecovery(`${gateway}/feed`, {
             auth: { token },
-            // IMPORTANT: Avoid browser console "WebSocket connection failed" spam by not attempting
-            // a websocket upgrade when the network/proxy blocks it. Polling keeps live updates working.
             transports: ['polling'],
             upgrade: false,
-            reconnection: true,
-            reconnectionAttempts: 10,
-            reconnectionDelay: 800,
-            reconnectionDelayMax: 4000,
             timeout: 12000,
         })
 
@@ -600,11 +716,12 @@ export function usePosts(params = {}) {
         })
 
         return () => socket.disconnect()
-    }, [])
+    }, [noFetch])
 
     const createPost = async (content, mediaUrls = [], replyToId = null) => {
         try {
             const newPost = await postService.createPost(content, mediaUrls, replyToId)
+            pinnedPostIdRef.current = newPost?.id != null ? String(newPost.id) : null
             // Optimistically add current user details
             const postWithUser = {
                 ...newPost,
@@ -615,7 +732,8 @@ export function usePosts(params = {}) {
                 const next = ensureNoConsecutiveSameUser([postWithUser, ...(prevList || [])], postUserKey)
                 return next
             })
-            markSeen([newPost])
+            // Do NOT mark as seen yet. The feed uses persisted `seenPostIds` to filter posts.
+            // Marking optimistic posts as "seen" causes them to be filtered out on the next refresh/reload.
             return newPost
         } catch (err) {
             console.error('Error creating post:', err)
@@ -745,6 +863,8 @@ export function usePosts(params = {}) {
         loadMore,
         hasMore,
         loadingMore,
+        pendingPosts,
+        showPendingPosts,
         createPost,
         likePost,
         unlikePost,

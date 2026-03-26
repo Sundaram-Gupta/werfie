@@ -53,9 +53,7 @@ export const POST = withAuth(async (request) => {
 
         const { recipientId } = result.data
 
-        if (recipientId === userId) {
-            return apiError('Cannot chat with yourself', 400)
-        }
+
 
         // Ensure recipient exists in User table (avoids FK violation)
         const recipientExists = await prisma.user.findUnique({

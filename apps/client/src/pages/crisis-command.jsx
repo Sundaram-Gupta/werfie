@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
+import React, { useState, useEffect } from 'react';
+import { createSocketWithRecovery } from '@/lib/socketWithRecovery';
 import { 
     ShieldAlert, 
     History, 
@@ -29,7 +29,6 @@ const CrisisCommand = () => {
     const [selectedCrisis, setSelectedCrisis] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showAdmin, setShowAdmin] = useState(false);
-    const socketRef = useRef(null);
 
     // Initial Fetch
     useEffect(() => {
@@ -53,15 +52,7 @@ const CrisisCommand = () => {
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         const gateway = getGatewayUrl();
-        socketRef.current = io(gateway, {
-            path: '/ws/live',
-            auth: { token }
-        });
-
-        const crisisNsp = socketRef.current.io.opts.path + '/crisis-live'; 
-        // Note: socket.io-client namespaces are handled via io(url + '/nsp')
-        const crisisSocket = io(`${gateway}/crisis-live`, {
-            path: '/ws/live',
+        const crisisSocket = createSocketWithRecovery(`${gateway}/crisis-live`, {
             auth: { token }
         });
 

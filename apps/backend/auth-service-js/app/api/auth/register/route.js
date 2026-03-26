@@ -63,6 +63,34 @@ export async function POST(request) {
             }
         })
 
+        // Connection fix:
+        // The UI expects Profile.handle to exist immediately after registration.
+        // Older code intentionally avoided creating Profile to prevent schema drift issues,
+        // but now we try to create/upsert Profile and gracefully ignore schema mismatch.
+        try {
+            await prisma.profile.upsert({
+                where: { userId: user.id },
+                update: {
+                    name,
+                    handle,
+                    verified: false
+                },
+                create: {
+                    userId: user.id,
+                    name,
+                    handle,
+                    verified: false
+                }
+            })
+        } catch (err) {
+            // If profile schema columns drift (e.g., Profile.gender missing), don't block registration.
+            if (err && err.code === 'P2022') {
+                console.warn('[Auth Register] Profile upsert skipped due to schema mismatch (P2022).', err.message || err)
+            } else {
+                throw err
+            }
+        }
+
         // Generate tokens
         const accessToken = await generateAccessToken(user.id, user.email)
         const refreshToken = await generateRefreshToken(user.id, user.email)

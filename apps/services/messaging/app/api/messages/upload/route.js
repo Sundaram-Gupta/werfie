@@ -14,7 +14,7 @@ export const POST = withAuth(async (req) => {
     try {
         console.log("📝 [Upload] Request received");
 
-        const user = getUserFromRequest(req);
+        const user = await getUserFromRequest(req);
         if (!user.userId) {
             console.error("❌ [Upload] Unauthorized: No userId found");
             return apiError('Unauthorized', 401);

@@ -11,7 +11,7 @@ import { PostCard } from "@/components/feed/post-card"
 import { postService, mediaService, analyticsService } from "@/services/api"
 import { getGatewayUrl } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
-import { io } from "socket.io-client"
+import { createSocketWithRecovery } from "@/lib/socketWithRecovery"
 
 // Use '' for same-origin when unset (works via IP - Vite proxies /api)
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -871,7 +871,7 @@ export function PostDetail() {
     const [replies, setReplies] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-    const { deletePost } = usePosts({ tab: 'for-you' })
+    const { deletePost } = usePosts({ tab: 'for-you', noFetch: true })
 
     const updatePost = (updater) => setPost((prev) => (prev ? updater(prev) : prev))
     const updateReplies = (updater) => setReplies((prev) => updater(prev))
@@ -963,7 +963,7 @@ export function PostDetail() {
     useEffect(() => {
         const onRefresh = () => fetchData(true)
         window.addEventListener('feed-refresh', onRefresh)
-        const socket = io(`${getGatewayUrl()}/feed`, { path: '/ws/live', transports: ['polling', 'websocket'] })
+        const socket = createSocketWithRecovery(`${getGatewayUrl()}/feed`, { transports: ['polling', 'websocket'] })
         socket.on('post_published', onRefresh)
         return () => {
             window.removeEventListener('feed-refresh', onRefresh)

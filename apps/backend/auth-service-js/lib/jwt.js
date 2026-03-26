@@ -9,7 +9,7 @@ export async function generateAccessToken(userId, email) {
     const token = await new SignJWT({ sub: userId, email, type: 'access' })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
-        .setExpirationTime(process.env.JWT_ACCESS_EXPIRY || '15m')
+        .setExpirationTime(process.env.ACCESS_TOKEN_EXPIRY || '1h')
         .sign(JWT_SECRET)
 
     return token
@@ -20,7 +20,7 @@ export async function generateRefreshToken(userId, email) {
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setJti(randomUUID())  // Add unique ID to prevent duplicate tokens
-        .setExpirationTime(process.env.JWT_REFRESH_EXPIRY || '7d')
+        .setExpirationTime(process.env.REFRESH_TOKEN_EXPIRY || '30d')
         .sign(JWT_SECRET)
 
     return token

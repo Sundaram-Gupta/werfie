@@ -12,18 +12,23 @@ export async function verifyJWT(token) {
     if (!token) throw new Error('No token provided')
     const cleanToken = String(token).trim().replace(/\s+/g, ' ').replace(/^Bearer\s+/i, '')
     try {
+        console.log(`[MessagingService] Verifying token: ${cleanToken.substring(0, 20)}...`)
+        console.log(`[MessagingService] Using JWT_SECRET: ${JWT_SECRET}`)
         const { payload } = await jwtVerify(cleanToken, JWT_SECRET_BYTES)
         const userId = payload.userId || payload.sub || payload.id
         if (!userId) throw new Error('Token missing userId/sub')
+        console.log(`[MessagingService] jose verified token for userId: ${userId}`)
         return { ...payload, userId }
-    } catch {
+    } catch (joseError) {
+        console.warn(`[MessagingService] jose verification failed: ${joseError.message}. Falling back to jsonwebtoken.`)
         try {
             const decoded = jwt.verify(cleanToken, JWT_SECRET)
             const userId = decoded.userId || decoded.sub || decoded.id
             if (!userId) throw new Error('Token missing userId/sub')
+            console.log(`[MessagingService] jsonwebtoken verified token for userId: ${userId}`)
             return { ...decoded, userId }
         } catch (e) {
-            console.error('JWT Verification failed:', e?.message)
+            console.error('[MessagingService] JWT Verification failed globally:', e?.message)
             throw new Error('Invalid token')
         }
     }

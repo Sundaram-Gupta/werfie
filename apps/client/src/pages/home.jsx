@@ -46,7 +46,48 @@ export default function Home() {
     const fileInputRef = useRef(null)
     const locationInputRef = useRef(null)
     const { user } = useAuth()
-    const { createPost } = usePosts()
+    const { createPost } = usePosts({ noFetch: true })
+
+    // Ensure navigation to "/" brings the user to the post composer box.
+    useEffect(() => {
+        try {
+            const el = document.getElementById('home-post-composer')
+            el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        } catch {
+            // ignore
+        }
+    }, [])
+
+    // Persist composer draft so typing doesn't disappear on re-render/refresh.
+    const DRAFT_KEY = 'werfie:draftPost:v1'
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(DRAFT_KEY)
+            if (!raw) return
+            const parsed = JSON.parse(raw)
+            if (typeof parsed?.content === 'string') setPostContent(parsed.content)
+            if (typeof parsed?.location === 'string') setLocation(parsed.location)
+        } catch {
+            // ignore
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    useEffect(() => {
+        const handle = setTimeout(() => {
+            try {
+                const payload = { content: postContent, location }
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
+            } catch {
+                // ignore
+            }
+        }, 250)
+        return () => clearTimeout(handle)
+    }, [postContent, location])
+
+    const clearDraft = () => {
+        try { sessionStorage.removeItem(DRAFT_KEY) } catch {}
+    }
 
     const handleCreatePost = async () => {
         let finalContent = postContent.trim()
@@ -63,6 +104,7 @@ export default function Home() {
             setSelectedFiles([])
             setFilePreviews([])
             setLocation("")
+            clearDraft()
             toast.success(t('feed.posted') || 'Posted!')
             // createPost already updates the state optimistically, but we keep feed-refresh for other listeners
             window.dispatchEvent(new Event('feed-refresh'))
@@ -225,6 +267,7 @@ export default function Home() {
             setSelectedFiles([])
             setFilePreviews([])
             setLocation("")
+            clearDraft()
             setShowScheduleModal(false)
             window.dispatchEvent(new Event('feed-refresh'))
             toast.success(t("feed.scheduled") || `Post scheduled for ${dt.toLocaleString()}`)
@@ -258,39 +301,49 @@ export default function Home() {
     const userAvatar = user?.profile?.avatar || user?.avatar || null
 
     return (
-        <div>
-            <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
-                <div className="flex border-b border-border/50">
-                    <div
+        <div className="w-full">
+            <div className="sticky top-0 z-10 bg-background/70 backdrop-blur-md border-b border-border">
+                <div className="flex w-full h-[53px]">
+                    <button
                         onClick={() => setActiveTab("for-you")}
-                        className={cn("flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] font-bold relative", activeTab === "following" && "text-muted-foreground font-medium")}
+                        className="flex-1 hover:bg-white/[0.03] transition-colors cursor-pointer relative flex flex-col items-center justify-center outline-none"
                     >
-                        {t('feed.for_you')}
-                        {activeTab === "for-you" && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 bg-primary rounded-full min-w-[56px]" />}
-                    </div>
-                    <div
+                        <div className="relative h-full flex flex-col justify-center">
+                            <span className={cn("text-[15px] pb-1", activeTab === "for-you" ? "font-bold text-foreground" : "text-muted-foreground font-medium")}>
+                                {t('feed.for_you')}
+                            </span>
+                            {activeTab === "for-you" && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-full" />}
+                        </div>
+                    </button>
+                    <button
                         onClick={() => setActiveTab("following")}
-                        className={cn("flex-1 p-4 hover:bg-muted/50 transition cursor-pointer text-center text-[15px] font-bold relative", activeTab === "for-you" && "text-muted-foreground font-medium")}
+                        className="flex-1 hover:bg-white/[0.03] transition-colors cursor-pointer relative flex flex-col items-center justify-center outline-none"
                     >
-                        {t('common.following')}
-                        {activeTab === "following" && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-primary rounded-full" />}
-                    </div>
+                        <div className="relative h-full flex flex-col justify-center">
+                            <span className={cn("text-[15px] pb-1", activeTab === "following" ? "font-bold text-foreground" : "text-muted-foreground font-medium")}>
+                                {t('common.following')}
+                            </span>
+                            {activeTab === "following" && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-full" />}
+                        </div>
+                    </button>
                 </div>
             </div>
 
+            <div id="home-post-composer" />
+
             {/* Post Composer */}
-            <div className="px-4 py-3 border-b border-border flex gap-3">
-                <Avatar className="w-10 h-10 shrink-0">
+            <div className="px-4 pt-3 pb-2 border-b border-border flex gap-3">
+                <Avatar className="w-10 h-10 shrink-0 mt-1 cursor-pointer hover:opacity-90 transition">
                     <AvatarImage src={getMediaUrl(userAvatar)} />
                     <AvatarFallback>{userName[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
-                <div className="flex-1 w-full relative">
+                <div className="flex-1 w-full relative pt-1">
                     <textarea
                         value={postContent}
                         onChange={(e) => setPostContent(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        placeholder={t('right_sidebar.whats_happening')}
-                        className="w-full bg-transparent outline-none text-[20px] placeholder-muted-foreground mb-3 text-foreground resize-none min-h-[60px]"
+                        placeholder={t('right_sidebar.whats_happening') || "What is happening?!"}
+                        className="w-full bg-transparent outline-none text-[20px] placeholder:text-muted-foreground/80 mb-2 text-foreground resize-none min-h-[50px]"
                         maxLength={charLimit}
                     />
 
@@ -328,8 +381,8 @@ export default function Home() {
                         </div>
                     )}
 
-                    <div className="flex justify-between items-center border-t border-border/20 pt-3">
-                        <div className="flex gap-2 text-primary -ml-2 relative">
+                    <div className="flex justify-between items-center border-t border-border/30 pt-2">
+                        <div className="flex gap-0 text-primary -ml-2 relative">
                             <input
                                 type="file"
                                 ref={fileInputRef}
@@ -634,6 +687,7 @@ export default function Home() {
                 </DialogContent>
             </Dialog>
 
+            <div id="home-feed-top" />
             <Feed tab={activeTab} />
         </div>
     )

@@ -309,6 +309,12 @@ export const postService = {
 
 // User Services
 export const userService = {
+    // Get my profile
+    getMyProfile: async () => {
+        const { data } = await api.get('/api/users/profile')
+        return data?.data ?? data
+    },
+
     // Get user profile
     getUser: async (userId) => {
         const { data } = await api.get(`/api/users/${userId}`)
@@ -452,6 +458,18 @@ export const searchService = {
         const { data } = await api.get('/api/spaces')
         return data
     },
+
+    // Safe fallback:
+    // Some UI flows call getGeneralInsightsList(); earlier implementation removed/moved.
+    // Returning [] prevents /spaces from crashing even if no dedicated endpoint exists.
+    getGeneralInsightsList: async () => {
+        try {
+            // No known endpoint in this repo; keep as empty fallback.
+            return []
+        } catch (_) {
+            return []
+        }
+    },
 }
 
 // Space Services
@@ -478,6 +496,15 @@ export const spaceService = {
     endSpace: async (spaceId) => {
         const { data } = await api.post(`/api/spaces/${spaceId}/end`)
         return data
+    },
+
+    // Safe fallback for UI compatibility.
+    getGeneralInsightsList: async () => {
+        try {
+            return []
+        } catch (_) {
+            return []
+        }
     }
 }
 
@@ -528,6 +555,14 @@ export const messagingService = {
         const { data } = await messagingApi.get(`/api/messages/conversations/${conversationId}`)
         return data
     },
+    getConversationSettings: async (conversationId) => {
+        const { data } = await messagingApi.get(`/api/messages/conversations/${conversationId}/settings`)
+        return data
+    },
+    updateConversationSettings: async (conversationId, payload) => {
+        const { data } = await messagingApi.patch(`/api/messages/conversations/${conversationId}/settings`, payload)
+        return data
+    },
 
     // Upload Media
     uploadMedia: async (formData) => {
@@ -550,6 +585,42 @@ export const messagingService = {
         const { data } = await messagingApi.post('/api/messages/send', { recipientId, content })
         return data
     },
+    deleteMessage: async (messageId) => {
+        const { data } = await messagingApi.delete(`/api/messages/${messageId}`)
+        return data
+    },
+    reactToMessage: async (messageId, emoji, isRemoving = false) => {
+        if (isRemoving) {
+            const { data } = await messagingApi.delete(`/api/messages/${messageId}/react`, { data: { emoji } })
+            return data
+        }
+        const { data } = await messagingApi.post(`/api/messages/${messageId}/react`, { emoji })
+        return data
+    },
+    replyToMessage: async (messageId, payload) => {
+        const { data } = await messagingApi.post(`/api/messages/${messageId}/reply`, payload)
+        return data
+    },
+    forwardMessage: async (messageId, targetConversationId) => {
+        const { data } = await messagingApi.post(`/api/messages/${messageId}/forward`, { targetConversationId })
+        return data
+    },
+    updateMessage: async (messageId, content) => {
+        const { data } = await messagingApi.patch(`/api/messages/${messageId}`, { content })
+        return data
+    },
+    hideMessage: async (messageId) => {
+        const { data } = await messagingApi.delete(`/api/messages/${messageId}/hide`)
+        return data
+    },
+    getMessageInfo: async (messageId) => {
+        const { data } = await messagingApi.get(`/api/messages/${messageId}`)
+        return data
+    },
+    createConversation: async (recipientId) => {
+        const { data } = await messagingApi.post('/api/messages/conversations', { recipientId })
+        return data
+    }
 }
 
 // Analytics Services
@@ -678,8 +749,28 @@ export const listService = {
         const { data } = await api.get('/api/lists/yours')
         return data
     },
+    getList: async (listId) => {
+        const { data } = await api.get(`/api/lists/${listId}`)
+        return data?.data ?? data
+    },
+    getMembers: async (listId) => {
+        const { data } = await api.get(`/api/lists/${listId}/members`)
+        return Array.isArray(data) ? data : (data?.data ?? [])
+    },
+    getPosts: async (listId, params = {}) => {
+        const { data } = await api.get(`/api/lists/${listId}/posts`, { params })
+        return Array.isArray(data) ? data : (data?.data ?? [])
+    },
     createList: async (listData) => {
         const { data } = await api.post('/api/lists', listData)
+        return data?.data ?? data
+    },
+    updateList: async (listId, updates) => {
+        const { data } = await api.patch(`/api/lists/${listId}`, updates)
+        return data?.data ?? data
+    },
+    deleteList: async (listId) => {
+        const { data } = await api.delete(`/api/lists/${listId}`)
         return data
     },
     addMember: async (listId, userId) => {
@@ -692,6 +783,22 @@ export const listService = {
     },
     getMembershipStatus: async (userId) => {
         const { data } = await api.get(`/api/lists/membership/${userId}`)
+        return data
+    },
+    togglePin: async (listId, pinned) => {
+        const { data } = await api.patch(`/api/lists/${listId}/pin`, { pinned })
+        return data?.data ?? data
+    },
+    followList: async (listId) => {
+        const { data } = await api.post(`/api/lists/${listId}/follow`)
+        return data
+    },
+    unfollowList: async (listId) => {
+        const { data } = await api.delete(`/api/lists/${listId}/follow`)
+        return data
+    },
+    getDiscoverPaginated: async (limit = 5, offset = 0) => {
+        const { data } = await api.get('/api/lists/discover', { params: { limit, offset } })
         return data
     }
 }

@@ -12,6 +12,7 @@ import { PollDisplay } from "./poll-display"
 import { parsePollContent } from "@/lib/poll-utils"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useAuth } from "@/context/AuthContext"
 
 import { useTranslation } from "react-i18next"
 
@@ -25,6 +26,24 @@ const videoAutoPlayManager = (() => {
     const ratios = new Map() // video -> intersectionRatio
 
     const THRESHOLD_PLAY = 0.7
+    const SWITCH_DEBOUNCE_MS = 120
+    let switchTimer = null
+    const safePlay = (videoEl) => {
+        try {
+            const playPromise = videoEl.play()
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch((err) => {
+                    // Expected when source reload/pause interrupts play() during fast scroll.
+                    if (err?.name === 'AbortError') return
+                    // Ignore policy blocks too; not actionable in feed autoplay.
+                    if (err?.name === 'NotAllowedError') return
+                    console.debug('Autoplay play() failed:', err)
+                })
+            }
+        } catch {
+            // ignore sync play errors
+        }
+    }
 
     const ensureObserver = () => {
         if (observer) return observer
@@ -47,59 +66,61 @@ const videoAutoPlayManager = (() => {
                         }
                     }
                 }
-
-                // Pick the best candidate (highest ratio >= threshold)
-                let candidate = null
-                let best = THRESHOLD_PLAY
-                for (const v of videos) {
-                    const r = ratios.get(v) || 0
-                    if (r >= best) {
-                        best = r
-                        candidate = v
+                if (switchTimer) clearTimeout(switchTimer)
+                switchTimer = setTimeout(() => {
+                    // Pick the best candidate (highest ratio >= threshold)
+                    let candidate = null
+                    let best = THRESHOLD_PLAY
+                    for (const v of videos) {
+                        const r = ratios.get(v) || 0
+                        if (r >= best) {
+                            best = r
+                            candidate = v
+                        }
                     }
-                }
 
-                // Pause active if it is no longer eligible
-                if (active && active !== candidate) {
-                    try {
-                        active.__autoPause = true
-                        active.pause()
-                    } catch {
-                        // ignore
-                    } finally {
-                        active.__autoPause = false
-                    }
-                    active = null
-                }
-
-                if (!candidate) return
-
-                // Respect manual pause: if user paused it, don't auto-play again while still in view.
-                if (candidate.dataset?.userPaused === '1') return
-
-                // Pause any other playing videos (safety)
-                for (const v of videos) {
-                    if (v !== candidate) {
+                    // Pause active if it is no longer eligible
+                    if (active && active !== candidate) {
                         try {
-                            v.__autoPause = true
-                            v.pause()
+                            active.__autoPause = true
+                            active.pause()
                         } catch {
                             // ignore
                         } finally {
-                            v.__autoPause = false
+                            active.__autoPause = false
+                        }
+                        active = null
+                    }
+
+                    if (!candidate) return
+
+                    // Respect manual pause: if user paused it, don't auto-play again while still in view.
+                    if (candidate.dataset?.userPaused === '1') return
+
+                    // Pause any other playing videos (safety)
+                    for (const v of videos) {
+                        if (v !== candidate) {
+                            try {
+                                v.__autoPause = true
+                                v.pause()
+                            } catch {
+                                // ignore
+                            } finally {
+                                v.__autoPause = false
+                            }
                         }
                     }
-                }
 
-                active = candidate
-                try {
-                    candidate.muted = true
-                    candidate.playsInline = true
-                    candidate.autoplay = true
-                    void candidate.play()
-                } catch {
-                    // autoplay may be blocked; ignore
-                }
+                    active = candidate
+                    try {
+                        candidate.muted = true
+                        candidate.playsInline = true
+                        candidate.autoplay = true
+                        safePlay(candidate)
+                    } catch {
+                        // autoplay may be blocked; ignore
+                    }
+                }, SWITCH_DEBOUNCE_MS)
             },
             { threshold: [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1] }
         )
@@ -160,6 +181,10 @@ const videoAutoPlayManager = (() => {
                 }
                 observer = null
             }
+            if (videos.size === 0 && switchTimer) {
+                clearTimeout(switchTimer)
+                switchTimer = null
+            }
         }
     }
 
@@ -202,7 +227,7 @@ function AutoPlayVideo({ src, poster, className, style, onError }) {
 export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete, onToggleHighlight }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
-    const mediaBase = getApiBase() || ''
+    const { user: authUser } = useAuth()
 
     const [lightboxOpen, setLightboxOpen] = useState(false)
     const [lightboxSrc, setLightboxSrc] = useState(null)
@@ -212,18 +237,16 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
         const list = Array.isArray(post?.media) ? post.media : []
         return list
             .map((media) => {
-                const raw = media?.mediaUrl
-                if (!raw) return null
-                const mediaUrl = raw.startsWith('http') ? raw : `${mediaBase}${raw}`
+                const mediaUrl = getMediaUrl(media?.mediaUrl || media?.url)
+                if (!mediaUrl) return null
                 const urlLower = mediaUrl.toLowerCase()
                 const looksLikeVideo =
-                    urlLower.endsWith('.mp4') || urlLower.endsWith('.webm') || urlLower.endsWith('.mov') || urlLower.endsWith('.m4v') ||
-                    urlLower.includes('.mp4?') || urlLower.includes('.webm?') || urlLower.includes('.mov?') || urlLower.includes('.m4v?')
-                const isImage = media?.mediaType === 'image' && !looksLikeVideo
+                    /\.(mp4|webm|mov|m4v)($|\?)/i.test(urlLower)
+                const isImage = (media?.mediaType === 'image' || media?.type === 'image') && !looksLikeVideo
                 return isImage ? mediaUrl : null
             })
             .filter(Boolean)
-    }, [post?.media, mediaBase])
+    }, [post?.media])
 
     useEffect(() => {
         if (!lightboxOpen) return
@@ -340,9 +363,9 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
 
 
     return (
-        <div className="flex gap-3 px-4 py-3 border-b border-border hover:bg-white/[0.03] transition-colors cursor-pointer">
+        <div className="flex gap-3 px-4 pt-3 pb-2 border-b border-border hover:bg-white/[0.03] transition-colors cursor-pointer animate-in fade-in slide-in-from-bottom-3 duration-500">
             {/* User avatar column */}
-            <div className="flex-shrink-0" onClick={handleUserClick}>
+            <div className="flex-shrink-0 pt-1" onClick={handleUserClick}>
                 <Avatar className="w-10 h-10 hover:opacity-90 transition-opacity">
                     <AvatarImage src={getMediaUrl(user.avatar)} />
                     <AvatarFallback>{user.name[0]?.toUpperCase() || 'U'}</AvatarFallback>
@@ -397,8 +420,8 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                     })()
 
                     return (
-                        <div className="mt-0.5">
-                            <div className="text-[15px] leading-5 whitespace-pre-wrap break-words text-foreground">
+                        <div className="mt-0.5 mb-1">
+                            <div className="text-[15px] leading-snug whitespace-pre-wrap break-words text-foreground">
                                 {renderContentWithLinks(contentExpanded || !isLong ? trimmed : preview)}
                             </div>
                             {isLong && (
@@ -424,16 +447,11 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                         post.media.length === 1 ? '' : 'grid grid-cols-2 gap-0.5'
                     }`}>
                         {post.media.map((media, index) => {
-                            // Handle both R2 URLs (absolute) and local URLs (relative)
-                            const mediaUrl = media.mediaUrl?.startsWith('http') 
-                                ? media.mediaUrl 
-                                : `${mediaBase}${media.mediaUrl}`;
-                            const thumbnailUrl = media.thumbnailUrl?.startsWith('http')
-                                ? media.thumbnailUrl
-                                : media.thumbnailUrl ? `${mediaBase}${media.thumbnailUrl}` : null;
-                            const urlLower = (mediaUrl || '').toString().toLowerCase()
-                            const looksLikeVideo = urlLower.endsWith('.mp4') || urlLower.endsWith('.webm') || urlLower.endsWith('.mov') || urlLower.endsWith('.m4v') || urlLower.includes('.mp4?') || urlLower.includes('.webm?') || urlLower.includes('.mov?') || urlLower.includes('.m4v?')
-                            const isImage = media.mediaType === 'image' && !looksLikeVideo
+                            const mediaUrl = getMediaUrl(media.mediaUrl || media.url);
+                            const thumbnailUrl = getMediaUrl(media.thumbnailUrl);
+                            const urlLower = (mediaUrl || '').toLowerCase()
+                            const looksLikeVideo = /\.(mp4|webm|mov|m4v)($|\?)/i.test(urlLower)
+                            const isImage = (media.mediaType === 'image' || media.type === 'image') && !looksLikeVideo
 
                             return (
                                 <div key={media.id || index} className="relative bg-black">
@@ -526,6 +544,7 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                 <PostActions
                     stats={stats}
                     post={post}
+                    currentUserId={authUser?.id}
                     onLike={onLike}
                     onUnlike={onUnlike}
                     onRetweet={onRetweet}

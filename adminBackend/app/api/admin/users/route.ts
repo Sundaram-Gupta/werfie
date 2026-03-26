@@ -23,7 +23,9 @@ export async function GET(req: NextRequest) {
             whereClause.OR = [
                 { email: { contains: search, mode: 'insensitive' } },
                 { profile: { name: { contains: search, mode: 'insensitive' } } },
-                { profile: { handle: { contains: search, mode: 'insensitive' } } }
+                { profile: { handle: { contains: search, mode: 'insensitive' } } },
+                { institutionalProfile: { institutionName: { contains: search, mode: 'insensitive' } } },
+                { institutionalProfile: { publicDisplayName: { contains: search, mode: 'insensitive' } } }
             ];
         }
 
@@ -36,55 +38,40 @@ export async function GET(req: NextRequest) {
         }
 
         // Execute query
-        let users: any[];
-        let totalUsers: number;
-        try {
-            [users, totalUsers] = await Promise.all([
-                prisma.user.findMany({
-                    where: whereClause,
-                    skip,
-                    take: limit,
-                    select: {
-                        id: true,
-                        email: true,
-                        role: true,
-                        status: true,
-                        createdAt: true,
-                        profile: {
-                            select: {
-                                name: true,
-                                handle: true,
-                                avatar: true
-                            }
+        const [users, totalUsers] = await Promise.all([
+            prisma.user.findMany({
+                where: whereClause,
+                skip,
+                take: limit,
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    status: true,
+                    createdAt: true,
+                    profile: {
+                        select: {
+                            name: true,
+                            handle: true,
+                            avatar: true,
+                            verified: true
                         }
                     },
-                    orderBy: { createdAt: 'desc' }
-                }),
-                prisma.user.count({ where: whereClause })
-            ]);
-        } catch (profileErr: any) {
-            if (profileErr?.code === 'P2022') {
-                [users, totalUsers] = await Promise.all([
-                    prisma.user.findMany({
-                        where: whereClause,
-                        skip,
-                        take: limit,
+                    institutionalProfile: {
                         select: {
-                            id: true,
-                            email: true,
-                            role: true,
+                            institutionName: true,
+                            institutionType: true,
+                            publicDisplayName: true,
+                            isVerified: true,
                             status: true,
-                            createdAt: true
-                        },
-                        orderBy: { createdAt: 'desc' }
-                    }),
-                    prisma.user.count({ where: whereClause })
-                ]);
-                users = users.map(u => ({ ...u, profile: null }));
-            } else {
-                throw profileErr;
-            }
-        }
+                            badgeType: true
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.user.count({ where: whereClause })
+        ]);
 
         const totalPages = Math.ceil(totalUsers / limit);
 

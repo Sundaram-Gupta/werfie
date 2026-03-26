@@ -47,34 +47,61 @@ function normalizeUserRecord(user) {
     if (!user) return null;
     const { passwordHash, ...safeUser } = user;
     
+    const inst = safeUser.institutionalProfile;
     const defaultHandle = safeUser.email ? safeUser.email.split('@')[0] : 'user';
-    const fallbackName = defaultHandle.charAt(0).toUpperCase() + defaultHandle.slice(1);
+    const isAutoFallbackHandle = (h) => /^user_[0-9a-f]{8}_[0-9a-f]{4}$/i.test(String(h || ''));
+    
+    // If institutional, prioritize institutional name
+    let fallbackName = defaultHandle.charAt(0).toUpperCase() + defaultHandle.slice(1);
+    if (inst) {
+        fallbackName = inst.publicDisplayName || inst.institutionName || fallbackName;
+    }
 
     if (!safeUser.profile) {
         safeUser.profile = {
             name: fallbackName,
             handle: defaultHandle,
-            bio: null,
-            avatar: null,
-            banner: null,
-            location: null,
-            website: null,
+            bio: inst ? (inst.publicBio || inst.description) : null,
+            avatar: inst ? inst.logoUrl : null,
+            banner: inst ? inst.bannerUrl : null,
+            location: inst ? (inst.headquarters || inst.country) : null,
+            website: inst ? inst.website : null,
             birthdate: null,
             gender: null,
-            verified: false
+            verified: inst ? inst.isVerified : false
         };
     } else {
         // Ensure all expected fields exist on profile
-        // If name is missing, empty, or literally "User", use capitalized handle
-        const handle = safeUser.profile.handle || defaultHandle;
+        const handleFromDb = safeUser.profile.handle || defaultHandle;
+        // If handle in DB is the auto-generated fallback (`user_<first8>_<last4>`),
+        // show a more meaningful handle (usually the email local-part) instead.
+        // This fixes cases where Profile was never created during register.
+        const handle =
+            isAutoFallbackHandle(handleFromDb) && defaultHandle && !isAutoFallbackHandle(defaultHandle)
+                ? defaultHandle
+                : handleFromDb;
         const currentName = safeUser.profile.name;
-        const hasRealName = currentName && currentName.trim() !== '' && currentName !== 'User';
+        
+        // If profile name is default/missing, try institutional name first
+        let name = currentName;
+        const isDefaultName = !currentName || currentName.trim() === '' || currentName === 'User';
+        
+        if (isDefaultName || handle !== handleFromDb) {
+            if (inst) {
+                name = inst.publicDisplayName || inst.institutionName;
+            } else {
+                name = handle.charAt(0).toUpperCase() + handle.slice(1);
+            }
+        }
         
         safeUser.profile = {
             ...safeUser.profile,
-            name: hasRealName ? currentName : (handle.charAt(0).toUpperCase() + handle.slice(1)),
+            name: name,
             handle: handle,
-            verified: safeUser.profile.verified ?? false
+            verified: safeUser.profile.verified ?? (inst ? inst.isVerified : false),
+            avatar: safeUser.profile.avatar || (inst ? inst.logoUrl : null),
+            banner: safeUser.profile.banner || (inst ? inst.bannerUrl : null),
+            bio: safeUser.profile.bio || (inst ? (inst.publicBio || inst.description) : null)
         };
     }
     
@@ -548,36 +575,53 @@ app.get('/suggestions', async (req, res) => {
 });
 
 // Search Users
-app.get('/api/users/search', async (req, res) => {
+// NOTE: /api/users/* is rewritten earlier to /*, so search must be mounted on /search.
+app.get('/search', async (req, res) => {
     const { q, limit = 20 } = req.query;
 
     if (!q || q.trim().length === 0) {
         return res.json([]);
     }
 
+    // Split query into individual terms for multi-keyword search (e.g. "Bob User" -> ["Bob", "User"])
+    const terms = q.trim().split(/\s+/).filter(t => t.length > 0);
+
+    // Search with AND of ORs across multiple fields
+    const andConditions = terms.map(term => ({
+        OR: [
+            { profile: { name: { contains: term, mode: 'insensitive' } } },
+            { profile: { handle: { contains: term, mode: 'insensitive' } } },
+            { email: { contains: term, mode: 'insensitive' } },
+            { institutionalProfile: { institutionName: { contains: term, mode: 'insensitive' } } },
+            { institutionalProfile: { publicDisplayName: { contains: term, mode: 'insensitive' } } }
+        ]
+    }));
+
     try {
         let users = [];
         try {
             users = await prisma.user.findMany({
                 where: {
-                    profile: {
-                        OR: [
-                            { name: { contains: q, mode: 'insensitive' } },
-                            { handle: { contains: q, mode: 'insensitive' } }
-                        ]
-                    }
+                    AND: andConditions
                 },
-                include: { profile: { select: PROFILE_SELECT } },
+                include: { 
+                    profile: { select: PROFILE_SELECT },
+                    institutionalProfile: true
+                },
                 take: parseInt(limit)
             });
         } catch (err) {
-            // If profile-based search fails due to schema mismatch (e.g. Profile.gender missing), fall back to email search
+            // Fallback for schema mismatch (e.g. missing profile relation or fields)
             if (err && err.code === 'P2022') {
+                const emailConditions = terms.map(term => ({
+                    email: { contains: term, mode: 'insensitive' }
+                }));
                 users = await prisma.user.findMany({
-                    where: {
-                        email: { contains: q, mode: 'insensitive' }
+                    where: { AND: emailConditions },
+                    include: { 
+                        profile: { select: PROFILE_SELECT },
+                        institutionalProfile: true
                     },
-                    include: { profile: { select: PROFILE_SELECT } },
                     take: parseInt(limit)
                 });
             } else {
@@ -683,43 +727,62 @@ app.get('/:id', async (req, res) => {
 });
 
 // Update User Profile
-app.put('/:id', authenticateToken, async (req, res) => {
-    console.log(`Update Profile Request: params.id=${req.params.id}, user.userId=${req.user.userId}`);
+async function updateProfileByUserId(targetUserId, req, res) {
+    const body = req.body || {};
+    const {
+        name,
+        handle,
+        bio,
+        location,
+        website,
+        avatar,
+        avatarUrl,
+        banner,
+        bannerUrl,
+        preferredLanguage,
+        gender,
+        birthdate,
+        profile
+    } = body;
 
-    // Ensure user can only update their own profile
-    if (req.user.userId !== req.params.id) {
-        console.warn('Update Profile: ID mismatch. Forbidden.');
-        return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    const { name, bio, location, website, avatar, banner, preferredLanguage, gender, birthdate } = req.body;
+    // Flutter may send `profile: { bio: "..." }`
+    const effectiveBio = bio !== undefined ? bio : (profile?.bio !== undefined ? profile.bio : undefined);
+    const sanitizeUrl = (u) => typeof u === 'string' ? u.replace(/`/g, '').trim() : u;
+    const sanitizeHandle = (h) => typeof h === 'string' ? h.replace(/^@+/g, '').replace(/`/g, '').trim() : h;
+    const avatarValue = avatar !== undefined ? sanitizeUrl(avatar) : sanitizeUrl(avatarUrl);
+    const bannerValue = banner !== undefined ? sanitizeUrl(banner) : sanitizeUrl(bannerUrl);
+    const effectiveHandle = handle !== undefined ? sanitizeHandle(handle) : undefined;
 
     try {
         if (preferredLanguage) {
             await prisma.user.update({
-                where: { id: req.params.id },
+                where: { id: targetUserId },
                 data: { preferredLanguage }
             });
         }
 
         const updateData = {};
         if (name !== undefined) updateData.name = name;
-        if (bio !== undefined) updateData.bio = bio;
+        if (effectiveHandle !== undefined) updateData.handle = effectiveHandle;
+        if (effectiveBio !== undefined) updateData.bio = effectiveBio;
         if (location !== undefined) updateData.location = location;
         if (website !== undefined) updateData.website = website;
-        if (avatar !== undefined) updateData.avatar = avatar;
-        if (banner !== undefined) updateData.banner = banner;
+        if (avatarValue !== undefined) updateData.avatar = avatarValue;
+        if (bannerValue !== undefined) updateData.banner = bannerValue;
         if (gender !== undefined) updateData.gender = gender || null;
         if (birthdate !== undefined) updateData.birthdate = birthdate ? new Date(birthdate) : null;
 
+        // Use a stable, near-unique fallback handle for profile creation.
+        // This prevents P2002 (`handle` unique constraint) when the profile row doesn't exist yet.
+        const fallbackHandle = `user_${String(targetUserId).slice(0, 8)}_${String(targetUserId).slice(-4)}`;
+
+        const baseHandle = effectiveHandle || fallbackHandle;
         const baseCreate = {
-            userId: req.params.id,
-            handle: (req.user?.email ? String(req.user.email).split('@')[0] : null) || `user_${String(req.params.id).slice(0, 8)}`,
+            userId: targetUserId,
+            handle: baseHandle,
             name: name || 'User',
         };
 
-        // Select only fields that are guaranteed to exist across DB versions.
-        // Some environments are missing Profile.gender, which would crash Prisma if selected implicitly.
         const PROFILE_SAFE_SELECT = {
             id: true,
             userId: true,
@@ -731,7 +794,6 @@ app.put('/:id', authenticateToken, async (req, res) => {
             location: true,
             website: true,
             birthdate: true,
-            gender: true,
             createdAt: true,
             updatedAt: true,
             verified: true,
@@ -740,31 +802,64 @@ app.put('/:id', authenticateToken, async (req, res) => {
         let updatedProfile;
         try {
             updatedProfile = await prisma.profile.upsert({
-                where: { userId: req.params.id },
+                where: { userId: targetUserId },
                 update: updateData,
                 create: { ...baseCreate, ...updateData },
                 select: PROFILE_SAFE_SELECT
             });
         } catch (err) {
             // Backward-compat: some DBs don't have Profile.gender yet.
-            if (err?.code === 'P2022' && String(err?.message || '').includes('Profile.gender')) {
+            const errMsg = String(err?.message || '');
+            const errColumn = String(err?.meta?.column || '');
+            if (
+                err?.code === 'P2022' &&
+                (errMsg.includes('gender') || errMsg.includes('Profile.gender') || errColumn === 'gender')
+            ) {
                 const { gender: _omit, ...noGender } = updateData;
                 updatedProfile = await prisma.profile.upsert({
-                    where: { userId: req.params.id },
+                    where: { userId: targetUserId },
                     update: noGender,
                     create: { ...baseCreate, ...noGender },
                     select: PROFILE_SAFE_SELECT
+                });
+            } else if (err?.code === 'P2002') {
+                // handle unique constraint etc.
+                return res.status(409).json({
+                    error: 'Update rejected (profile handle conflict). Try again.',
+                    details: err?.meta || null
                 });
             } else {
                 throw err;
             }
         }
 
-        res.json({ ...updatedProfile, preferredLanguage });
+        return res.json({ ...updatedProfile, preferredLanguage });
     } catch (error) {
         console.error('Update Profile Error:', error);
-        res.status(500).json({ error: 'Failed to update profile' });
+        return res.status(500).json({ error: 'Failed to update profile' });
     }
+}
+
+// Update current user's profile
+app.put('/profile', authenticateToken, async (req, res) => {
+    const targetUserId = String(req.user?.userId ?? '').trim();
+    if (!targetUserId) return res.status(401).json({ error: 'Unauthorized' });
+    return updateProfileByUserId(targetUserId, req, res);
+});
+
+// Update User Profile by ID
+app.put('/:id', authenticateToken, async (req, res) => {
+    console.log(`Update Profile Request: params.id=${req.params.id}, user.userId=${req.user.userId}`);
+
+    // Ensure user can only update their own profile
+    const reqUserId = String(req.user?.userId ?? '').trim();
+    const paramId = String(req.params?.id ?? '').trim();
+    if (!reqUserId || reqUserId !== paramId) {
+        console.warn('Update Profile: ID mismatch. Forbidden.');
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return updateProfileByUserId(paramId, req, res);
 });
 
 app.use((req, res) => {
@@ -777,6 +872,7 @@ app.use((req, res) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`User Service running on port ${PORT}`);
+const bindHost = process.env.BIND_HOST || '0.0.0.0';
+app.listen(PORT, bindHost, () => {
+    console.log(`User Service running on http://${bindHost}:${PORT} (LAN: use this machine's IP)`);
 });

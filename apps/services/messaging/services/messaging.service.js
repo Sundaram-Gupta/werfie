@@ -18,7 +18,9 @@ export class MessagingService {
 
     static markConversationSettingsUnavailable(error) {
         // P2021 = table does not exist. Disable settings queries for this process.
-        if (error?.code === 'P2021') {
+        const msg = String(error?.message || '')
+        const isTableMissing = error?.code === 'P2021' || /does not exist/i.test(msg) || /relation.*does not exist/i.test(msg)
+        if (isTableMissing) {
             this._conversationSettingsTableAvailable = false
             console.warn('[MessagingService] ConversationUserSetting table unavailable; using fallback behavior.')
         }
@@ -76,11 +78,22 @@ export class MessagingService {
                 blockMessages: Boolean(next.blockMessages)
             }
         }
-        return prisma.conversationUserSetting.upsert({
-            where: { conversationId_userId: { conversationId, userId } },
-            update: next,
-            create: { conversationId, userId, ...next }
-        })
+        try {
+            return await prisma.conversationUserSetting.upsert({
+                where: { conversationId_userId: { conversationId, userId } },
+                update: next,
+                create: { conversationId, userId, ...next }
+            })
+        } catch (error) {
+            this.markConversationSettingsUnavailable(error)
+            return {
+                conversationId,
+                userId,
+                disappearingMode: next.disappearingMode || 'off',
+                blockScreenshots: Boolean(next.blockScreenshots),
+                blockMessages: Boolean(next.blockMessages)
+            }
+        }
     }
 
     static async assertCanSendToConversation(conversationId, senderId) {
@@ -97,12 +110,20 @@ export class MessagingService {
         if (conversation.type === 'direct' && this.hasConversationSettingsModel()) {
             const recipient = conversation.participants.find(p => p.userId !== senderId)
             if (recipient?.userId) {
-                const recipientSettings = await prisma.conversationUserSetting.findUnique({
-                    where: { conversationId_userId: { conversationId, userId: recipient.userId } },
-                    select: { blockMessages: true }
-                })
-                if (recipientSettings?.blockMessages) {
-                    throw new Error("This user is not accepting messages in this conversation")
+                try {
+                    const recipientSettings = await prisma.conversationUserSetting.findUnique({
+                        where: { conversationId_userId: { conversationId, userId: recipient.userId } },
+                        select: { blockMessages: true }
+                    })
+
+                    if (recipientSettings?.blockMessages) {
+                        throw new Error("This user is not accepting messages in this conversation")
+                    }
+                } catch (error) {
+                    // If the table doesn't exist in DB yet, disable settings and proceed.
+                    this.markConversationSettingsUnavailable(error)
+                    // Preserve original behavior for real "not accepting messages" blocks.
+                    if (/not accepting messages/i.test(String(error?.message || ''))) throw error
                 }
             }
         }
@@ -226,14 +247,15 @@ export class MessagingService {
     }
 
     static async createDirectConversation(user1, user2) {
+        const participantsData = user1 === user2 
+            ? [{ userId: user1 }] 
+            : [{ userId: user1 }, { userId: user2 }]
+
         return prisma.conversation.create({
             data: {
                 type: 'direct',
                 participants: {
-                    create: [
-                        { userId: user1 },
-                        { userId: user2 }
-                    ]
+                    create: participantsData
                 }
             },
             include: {
@@ -244,7 +266,21 @@ export class MessagingService {
     }
 
     static async findDirectConversation(user1, user2) {
-        if (user1 === user2) return null;
+        if (user1 === user2) {
+            // Self-chat: find conversation where this user is the ONLY participant
+            const conversations = await prisma.conversation.findMany({
+                where: {
+                    type: 'direct',
+                    participants: {
+                        every: { userId: user1 }
+                    }
+                },
+                include: {
+                    participants: true
+                }
+            });
+            return conversations.find(conv => conv.participants.length === 1) || null;
+        }
 
         const conversations = await prisma.conversation.findMany({
             where: {

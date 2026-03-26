@@ -1,7 +1,7 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage, getAvatarColor } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { BadgeCheck, Mail, Search, Settings, MessageSquarePlus, Smile, Send, MoreVertical, X, Users2, Plus, Check, ArrowLeft, Link2, Phone, Video, User, Clock, CameraOff, Ban } from "lucide-react"
+import { BadgeCheck, Mail, Search, Settings, MessageSquarePlus, Smile, Send, MoreVertical, X, Users2, Plus, Check, ArrowLeft, ArrowRight, Link2, Phone, Video, User, Clock, CameraOff, Ban, MessageCircle, Forward, Copy, Info, Trash2, MoreHorizontal } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import { useState, useRef, useEffect } from "react"
@@ -20,6 +20,12 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const normalizeUser = (user) => {
     if (!user) return null;
@@ -94,6 +100,39 @@ export default function Chat() {
     const [modalSearchResults, setModalSearchResults] = useState([])
     const [followingUsers, setFollowingUsers] = useState([])
     const [showUserInfoModal, setShowUserInfoModal] = useState(false)
+    const [replyingTo, setReplyingTo] = useState(null)
+    const [showForwardModal, setShowForwardModal] = useState(false)
+    const [forwardingMessage, setForwardingMessage] = useState(null)
+    const [showMessageInfoModal, setShowMessageInfoModal] = useState(false)
+    const [selectedMessageDetail, setSelectedMessageDetail] = useState(null)
+    const [conversationsReady, setConversationsReady] = useState(false)
+
+    // Handlers for message actions
+    const handleReply = (msg) => {
+        setReplyingTo(msg)
+        fileInputRef.current?.focus() // Focus the input
+    }
+
+    const handleForward = (msg) => {
+        setForwardingMessage(msg)
+        setShowForwardModal(true)
+    }
+
+    const handleInfo = (msg) => {
+        setSelectedMessageDetail(msg)
+        setShowMessageInfoModal(true)
+    }
+
+    const handleDeleteForMe = async (msg) => {
+        try {
+            // Optimistic update
+            setMessages(prev => prev.filter(m => m.id !== msg.id))
+            await messagingService.hideMessage(msg.id)
+        } catch (err) {
+            console.error('Delete message error:', err)
+            // Rollback if needed (though usually not critical for "delete for me")
+        }
+    }
 
     const upsertConversation = (prev, chatObj) => {
         if (!chatObj?.id) return prev
@@ -230,9 +269,11 @@ export default function Chat() {
                     // 2. Check for Optimistic Match (Sender matches + Content matches + Recent)
                     const isOwnMessage = message.senderId === currentUser?.id;
                     if (isOwnMessage) {
-                        // Find a numeric ID message (optimistic) with same content/media
+                        // Find a temp ID message (optimistic) with same content/media
+                        // Temp IDs are pure-digit strings from Date.now(), real UUIDs contain dashes
+                        const isOptimisticId = (id) => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
                         const optimisticMatchIndex = msgs.findIndex(m =>
-                            typeof m.id === 'number' &&
+                            isOptimisticId(m.id) &&
                             ((m.text === message.content) || (m.mediaUrl && m.mediaUrl === message.mediaUrl))
                         );
 
@@ -541,20 +582,22 @@ export default function Chat() {
             thumbnailUrl: mediaAttachment?.thumbnailUrl,
             duration: mediaAttachment?.duration,
             size: mediaAttachment?.size,
-            mimeType: mediaAttachment?.mimeType
+            mimeType: mediaAttachment?.mimeType,
+            replyToId: replyingTo?.id
         }
 
         // Optimistic update
         const tempMsg = {
-            id: Date.now(), // Temporary ID
+            id: Date.now().toString(), // Temporary ID
             senderId: currentUser.id,
-            content: newMessage,
+            content: newMessage || '',
             type: payload.type,
             mediaUrl: payload.mediaUrl,
             thumbnailUrl: payload.thumbnailUrl,
             duration: payload.duration,
             size: payload.size,
             mimeType: payload.mimeType,
+            replyToId: payload.replyToId,
             createdAt: new Date().toISOString()
         }
 
@@ -565,7 +608,23 @@ export default function Chat() {
 
         setNewMessage("")
         setMediaAttachment(null)
+        setReplyingTo(null)
         setShowEmojiPicker(false)
+    }
+
+    const handleForwardAction = async (targetConvId) => {
+        if (!forwardingMessage) return
+        try {
+            toast.loading("Forwarding message...")
+            await messagingService.forwardMessage(forwardingMessage.id, targetConvId)
+            toast.dismiss()
+            toast.success("Message forwarded")
+            setShowForwardModal(false)
+            setForwardingMessage(null)
+        } catch (err) {
+            toast.dismiss()
+            toast.error("Failed to forward message")
+        }
     }
 
     const modalDisplayUsers = modalSearchQuery.trim() ? modalSearchResults : followingUsers
@@ -715,43 +774,39 @@ export default function Chat() {
                 <div className="flex-1 flex flex-col h-screen bg-black">
                     {selectedChat ? (
                         <>
-                            <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md px-4 py-3 border-b border-border flex items-center gap-3">
+                            <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md px-4 h-14 border-b border-border flex items-center justify-between">
                                 <button type="button"
                                     onClick={() => setShowUserInfoModal(true)}
-                                    className="flex items-center gap-3 flex-1 min-w-0"
+                                    className="flex items-center gap-1"
                                 >
-                                    <Avatar className="w-10 h-10 border border-border shrink-0 cursor-pointer">
-                                        <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} />
-                                        <AvatarFallback>{selectedChat.user.name?.[0]}</AvatarFallback>
-                                    </Avatar>
-                                    <h2 className="text-[18px] font-bold truncate text-left">{selectedChat.user.name}</h2>
+                                    <h2 className="text-[19px] font-bold text-white hover:underline truncate text-left">{selectedChat.user.name}</h2>
+                                    {selectedChat.user.verified && <BadgeCheck className="w-[18px] h-[18px] text-[#ffd700] fill-[#ffd700]/20" />}
                                 </button>
                                 <button type="button"
                                     onClick={() => setShowUserInfoModal(true)}
-                                    className="p-2.5 hover:bg-white/[0.06] rounded-full transition-colors text-muted-foreground hover:text-white"
+                                    className="w-[34px] h-[34px] flex items-center justify-center hover:bg-white/[0.1] rounded-full transition-colors text-white"
                                 >
-                                    <MoreVertical className="w-6 h-6" />
+                                    <MoreVertical className="w-5 h-5" />
                                 </button>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
                                 {/* Profile Info in Chat */}
-                                <div className="flex flex-col items-center justify-center py-8">
-                                    <Avatar className="w-20 h-20 mb-3 border-2 border-border">
-                                        <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} />
-                                        <AvatarFallback className="text-2xl">{selectedChat.user.name?.[0]}</AvatarFallback>
+                                <div className="flex flex-col items-center justify-center pt-10 pb-16 hover:bg-white/[0.03] transition-colors cursor-pointer border-b border-border" onClick={() => navigate(`/profile/${selectedChat.user.id}`)}>
+                                    <Avatar className="w-[120px] h-[120px] mb-3 relative overflow-hidden bg-black">
+                                        <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} className="object-cover" />
+                                        <AvatarFallback className="text-4xl bg-[#ff3366] font-bold text-white">{selectedChat.user.name?.[0]}</AvatarFallback>
                                     </Avatar>
-                                    <h3 className="text-[18px] font-bold flex items-center gap-1 mb-0.5">
+                                    <h3 className="text-[20px] font-bold flex items-center gap-1 mb-0 leading-tight">
                                         {selectedChat.user.name}
                                         {selectedChat.user.verified && <BadgeCheck className="w-5 h-5 text-[#ffd700] fill-[#ffd700]/20" />}
                                     </h3>
-                                    <p className="text-muted-foreground text-[16px] mb-0.5">@{selectedChat.user.handle}</p>
-                                    <p className="text-muted-foreground text-[16px] mb-4">{formatJoinedDate(selectedChat.user.createdAt)}</p>
+                                    <p className="text-[#71767b] text-[15px] mb-1">@{selectedChat.user.handle}</p>
+                                    <p className="text-[#71767b] text-[15px] mb-4">{formatJoinedDate(selectedChat.user.createdAt)}</p>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="rounded-full border-white/20 bg-white text-black hover:bg-white/90 font-semibold px-5"
-                                        onClick={() => navigate(`/profile/${selectedChat.user.id}`)}
+                                        className="rounded-full bg-white hover:bg-[#d7dbdc] text-black font-bold px-6 h-[34px] border-none text-[15px] transition-colors"
                                     >
                                         View Profile
                                     </Button>
@@ -773,59 +828,91 @@ export default function Chat() {
 
                                             <div
                                                 className={cn(
-                                                    "flex flex-col max-w-[66%]",
+                                                    "flex flex-col max-w-[70%]",
                                                     msg.sender === "me" ? "self-end items-end" : "self-start items-start"
                                                 )}
                                             >
                                                 <div
                                                     className={cn(
-                                                        "px-4 py-2.5 rounded-2xl text-[15px] leading-snug",
+                                                        "px-3.5 py-2.5 text-[15px] leading-[20px] relative group",
                                                         msg.sender === "me"
-                                                            ? "bg-[rgb(29,155,240)] text-white rounded-br-md"
-                                                            : "bg-[#2f3336] text-white rounded-bl-md"
+                                                            ? "bg-[#1d9bf0] text-white rounded-[22px] rounded-br-[4px]"
+                                                            : "bg-[#2f3336] text-[#e7e9ea] rounded-[22px] rounded-bl-[4px]"
                                                     )}
                                                 >
                                                     {msg.mediaUrl && (
                                                         msg.mediaType === 'video' ? (
-                                                            <div className="relative">
+                                                            <div className="relative mb-1">
                                                                 <video
                                                                     src={getMediaUrl(msg.mediaUrl)}
                                                                     controls
                                                                     poster={getMediaUrl(msg.thumbnailUrl)}
-                                                                    className="rounded-lg mb-2 max-h-[280px] w-full object-cover bg-black"
+                                                                    className="rounded-2xl max-h-[300px] w-full object-cover bg-black"
                                                                 />
                                                                 {msg.duration && (
-                                                                    <span className="absolute bottom-4 right-2 bg-black/60 text-white text-xs px-1 rounded">
+                                                                    <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[11px] font-bold px-1.5 rounded">
                                                                         {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
                                                                     </span>
                                                                 )}
                                                             </div>
                                                         ) : msg.mediaType === 'audio' ? (
-                                                            <div className="w-[220px] bg-gray-900 rounded-lg p-2 mb-2">
-                                                                <audio src={getMediaUrl(msg.mediaUrl)} controls className="w-full" />
-                                                                {msg.duration && (
-                                                                    <div className="text-xs text-muted-foreground text-right mt-1">
-                                                                        {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
-                                                                    </div>
-                                                                )}
+                                                            <div className="w-[220px] bg-black/20 rounded-2xl p-2 mb-1">
+                                                                <audio src={getMediaUrl(msg.mediaUrl)} controls className="w-full h-8" />
                                                             </div>
                                                         ) : (
                                                             <img
                                                                 src={getMediaUrl(msg.mediaUrl)}
                                                                 alt="Attachment"
-                                                                className="rounded-lg mb-2 max-h-[280px] w-full object-cover"
+                                                                className="rounded-2xl mb-1 max-h-[300px] w-full object-cover"
                                                             />
                                                         )
                                                     )}
 
-                                                    {msg.text ? <span className={msg.mediaUrl ? "block" : ""}>{msg.text}</span> : null}
-
-                                                    {msg.sender === "me" && (
-                                                        <div className="flex items-center justify-end gap-1 mt-1 text-white/80">
-                                                            <span className="text-[11px]">{msg.timestamp}</span>
-                                                            <Check className="w-4 h-4" strokeWidth={2.5} />
-                                                        </div>
-                                                    )}
+                                                    <div className="flex items-end gap-2 flex-wrap min-w-0 pointer-events-none">
+                                                        {msg.text ? <span className="whitespace-pre-wrap break-words">{msg.text}</span> : null}
+                                                        
+                                                        {/* Timestamp next to text */}
+                                                        <span className="shrink-0 text-[11px] text-white/70 ml-auto flex items-center gap-[3px] select-none h-[20px]">
+                                                            {msg.timestamp}
+                                                            {msg.sender === "me" && <Check className="w-[13px] h-[13px]" strokeWidth={2.5} />}
+                                                        </span>
+                                                    </div>
+                                                    {/* Hover options... (Made visible explicitly per request & mobile friendly) */}
+                                                    <div className="absolute top-1/2 -translate-y-1/2 flex items-center gap-1" style={{[msg.sender === "me" ? "left" : "right"]: "-38px"}}>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <button className="h-[26px] w-[26px] rounded-full border border-[#2f3336] bg-black flex items-center justify-center text-[#71767b] hover:text-[#e7e9ea] hover:bg-[#16181c] transition-colors" title="More">
+                                                                    <MoreHorizontal className="w-4 h-4" />
+                                                                </button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent 
+                                                                align={msg.sender === "me" ? "end" : "start"} 
+                                                                side="bottom" 
+                                                                className="w-[260px] bg-black border-[#2f3336] rounded-2xl p-0 shadow-xl shadow-black/50 py-1"
+                                                            >
+                                                                 <DropdownMenuItem className="flex items-center gap-3 px-4 py-[14px] cursor-pointer text-[#e7e9ea] focus:bg-white/[0.03] focus:text-white font-bold text-[15px] rounded-none outline-none border-none" onClick={() => handleReply(msg)}>
+                                                                    <MessageCircle className="w-5 h-5 text-[#71767b] absolute left-4" strokeWidth={2} />
+                                                                    <span className="ml-[34px]">Reply</span>
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem className="flex items-center gap-3 px-4 py-[14px] cursor-pointer text-[#e7e9ea] focus:bg-white/[0.03] focus:text-white font-bold text-[15px] rounded-none outline-none border-none" onClick={() => handleForward(msg)}>
+                                                                    <Forward className="w-5 h-5 text-[#71767b] absolute left-4" strokeWidth={2} />
+                                                                    <span className="ml-[34px]">Forward</span>
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem className="flex items-center gap-3 px-4 py-[14px] cursor-pointer text-[#e7e9ea] focus:bg-white/[0.03] focus:text-white font-bold text-[15px] rounded-none outline-none border-none" onClick={() => navigator.clipboard.writeText(msg.text || '')}>
+                                                                    <Copy className="w-5 h-5 text-[#71767b] absolute left-4" strokeWidth={2} />
+                                                                    <span className="ml-[34px]">Copy message text</span>
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem className="flex items-center gap-3 px-4 py-[14px] cursor-pointer text-[#e7e9ea] focus:bg-white/[0.03] focus:text-white font-bold text-[15px] rounded-none outline-none border-none" onClick={() => handleInfo(msg)}>
+                                                                    <Info className="w-5 h-5 text-[#71767b] absolute left-4" strokeWidth={2} />
+                                                                    <span className="ml-[34px]">Info</span>
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem className="flex items-center gap-3 px-4 py-[14px] cursor-pointer text-[#f4212e] focus:bg-[#f4212e]/10 focus:text-[#f4212e] font-bold text-[15px] rounded-none outline-none border-none" onClick={() => handleDeleteForMe(msg)}>
+                                                                    <Trash2 className="w-5 h-5 text-[#f4212e] absolute left-4" strokeWidth={2} />
+                                                                    <span className="ml-[34px]">Delete for me</span>
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -835,6 +922,22 @@ export default function Chat() {
                             </div>
 
                             <div className="p-3 border-t border-border bg-black relative">
+                                {/* Reply Preview */}
+                                {replyingTo && (
+                                    <div className="flex items-center justify-between bg-[#16181c] p-3 border-b border-border animate-in slide-in-from-bottom-2 duration-200">
+                                        <div className="flex flex-col gap-0.5 min-w-0 border-l-[3px] border-[#1d9bf0] pl-3">
+                                            <span className="text-[13px] text-[#71767b]">Replying to {replyingTo.sender === 'me' ? 'yourself' : 'them'}</span>
+                                            <span className="text-[14px] text-[#e7e9ea] truncate max-w-full italic">"{replyingTo.text}"</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => setReplyingTo(null)}
+                                            className="w-7 h-7 rounded-full hover:bg-white/10 flex items-center justify-center text-[#71767b] hover:text-[#e7e9ea] transition-colors"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* Emoji Picker Popover */}
                                 {showEmojiPicker && (
                                     <div className="absolute bottom-20 left-4 z-50">
@@ -867,7 +970,7 @@ export default function Chat() {
                                     </div>
                                 )}
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 px-3 py-1">
                                     <input
                                         type="file"
                                         ref={fileInputRef}
@@ -878,54 +981,56 @@ export default function Chat() {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="bg-[#202327] hover:bg-[#2a2d31] text-white/80 hover:text-white rounded-full h-12 w-12 shrink-0"
+                                        className="hover:bg-white/10 text-white/80 hover:text-white rounded-full h-10 w-10 shrink-0 bg-[#202327]"
                                         onClick={() => fileInputRef.current?.click()}
                                         disabled={isUploading}
-                                        title="Attach"
+                                        title="Attach file"
                                     >
-                                        <Plus className="w-6 h-6" />
+                                        <Plus className="w-5 h-5" />
                                     </Button>
-                                    <div className="bg-[#202327] rounded-full flex items-center px-2.5 py-2 gap-1 flex-1 focus-within:ring-1 focus-within:ring-white/10">
-                                        <button
-                                            type="button"
-                                            className="h-10 w-10 rounded-full bg-white/[0.06] hover:bg-white/[0.10] text-white/80 hover:text-white flex items-center justify-center shrink-0"
-                                            title="GIF"
-                                            onClick={() => toast.info("GIF picker coming soon")}
-                                        >
-                                            <span className="text-[12px] font-bold">GIF</span>
-                                        </button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className={cn(
-                                                "rounded-full h-10 w-10 shrink-0 text-white/80 hover:text-white hover:bg-white/[0.06]",
-                                                showEmojiPicker ? "bg-white/[0.10] text-white" : ""
-                                            )}
-                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                            title="Emoji"
-                                        >
-                                            <Smile className="w-5 h-5" />
-                                        </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="hover:bg-white/10 text-white/80 hover:text-white rounded-full h-10 w-10 shrink-0 bg-[#202327]"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isUploading}
+                                        title="Attach media"
+                                    >
+                                        <Link2 className="w-[18px] h-[18px]" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "rounded-full h-10 w-10 shrink-0 text-white/80 hover:text-white hover:bg-white/10 bg-[#202327]",
+                                            showEmojiPicker ? "bg-white/20 text-white" : ""
+                                        )}
+                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                        title="Emoji"
+                                    >
+                                        <Smile className="w-[18px] h-[18px]" />
+                                    </Button>
+                                    
+                                    <div className="bg-[#202327] rounded-full flex items-center px-4 py-0 flex-1 h-[42px] ml-1">
                                         <Input
                                             value={newMessage}
                                             onChange={(e) => setNewMessage(e.target.value)}
                                             placeholder="Unencrypted message"
-                                            className="flex-1 border-none bg-transparent focus-visible:ring-0 text-white placeholder:text-muted-foreground px-3 h-10 text-[15px]"
+                                            className="flex-1 border-none bg-transparent focus-visible:ring-0 text-[#e7e9ea] placeholder:text-[#71767b] px-0 h-full text-[15px]"
                                             onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                                         />
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className={cn(
-                                                "rounded-full h-10 w-10 shrink-0 transition-colors",
-                                                (newMessage.trim() || mediaAttachment) ? "text-white hover:bg-white/[0.06]" : "text-white/40"
-                                            )}
-                                            onClick={handleSendMessage}
-                                            disabled={(!newMessage.trim() && !mediaAttachment) || isUploading}
-                                            title="Send"
-                                        >
-                                            <Send className="w-5 h-5" />
-                                        </Button>
+                                        {(newMessage.trim() || mediaAttachment) && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="rounded-full h-8 w-8 shrink-0 text-[#1d9bf0] hover:bg-[#1d9bf0]/10 ml-1"
+                                                onClick={handleSendMessage}
+                                                disabled={isUploading}
+                                                title="Send"
+                                            >
+                                                <Send className="w-4 h-4 ml-[2px]" />
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1095,6 +1200,109 @@ export default function Chat() {
                         </div>
                     </DialogContent>
                 </Dialog>
+            )}
+            {/* Forward Message Modal */}
+            {showForwardModal && (
+                <div className="fixed inset-0 z-[100] bg-[#5b7083]/40 flex items-center justify-center p-4">
+                    <div className="bg-black w-full max-w-[600px] h-[650px] rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-[#2f3336]">
+                            <div className="flex items-center gap-6">
+                                <button 
+                                    onClick={() => { setShowForwardModal(false); setForwardingMessage(null); }}
+                                    className="p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-white" />
+                                </button>
+                                <h2 className="text-[20px] font-bold text-white">Forward message</h2>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                           <div className="space-y-4">
+                               <p className="text-[#71767b] text-[15px] px-2">Select a conversation to forward this message to.</p>
+                               {conversations.map(c => {
+                                   // `conversations` state ko `loadConversations()` me enrich kiya jata hai,
+                                   // jahan contact user ko `c.user` me diya hota hai (na ki participants array me).
+                                   // Forward modal me isi ko use karo, warna name/handle blank aa sakte hain.
+                                   const otherUser =
+                                       c.user ||
+                                       (c.participants || []).find(p => String(p.user?.id) !== String(currentUser?.id))?.user ||
+                                       {}
+
+                                   const displayName = otherUser.name || otherUser.profile?.name || 'Unknown'
+                                   const displayHandle = otherUser.handle || otherUser.profile?.handle || otherUser.username || 'unknown'
+                                   const avatarSrc = otherUser.avatar || otherUser.profile?.avatar || null
+                                   return (
+                                       <button 
+                                           key={c.id}
+                                           onClick={() => handleForwardAction(c.id)}
+                                           className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.03] transition-colors group text-left"
+                                       >
+                                           <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold overflow-hidden shrink-0">
+                                               {avatarSrc ? (
+                                                   <img src={getMediaUrl(avatarSrc)} className="w-full h-full object-cover" />
+                                               ) : (
+                                                   (displayName?.[0] || 'U').toUpperCase()
+                                               )}
+                                           </div>
+                                           <div className="min-w-0">
+                                               <div className="font-bold text-[15px] text-white truncate">{displayName}</div>
+                                               <div className="text-[14px] text-[#71767b] truncate">@{displayHandle}</div>
+                                           </div>
+                                           <ArrowRight className="ml-auto w-5 h-5 text-[#71767b] group-hover:text-primary transition-colors" />
+                                       </button>
+                                   )
+                               })}
+                           </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Message Info Modal */}
+            {showMessageInfoModal && selectedMessageDetail && (
+                <div className="fixed inset-0 z-[100] bg-[#5b7083]/40 flex items-center justify-center p-4">
+                    <div className="bg-black w-full max-w-[400px] rounded-2xl flex flex-col overflow-hidden shadow-2xl border border-[#2f3336]">
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-[#2f3336]">
+                            <h2 className="text-[18px] font-bold text-white">Message Info</h2>
+                            <button 
+                                onClick={() => { setShowMessageInfoModal(false); setSelectedMessageDetail(null); }}
+                                className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                            >
+                                <X className="w-5 h-5 text-white" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="space-y-1">
+                                <p className="text-[13px] text-[#71767b] uppercase font-bold tracking-tight">Status</p>
+                                <div className="flex items-center gap-2 text-white">
+                                    <span className="capitalize">{selectedMessageDetail.status || 'Sent'}</span>
+                                    {selectedMessageDetail.sender === 'me' && (
+                                        <div className="flex">
+                                            <Check className="w-4 h-4 text-[#1d9bf0]" />
+                                            {selectedMessageDetail.status === 'read' && <Check className="w-4 h-4 -ml-2 text-[#1d9bf0]" />}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <p className="text-[13px] text-[#71767b] uppercase font-bold tracking-tight">Sent at</p>
+                                <p className="text-white text-[15px]">
+                                    {new Date(selectedMessageDetail.fullDate).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })} at {selectedMessageDetail.timestamp}
+                                </p>
+                            </div>
+
+                            {selectedMessageDetail.mediaUrl && (
+                                <div className="space-y-1">
+                                    <p className="text-[13px] text-[#71767b] uppercase font-bold tracking-tight">Content Type</p>
+                                    <p className="text-white text-[15px] capitalize">{selectedMessageDetail.mediaType}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     )

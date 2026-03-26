@@ -14,25 +14,26 @@ const authenticateToken = (req, res, next) => {
     }
 
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    const token = authHeader && authHeader.match(/^Bearer\s+(.+)$/i)?.[1];
 
     if (!token) {
         if (req.headers['x-user-id']) {
             req.user = { userId: req.headers['x-user-id'], id: req.headers['x-user-id'] };
             return next();
         }
+        console.warn(`Auth Middleware: No token found for ${req.url}`);
         return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
     }
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) {
-            console.error('Auth Middleware: Token verification failed:', err.message);
+            console.error(`Auth Middleware: Token verification failed for ${req.url}:`, err.message);
             return res.status(401).json({ status: false, message: 'Unauthorized', data: null });
         }
-        console.log('Auth Middleware: Success, user:', user.sub);
+        console.log(`Auth Middleware: Success for ${req.url}, user:`, user.sub || user.id);
         req.user = user;
-        req.user.userId = user.sub || user.id || user.userId; // Map standard claims
-        req.user.id = req.user.userId; // Ensure .id is also available
+        req.user.userId = user.sub || user.id || user.userId;
+        req.user.id = req.user.userId;
         next();
     });
 };

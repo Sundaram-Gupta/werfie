@@ -14,10 +14,10 @@ export const getPostsCount = async () => {
     }
 };
 
-export const getPosts = async (filter = 'all', page = 1, limit = 100) => {
+export const getPosts = async (filter = 'all', page = 1, limit = 100, search = '', hasMedia = false) => {
     try {
         const response = await api.get('/admin/posts', {
-            params: { filter, page, limit }
+            params: { filter, page, limit, search, hasMedia }
         });
         return response.data;
     } catch (error) {

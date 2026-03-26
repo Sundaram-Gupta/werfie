@@ -5,9 +5,12 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { EyeOff, Trash2, CheckCircle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { EyeOff, Trash2, CheckCircle, RefreshCw, ChevronLeft, ChevronRight, Search, Image as ImageIcon } from 'lucide-react';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Admin posts page size: show 100 posts per page
 const PAGE_SIZE = 100;
@@ -28,13 +31,21 @@ export default function PostsPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
+    const [search, setSearch] = useState('');
+    const [hasMedia, setHasMedia] = useState(false);
     const [viewMode, setViewMode] = useState('paged'); // 'paged' | 'all'
     const [hasMore, setHasMore] = useState(false);
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all', currentPage, PAGE_SIZE);
+            const data = await contentService.getPosts(
+                filter === 'reported' ? 'reported' : 'all', 
+                currentPage, 
+                PAGE_SIZE,
+                search,
+                hasMedia
+            );
             const list = data?.posts ?? (Array.isArray(data) ? data : data?.data ?? []);
             const pag = data?.pagination;
             const total = pag?.totalPosts ?? list.length;
@@ -62,7 +73,13 @@ export default function PostsPage() {
             // Hard safety cap to avoid infinite loops if backend misbehaves
             const MAX_PAGES = 2000;
             while (page <= MAX_PAGES) {
-                const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all', page, PAGE_SIZE);
+                const data = await contentService.getPosts(
+                    filter === 'reported' ? 'reported' : 'all', 
+                    page, 
+                    PAGE_SIZE,
+                    search,
+                    hasMedia
+                );
                 const list = data?.posts ?? (Array.isArray(data) ? data : data?.data ?? []);
                 if (!Array.isArray(list) || list.length === 0) break;
                 all.push(...list);
@@ -84,12 +101,15 @@ export default function PostsPage() {
     }, [filter, totalCountUncapped]);
 
     useEffect(() => {
-        if (viewMode === 'all') {
-            loadAllPosts();
-        } else {
-            fetchPosts();
-        }
-    }, [fetchPosts, loadAllPosts, viewMode]);
+        const timer = setTimeout(() => {
+            if (viewMode === 'all') {
+                loadAllPosts();
+            } else {
+                fetchPosts();
+            }
+        }, search ? 500 : 0);
+        return () => clearTimeout(timer);
+    }, [fetchPosts, loadAllPosts, viewMode, search, hasMedia]);
 
     useEffect(() => {
         contentService.getPostsCount().then(setTotalCountUncapped).catch(() => {});
@@ -162,6 +182,30 @@ export default function PostsPage() {
                     >
                         {viewMode === 'all' ? 'Paged view' : 'Load all'}
                     </Button>
+                </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 bg-muted/30 p-4 rounded-lg border border-border/50">
+                <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search post content..."
+                        className="pl-9 h-10"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </div>
+                
+                <div className="flex items-center space-x-2 bg-background/50 px-3 py-2 rounded-md border border-border/50 h-10">
+                    <Checkbox 
+                        id="hasMedia" 
+                        checked={hasMedia} 
+                        onCheckedChange={setHasMedia}
+                    />
+                    <Label htmlFor="hasMedia" className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2 pr-1">
+                        <ImageIcon className="h-4 w-4 text-primary" />
+                        Has Media
+                    </Label>
                 </div>
             </div>
 

@@ -1,10 +1,11 @@
-import { Search, Settings } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Search, Settings, BadgeCheck } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
 import { searchService } from "@/services/api"
-import { cn } from "@/lib/utils"
+import { cn, getMediaUrl } from "@/lib/utils"
 import { MoreOptionsDropdown } from "@/components/feed/more-options-dropdown"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 const DEFAULT_TRENDS = [
     { id: "dummy-1", category: "Trending in India", topic: "#LPGCylinders", posts: 12800 },
@@ -21,7 +22,43 @@ export default function Explore() {
     const [trendsLoading, setTrendsLoading] = useState(true)
     const [exploreItems, setExploreItems] = useState([])
     const [loading, setLoading] = useState(false)
+    const [searchQuery, setSearchQuery] = useState("")
+    const [searchLoading, setSearchLoading] = useState(false)
+    const [userResults, setUserResults] = useState([])
+    const [postResults, setPostResults] = useState([])
+    const searchRef = useRef(null)
     const navigate = useNavigate()
+
+    // Debounced search for users + posts
+    useEffect(() => {
+        const q = searchQuery.trim()
+        if (!q) {
+            setSearchLoading(false)
+            setUserResults([])
+            setPostResults([])
+            return
+        }
+        let isActive = true
+        setSearchLoading(true)
+        const tmr = setTimeout(async () => {
+            try {
+                const [users, posts] = await Promise.all([
+                    searchService.searchUsers(q, { limit: 5 }),
+                    searchService.searchPosts(q, { limit: 5 }),
+                ])
+                if (!isActive) return
+                setUserResults(Array.isArray(users) ? users : (users?.users || users?.data || []))
+                setPostResults(Array.isArray(posts) ? posts : (posts?.posts || posts?.data || []))
+            } catch {
+                if (!isActive) return
+                setUserResults([])
+                setPostResults([])
+            } finally {
+                if (isActive) setSearchLoading(false)
+            }
+        }, 300)
+        return () => { isActive = false; clearTimeout(tmr) }
+    }, [searchQuery])
 
     useEffect(() => {
         const loadTrends = async () => {
@@ -70,14 +107,68 @@ export default function Explore() {
             {/* Sticky Header with Search */}
             <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
                 <div className="px-4 py-2 flex items-center gap-4">
-                    <div className="relative flex-1 group">
+                    <div ref={searchRef} className="relative flex-1 group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
                             type="text"
                             placeholder={t('right_sidebar.search_placeholder')}
                             className="w-full bg-muted/50 rounded-full py-2.5 pl-10 pr-4 outline-none text-[15px] focus:bg-background focus:ring-1 ring-primary transition border border-transparent focus:border-primary placeholder-muted-foreground"
-                            onKeyDown={e => e.key === 'Enter' && navigate(`/search?q=${encodeURIComponent(e.target.value)}`)}
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && searchQuery.trim() && navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)}
                         />
+                        {searchQuery.trim().length > 0 && (
+                            <div
+                                className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/40 rounded-[16px] overflow-hidden shadow-xl max-h-[320px] overflow-y-auto"
+                                onMouseDown={e => e.preventDefault()}
+                            >
+                                {searchLoading ? (
+                                    <div className="p-4 text-center text-muted-foreground text-[13px]">Searching...</div>
+                                ) : (userResults.length === 0 && postResults.length === 0) ? (
+                                    <div className="p-4 text-center text-muted-foreground text-[13px]">No users or posts found</div>
+                                ) : (
+                                    <>
+                                        {userResults.length > 0 && (
+                                            <div className="border-b border-border/30">
+                                                <div className="px-4 py-2 text-[12px] font-semibold text-muted-foreground uppercase">People</div>
+                                                {userResults.map(u => (
+                                                    <div key={u.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] cursor-pointer" onClick={() => navigate(`/profile/${u.id}`)}>
+                                                        <Avatar className="w-9 h-9 rounded-full border border-border/10 flex-shrink-0">
+                                                            <AvatarImage src={getMediaUrl(u.profile?.avatar)} />
+                                                            <AvatarFallback>{(u.profile?.name || u.email?.[0] || 'U').toString().toUpperCase()}</AvatarFallback>
+                                                        </Avatar>
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="font-bold text-[14px] truncate">{u.profile?.name || u.email?.split('@')[0]}</span>
+                                                                {u.profile?.verified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/10" />}
+                                                            </div>
+                                                            <div className="text-[13px] text-muted-foreground truncate">@{u.profile?.handle || u.email?.split('@')[0] || 'user'}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {postResults.length > 0 && (
+                                            <div>
+                                                <div className="px-4 py-2 text-[12px] font-semibold text-muted-foreground uppercase">Posts</div>
+                                                {postResults.map(p => (
+                                                    <div key={p.id} className="px-4 py-3 hover:bg-white/[0.03] cursor-pointer" onClick={() => navigate(`/post/${p.id}`)}>
+                                                        <div className="text-[13px] text-muted-foreground truncate">
+                                                            {p?.user?.profile?.name || p?.user?.email?.split('@')[0] || 'Unknown'}
+                                                            {(p?.user?.profile?.handle || p?.user?.handle) && ` • @${p?.user?.profile?.handle || p?.user?.handle}`}
+                                                        </div>
+                                                        <div className="text-[14px] mt-1 line-clamp-2">{(p?.content || '').toString().slice(0, 140) || '(No content)'}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="text-primary text-[15px] px-4 py-3 cursor-pointer hover:bg-white/[0.03] border-t border-border/30" onClick={() => navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)}>
+                                            Show all results
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <Settings className="w-5 h-5 cursor-pointer hover:bg-muted/50 rounded-full transition" />
                 </div>

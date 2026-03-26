@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 
-export function PostActions({ stats, post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark }) {
+export function PostActions({ stats, post, currentUserId, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark }) {
     const [isShareModalOpen, setIsShareModalOpen] = useState(false)
     const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false)
     const postUrl = `${window.location.origin}/post/${post.id}`
@@ -25,6 +25,9 @@ export function PostActions({ stats, post, onLike, onUnlike, onRetweet, onUnretw
     const isRetweeted = post.retweets && post.retweets.length > 0
     // Check if current user has bookmarked (backend sends bookmarks[] or we set from optimistic update)
     const isBookmarked = Array.isArray(post.bookmarks) && post.bookmarks.length > 0
+    // Only the author can see analytics
+    const postOwnerId = post.userId || post.user?.id
+    const isOwnPost = !!(currentUserId && postOwnerId && currentUserId === postOwnerId)
 
     const handleBookmark = async (e) => {
         e.preventDefault()
@@ -65,67 +68,67 @@ export function PostActions({ stats, post, onLike, onUnlike, onRetweet, onUnretw
     }
 
     return (
-        <div className="flex justify-between mt-1 text-muted-foreground w-full max-w-[425px]">
+        <div className="flex justify-between items-center mt-3 mb-1 text-muted-foreground w-full">
             <ReplyModal post={post}>
-                <button className="flex items-center gap-3 group hover:text-blue-500 transition-colors -ml-2" onClick={(e) => e.stopPropagation()}>
-                    <div className="p-2 rounded-full group-hover:bg-blue-500/10 transition-colors">
-                        <MessageCircle className="w-[18px] h-[18px]" />
+                <button className="flex items-center group hover:text-blue-500 transition-colors" onClick={(e) => e.stopPropagation()}>
+                    <div className="w-[34px] h-[34px] flex items-center justify-center rounded-full group-hover:bg-blue-500/10 transition-colors">
+                        <MessageCircle className="w-[18px] h-[18px]" strokeWidth={1.75} />
                     </div>
-                    <span className="text-[13px] group-hover:text-blue-500 leading-4">{formatNumber(stats.comments)}</span>
+                    <span className="text-[13px] group-hover:text-blue-500">{formatNumber(stats.comments) || ''}</span>
                 </button>
             </ReplyModal>
 
-            <button onClick={handleRepost} className={cn("flex items-center gap-3 group hover:text-green-500 transition-colors", isRetweeted && "text-green-500")}>
-                <div className="p-2 rounded-full group-hover:bg-green-500/10 transition-colors">
-                    <Repeat2 className="w-[18px] h-[18px]" />
+            <button onClick={handleRepost} className={cn("flex items-center group hover:text-green-500 transition-colors", isRetweeted && "text-green-500")}>
+                <div className="w-[34px] h-[34px] flex items-center justify-center rounded-full group-hover:bg-green-500/10 transition-colors">
+                    <Repeat2 className="w-[18px] h-[18px]" strokeWidth={1.75} />
                 </div>
-                <span className="text-[13px] leading-4">{formatNumber(reposts)}</span>
+                <span className="text-[13px]">{formatNumber(reposts) || ''}</span>
             </button>
 
-            <button onClick={handleLike} className={cn("flex items-center gap-3 group hover:text-pink-500 transition-colors", isLiked && "text-pink-500")}>
-                <div className="p-2 rounded-full group-hover:bg-pink-500/10 transition-colors">
-                    <Heart className={cn("w-[18px] h-[18px]", isLiked && "fill-current")} />
+            <button onClick={handleLike} className={cn("flex items-center group hover:text-pink-500 transition-colors", isLiked && "text-pink-500")}>
+                <div className="w-[34px] h-[34px] flex items-center justify-center rounded-full group-hover:bg-pink-500/10 transition-colors">
+                    <Heart className={cn("w-[18px] h-[18px]", isLiked && "fill-current")} strokeWidth={1.75} />
                 </div>
-                <span className="text-[13px] leading-4">{formatNumber(likes)}</span>
+                <span className="text-[13px]">{formatNumber(likes) || ''}</span>
             </button>
 
             <button
-                className="flex items-center gap-3 group hover:text-blue-500 transition-colors"
+                className={cn(
+                    "flex items-center group transition-colors",
+                    isOwnPost ? "hover:text-blue-500 cursor-pointer" : "cursor-default opacity-80"
+                )}
                 onClick={(e) => {
                     e.stopPropagation()
-                    setIsAnalyticsModalOpen(true)
+                    if (isOwnPost) setIsAnalyticsModalOpen(true)
                 }}
-                aria-label="View post analytics"
-                title="Views"
+                aria-label={isOwnPost ? "View post analytics" : "Views"}
+                title={isOwnPost ? "View analytics" : "Views"}
             >
-                <div className="p-2 rounded-full group-hover:bg-blue-500/10 transition-colors">
-                    <BarChart2 className="w-[18px] h-[18px]" />
+                <div className={cn(
+                    "w-[34px] h-[34px] flex items-center justify-center rounded-full transition-colors",
+                    isOwnPost && "group-hover:bg-blue-500/10"
+                )}>
+                    <BarChart2 className="w-[18px] h-[18px]" strokeWidth={1.75} />
                 </div>
-                <span className="text-[13px] leading-4">{stats.views}</span>
+                <span className="text-[13px]">{stats.views || '0'}</span>
             </button>
 
             <button
                 onClick={handleBookmark}
-                className={cn("flex items-center gap-3 group hover:text-blue-500 transition-colors", isBookmarked && "text-blue-500")}
+                className={cn("flex items-center group hover:text-blue-500 transition-colors", isBookmarked && "text-blue-500")}
                 aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
                 title={isBookmarked ? "Remove bookmark" : "Bookmark"}
             >
-                <div className="p-2 rounded-full group-hover:bg-blue-500/10 transition-colors">
-                    <Bookmark className={cn("w-[18px] h-[18px]", isBookmarked && "fill-current")} />
+                <div className="w-[34px] h-[34px] flex items-center justify-center rounded-full group-hover:bg-blue-500/10 transition-colors">
+                    <Bookmark className={cn("w-[18px] h-[18px]", isBookmarked && "fill-current")} strokeWidth={1.75} />
                 </div>
             </button>
 
-            <PostAnalyticsModal
-                open={isAnalyticsModalOpen}
-                onOpenChange={setIsAnalyticsModalOpen}
-                post={post}
-            />
-
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-3 group hover:text-blue-500 transition-colors -mr-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="p-2 rounded-full group-hover:bg-blue-500/10 transition-colors">
-                            <Share className="w-[18px] h-[18px]" />
+                    <button className="flex items-center group hover:text-blue-500 transition-colors" onClick={(e) => e.stopPropagation()}>
+                        <div className="w-[34px] h-[34px] flex items-center justify-center rounded-full group-hover:bg-blue-500/10 transition-colors">
+                            <Share className="w-[18px] h-[18px]" strokeWidth={1.75} />
                         </div>
                     </button>
                 </DropdownMenuTrigger>
@@ -158,7 +161,14 @@ export function PostActions({ stats, post, onLike, onUnlike, onRetweet, onUnretw
             <ShareModal 
                 isOpen={isShareModalOpen} 
                 onClose={() => setIsShareModalOpen(false)} 
+                post={post}
                 postUrl={postUrl} 
+            />
+
+            <PostAnalyticsModal 
+                open={isAnalyticsModalOpen} 
+                onOpenChange={setIsAnalyticsModalOpen} 
+                post={post} 
             />
         </div>
     )

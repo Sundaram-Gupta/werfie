@@ -6,10 +6,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-export function Feed({ tab = 'for-you' }) {
+export function Feed({ tab = 'for-you', ...rest }) {
     const { t } = useTranslation()
-    const { posts, loading, error, loadMore, hasMore, loadingMore, likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost } = usePosts({ tab })
+    const { posts, loading, error, loadMore, hasMore, loadingMore, likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost } = usePosts({ tab, ...rest })
     const loadMoreTriggerRef = useRef(null)
+    const feedRef = useRef(null)
 
     // Infinite scroll: when user scrolls near bottom, load more posts (Intersection Observer)
     useEffect(() => {
@@ -24,22 +25,22 @@ export function Feed({ tab = 'for-you' }) {
         )
         observer.observe(el)
         return () => observer.disconnect()
-    }, [tab, hasMore, loadingMore, loadMore])
+    }, [hasMore, loadingMore, loadMore])
 
-    if (loading) {
+    if (loading && posts.length === 0) {
         return (
             <div className="divide-y divide-border">
-                {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="flex gap-4 p-4">
-                        <Skeleton className="w-10 h-10 rounded-full" />
-                        <div className="flex-1 space-y-2">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="flex gap-4 p-4 animate-pulse">
+                        <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
+                        <div className="flex-1 space-y-3 pt-1">
                             <div className="flex items-center gap-2">
-                                <Skeleton className="h-4 w-24" />
-                                <Skeleton className="h-4 w-16" />
+                                <Skeleton className="h-4 w-32" />
+                                <Skeleton className="h-4 w-20" />
                             </div>
                             <Skeleton className="h-4 w-full" />
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-32 w-full rounded-2xl mt-2" />
+                            <Skeleton className="h-4 w-[90%]" />
+                            <Skeleton className="h-[200px] w-full rounded-2xl mt-3" />
                         </div>
                     </div>
                 ))}
@@ -78,7 +79,15 @@ export function Feed({ tab = 'for-you' }) {
     }
 
     return (
-        <div className="divide-y divide-border">
+        <div ref={feedRef} className="relative">
+            {/* Subtle Refreshing Indicator (if posts already exist) */}
+            {loading && posts.length > 0 && (
+                <div className="h-1 bg-primary/20 overflow-hidden sticky top-[53px] z-10 w-full">
+                    <div className="h-full bg-primary animate-progress-indeterminate origin-left" />
+                </div>
+            )}
+
+            <div className="divide-y divide-border">
             {posts.map((item) => {
                 if (item.isOfficialAnnouncement) {
                     return <AnnouncementFeedCard key={`ann-${item.id}`} announcement={item} />
@@ -105,6 +114,7 @@ export function Feed({ tab = 'for-you' }) {
                     )}
                 </div>
             )}
+            </div>
         </div>
     )
 }

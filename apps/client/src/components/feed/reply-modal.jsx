@@ -25,7 +25,7 @@ import { cn, getMediaUrl } from "@/lib/utils"
 export function ReplyModal({ post, children }) {
     const { t } = useTranslation()
     const { user: currentUser } = useAuth()
-    const { createPost: createPostHook } = usePosts()
+    const { createPost: createPostHook } = usePosts({ noFetch: true })
     const [replyText, setReplyText] = useState("")
     const [open, setOpen] = useState(false)
     const [isPosting, setIsPosting] = useState(false)
@@ -59,7 +59,7 @@ export function ReplyModal({ post, children }) {
     const author = {
         name: post.user?.profile?.name || post.user?.name || 'Unknown User',
         handle: post.user?.profile?.handle || post.user?.handle || 'unknown',
-        avatar: post.user?.profile?.avatar || post.user?.avatar || '/websplash.png',
+        avatar: post.user?.profile?.avatar || post.user?.avatar || '/werfie.png',
     }
 
     // Format timestamp

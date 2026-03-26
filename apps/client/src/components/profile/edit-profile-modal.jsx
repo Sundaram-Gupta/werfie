@@ -25,6 +25,7 @@ export function EditProfileModal({ user, onUpdate, children }) {
 
     const [formData, setFormData] = useState({
         name: user.profile?.name || user.name || "",
+        handle: user.profile?.handle || user.handle || "",
         bio: user.profile?.bio || "",
         location: user.profile?.location || "",
         website: user.profile?.website || "",
@@ -167,6 +168,16 @@ export function EditProfileModal({ user, onUpdate, children }) {
                                 value={formData.name} 
                                 onChange={handleChange} 
                                 maxLength={50} 
+                            />
+
+                            <ProfileInput
+                                label="Handle"
+                                id="handle"
+                                name="handle"
+                                value={formData.handle}
+                                onChange={handleChange}
+                                maxLength={30}
+                                placeholder="latesth13"
                             />
 
                             <ProfileTextarea 

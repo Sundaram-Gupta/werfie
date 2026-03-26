@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
+import { createSocketWithRecovery } from '@/lib/socketWithRecovery';
 import { Globe, BadgeCheck, Radio, AlertTriangle } from 'lucide-react';
 import { AnnouncementFeedCard } from '../components/feed/announcement-feed-card';
 import { getApiBase, getGatewayUrl } from '@/lib/api';
+import { useNavigate } from 'react-router-dom';
 
 export default function WorldLeadersPage() {
+    const navigate = useNavigate();
     const [feed, setFeed] = useState([]);
     const [featuredLeaders, setFeaturedLeaders] = useState([]);
+    const [approvedLeaders, setApprovedLeaders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const approvedLeaderIdsRef = useRef(new Set());
     
     // Filters
     const [regionFilter, setRegionFilter] = useState('');
@@ -28,12 +32,21 @@ export default function WorldLeadersPage() {
                 setFeed(Array.isArray(feedPayload) ? feedPayload : []);
 
                 // Fetch Featured Leaders (top 10 by priority)
-                const leadersRes = await axios.get(`${base}/api/users/leaders?limit=10`);
+                const leadersRes = await axios.get(`${base}/api/users/leaders?limit=10&verifiedStatus=true`);
                 const payload = leadersRes.data?.data ?? leadersRes.data;
                 if (Array.isArray(payload)) {
-                    setFeaturedLeaders(payload);
+                    setFeaturedLeaders(payload.filter(l => l.verifiedStatus));
                 } else if (payload && Array.isArray(payload.leaders)) {
-                    setFeaturedLeaders(payload.leaders);
+                    setFeaturedLeaders(payload.leaders.filter(l => l.verifiedStatus));
+                }
+
+                // Fetch full Approved Leaders list (for the main section)
+                const approvedRes = await axios.get(`${base}/api/users/leaders?limit=50&verifiedStatus=true`);
+                const approvedPayload = approvedRes.data?.data ?? approvedRes.data;
+                if (Array.isArray(approvedPayload)) {
+                    setApprovedLeaders(approvedPayload);
+                } else if (approvedPayload && Array.isArray(approvedPayload.leaders)) {
+                    setApprovedLeaders(approvedPayload.leaders);
                 }
             } catch (error) {
                 console.error("Failed to fetch world leaders data:", error);
@@ -45,17 +58,25 @@ export default function WorldLeadersPage() {
         fetchData();
 
         // Setup WebSocket connection
-        const socket = io(getGatewayUrl(), { path: '/ws/live' });
+        const socket = createSocketWithRecovery(getGatewayUrl());
 
         socket.on('connect', () => {
             console.log('Connected to World Leaders Live Updates');
         });
 
         socket.on('new_leader_post', (post) => {
+            const leaderId = post?.leaderId;
+            if (approvedLeaderIdsRef.current.size > 0 && leaderId && !approvedLeaderIdsRef.current.has(leaderId)) {
+                return;
+            }
             setFeed(prev => [post, ...prev].sort((a,b) => b.leaderPriorityScore - a.leaderPriorityScore));
         });
 
         socket.on('leader_live', (post) => {
+            const leaderId = post?.leaderId;
+            if (approvedLeaderIdsRef.current.size > 0 && leaderId && !approvedLeaderIdsRef.current.has(leaderId)) {
+                return;
+            }
             setFeed(prev => {
                 const existing = prev.find(p => p.id === post.id);
                 if (existing) {
@@ -67,6 +88,10 @@ export default function WorldLeadersPage() {
 
         return () => socket.disconnect();
     }, [regionFilter, severityFilter]); // Re-fetch on filter change
+
+    useEffect(() => {
+        approvedLeaderIdsRef.current = new Set(approvedLeaders.map(l => l.id).filter(Boolean));
+    }, [approvedLeaders]);
 
     return (
         <div className="flex-1 w-[600px] min-h-screen border-x border-border/50 bg-background pb-20 sm:pb-0">
@@ -115,7 +140,14 @@ export default function WorldLeadersPage() {
                     <h2 className="text-sm font-bold text-muted-foreground mb-3 tracking-wider uppercase">Featured Leaders</h2>
                     <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                         {featuredLeaders.map(leader => (
-                            <div key={leader.id} className="flex flex-col items-center gap-2 min-w-[80px] shrink-0 cursor-pointer hover:opacity-80 transition">
+                            <div
+                                key={leader.id}
+                                className="flex flex-col items-center gap-2 min-w-[80px] shrink-0 cursor-pointer hover:opacity-80 transition"
+                                onClick={() => navigate(`/leaders/${leader.id}`)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => e.key === 'Enter' && navigate(`/leaders/${leader.id}`)}
+                            >
                                 <div className="relative">
                                     <img 
                                         src={leader.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(leader.leaderName)}&background=random`} 
@@ -129,6 +161,33 @@ export default function WorldLeadersPage() {
                                 <span className="text-xs font-medium text-center line-clamp-1">{leader.leaderName}</span>
                                 <span className="text-[10px] text-muted-foreground text-center line-clamp-1">{leader.country}</span>
                             </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Approved Leaders (Institutional Requests) Section */}
+            {approvedLeaders.length > 0 && (
+                <div className="border-b border-border/50 p-4">
+                    <h2 className="text-sm font-bold text-muted-foreground mb-3 tracking-wider uppercase">Approved Institutional Requests</h2>
+                    <div className="grid grid-cols-2 gap-3">
+                        {approvedLeaders.map(leader => (
+                            <button
+                                key={leader.id}
+                                type="button"
+                                className="flex items-center gap-3 p-3 rounded-xl bg-muted/10 hover:bg-muted/20 transition border border-border/30 cursor-pointer"
+                                onClick={() => navigate(`/leaders/${leader.id}`)}
+                            >
+                                <img
+                                    src={leader.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(leader.leaderName)}&background=random`}
+                                    alt={leader.leaderName}
+                                    className="w-10 h-10 rounded-full object-cover border border-primary/20"
+                                />
+                                <div className="min-w-0 text-left">
+                                    <div className="font-bold text-[13px] truncate">{leader.leaderName}</div>
+                                    <div className="text-[12px] text-muted-foreground truncate">{leader.country} • {leader.region}</div>
+                                </div>
+                            </button>
                         ))}
                     </div>
                 </div>
