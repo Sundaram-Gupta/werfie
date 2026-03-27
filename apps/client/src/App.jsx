@@ -49,6 +49,13 @@ import DebateView from "@/pages/debate-view"
 import Debate from "@/pages/debate"
 import ArticleEditor from "@/pages/articles/ArticleEditor"
 import ArticleDetail from "@/pages/articles/ArticleDetail"
+import AdminLayout from "@/pages/admin/AdminLayout"
+import AdminDashboard from "@/pages/admin/AdminDashboard"
+import AdminCrisisList from "@/pages/admin/AdminCrisisList"
+import AdminCrisisForm from "@/pages/admin/AdminCrisisForm"
+import AdminUsers from "@/pages/admin/AdminUsers"
+import AdminLogs from "@/pages/admin/AdminLogs"
+import { AdminRoute } from "./components/AdminRoute"
 
 import { AuthModalProvider } from "./components/auth/auth-modal-context"
 import { AuthModal } from "./components/auth/auth-modal"
@@ -57,6 +64,8 @@ import { BusinessAccessProvider } from "./context/BusinessAccessContext"
 import { SocketProvider } from "./context/SocketContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { Toaster } from "sonner"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { useState } from "react"
 import BusinessIndexRedirect from "@/pages/business/BusinessIndexRedirect"
 import BusinessOnboarding from "@/pages/business/BusinessOnboarding"
 import BusinessNoAccess from "@/pages/business/BusinessNoAccess"
@@ -64,7 +73,9 @@ import BusinessDashboardGate from "@/pages/business/BusinessDashboardGate"
 import BusinessAdminRoute from "@/pages/business/BusinessAdminRoute"
 
 function App() {
+  const [queryClient] = useState(() => new QueryClient())
   return (
+    <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <SocketProvider>
         <BrowserRouter>
@@ -121,6 +132,14 @@ function App() {
                 <Route path="/articles/new" element={<ArticleEditor />} />
                 <Route path="/articles/edit/:id" element={<ArticleEditor />} />
                 <Route path="/article/:id" element={<ArticleDetail />} />
+                <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="crisis" element={<AdminCrisisList />} />
+                  <Route path="crisis/create" element={<AdminCrisisForm />} />
+                  <Route path="crisis/:id/edit" element={<AdminCrisisForm />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="logs" element={<AdminLogs />} />
+                </Route>
               </Route>
 
               {/* Protected Standalone Layouts (No Main Sidebar) */}
@@ -174,6 +193,7 @@ function App() {
         </BrowserRouter>
       </SocketProvider>
     </AuthProvider>
+    </QueryClientProvider>
   )
 }
 

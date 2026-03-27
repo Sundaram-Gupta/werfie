@@ -23,7 +23,7 @@ export async function GET(request) {
         let rows
         try {
             rows = await prisma.$queryRaw`
-                SELECT u.id, u.email, u."createdAt", u."updatedAt",
+                SELECT u.id, u.email, u.role, u.status, u."preferredLanguage", u."createdAt", u."updatedAt",
                        p.id as "profileId", p.name, p.handle, p.bio, p.avatar, p.banner, p.verified,
                        p.location, p.website, p."birthdate", p.gender
                 FROM "User" u
@@ -34,7 +34,8 @@ export async function GET(request) {
         } catch (qErr) {
             // Fallback if Profile table or join fails
             rows = await prisma.$queryRaw`
-                SELECT id, email, "createdAt", "updatedAt" FROM "User" WHERE id = ${payload.sub} LIMIT 1
+                SELECT id, email, role, status, "preferredLanguage", "createdAt", "updatedAt"
+                FROM "User" WHERE id = ${payload.sub} LIMIT 1
             `
         }
         const row = rows[0]

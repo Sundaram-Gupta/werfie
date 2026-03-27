@@ -41,6 +41,7 @@ export const authService = {
         const user = {
             id: payload.id,
             email: payload.email,
+            role: payload.role || 'Viewer',
             profile: payload.profile,
             preferredLanguage: payload.preferredLanguage,
             institutionalProfile: payload.institutionalProfile

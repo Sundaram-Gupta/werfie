@@ -6,12 +6,14 @@ import {
     Video, 
     AlertCircle, 
     Map as MapIcon, 
+    MapPin,
     Layers, 
     Filter,
     Activity,
     Users,
     ChevronRight,
-    Search
+    Search,
+    Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,6 +24,7 @@ import { getCrises, getCrisisDetail } from '@/services/crisis.api';
 import { useAuth } from '@/context/AuthContext';
 
 import { getGatewayUrl } from '@/lib/api';
+import { Link } from 'react-router-dom';
 
 const CrisisCommand = () => {
     const { user } = useAuth();
@@ -39,7 +42,7 @@ const CrisisCommand = () => {
                 if (data.length > 0) {
                     setSelectedCrisis(data[0]);
                 }
-            } catch (error) {
+            } catch (_error) {
                 toast.error('Failed to fetch operational data');
             } finally {
                 setLoading(false);
@@ -84,7 +87,7 @@ const CrisisCommand = () => {
         try {
             const detail = await getCrisisDetail(crisis.id);
             setSelectedCrisis(detail);
-        } catch (error) {
+        } catch (_error) {
             setSelectedCrisis(crisis);
         }
     };
@@ -124,15 +127,22 @@ const CrisisCommand = () => {
                         <button className="px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition-colors">Reports</button>
                     </div>
                     
-                    {user?.role === 'ADMIN' && (
-                        <button 
-                            onClick={() => setShowAdmin(!showAdmin)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all
-                                ${showAdmin ? 'bg-white text-black' : 'bg-red-600 hover:bg-red-500 text-white'}`}
-                        >
-                            {showAdmin ? 'View Incident' : 'Operational Control'}
-                        </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {['ADMIN', 'Admin', 'CrisisManager'].includes(user?.role) && (
+                            <button 
+                                onClick={() => setShowAdmin(!showAdmin)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all
+                                    ${showAdmin ? 'bg-white text-black' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+                            >
+                                {showAdmin ? 'View Incident' : 'Operational Control'}
+                            </button>
+                        )}
+                        {['ADMIN', 'Admin', 'CrisisManager', 'Publisher', 'Viewer'].includes(user?.role) && (
+                            <Link to="/admin" className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-sm text-slate-200 hover:bg-white/10">
+                                <Settings className="h-4 w-4" /> Admin Panel
+                            </Link>
+                        )}
+                    </div>
                 </div>
             </header>
 

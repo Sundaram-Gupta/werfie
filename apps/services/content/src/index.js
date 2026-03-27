@@ -2227,10 +2227,10 @@ app.get('/:postId/analytics', authenticateToken, async (req, res) => {
 
 const http = require('http');
 const websocketService = require('./services/websocket.service');
+const redisService = require('./services/redis.service');
 const { startScheduledPostPublisher } = require('./scheduledPostPublisher');
 
 const server = http.createServer(app);
-websocketService.init(server);
 
 const bindHost = process.env.BIND_HOST || '0.0.0.0';
 
@@ -2255,7 +2255,9 @@ async function ensureArticleSchemaCompatibility() {
 }
 
 ensureArticleSchemaCompatibility()
-    .then(() => {
+    .then(async () => {
+        await redisService.init();
+        websocketService.init(server);
         server.listen(PORT, bindHost, () => {
             console.log(`Content Service with WebSockets running on port ${PORT} (bound to ${bindHost})`);
             startScheduledPostPublisher(); // Kafka-driven scheduled post publishing (every 60s)

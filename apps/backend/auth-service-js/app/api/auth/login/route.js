@@ -80,6 +80,7 @@ export async function POST(request) {
             refreshToken,
             id: user.id,
             email: user.email,
+            role: userRole,
             profile,
             institutionType: null,
             institutionalProfile: null,

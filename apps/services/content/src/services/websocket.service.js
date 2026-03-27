@@ -1,4 +1,8 @@
 let io;
+const { randomUUID } = require('crypto');
+const redisService = require('./redis.service');
+const INSTANCE_ID = randomUUID();
+const CRISIS_CHANNEL = 'crisis.events';
 
 exports.init = (server) => {
     const { Server } = require('socket.io');
@@ -89,6 +93,12 @@ exports.init = (server) => {
             console.log('[ContentService:DebateWS] Subscriber disconnected:', socket.id);
         });
     });
+
+    redisService.subscribe(CRISIS_CHANNEL, (payload) => {
+        if (!io) return;
+        if (!payload || payload.source === INSTANCE_ID) return;
+        io.of('/crisis-live').emit(payload.type, payload.data);
+    });
 };
 
 exports.getIO = () => io;
@@ -100,9 +110,11 @@ exports.broadcastSoapboxEvent = (data, type) => {
 };
 
 exports.broadcastCrisisEvent = (data, type) => {
-    if (!io) return;
-    console.log(`[WebSocket] Broadcasting ${type} event`);
-    io.of('/crisis-live').emit(type, data);
+    if (io) {
+        console.log(`[WebSocket] Broadcasting ${type} event`);
+        io.of('/crisis-live').emit(type, data);
+    }
+    redisService.publish(CRISIS_CHANNEL, { source: INSTANCE_ID, type, data }).catch(() => {});
 };
 
 exports.broadcastLiveStatus = (announcement) => {
