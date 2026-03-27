@@ -11,9 +11,39 @@ prisma = global.prisma;
 
 export class MessagingService {
     static _conversationSettingsTableAvailable = true
+    static _hiddenMessageTableAvailable = true
+    static _messageReactionTableAvailable = true
 
     static hasConversationSettingsModel() {
         return Boolean(prisma?.conversationUserSetting) && this._conversationSettingsTableAvailable
+    }
+
+    static hasHiddenMessageModel() {
+        return Boolean(prisma?.hiddenMessage) && this._hiddenMessageTableAvailable
+    }
+
+    static hasMessageReactionModel() {
+        return Boolean(prisma?.messageReaction) && this._messageReactionTableAvailable
+    }
+
+    static markMessagingTableUnavailable(error) {
+        const msg = String(error?.message || '')
+        const isMissingTable = error?.code === 'P2021' || /does not exist/i.test(msg) || /relation.*does not exist/i.test(msg)
+        const isMissingColumn = error?.code === 'P2022' || /column.*does not exist/i.test(msg)
+        if (!(isMissingTable || isMissingColumn)) return
+
+        if (/ConversationUserSetting/i.test(msg)) {
+            this._conversationSettingsTableAvailable = false
+            console.warn('[MessagingService] ConversationUserSetting unavailable; using fallback behavior.')
+        }
+        if (/HiddenMessage/i.test(msg)) {
+            this._hiddenMessageTableAvailable = false
+            console.warn('[MessagingService] HiddenMessage unavailable; disabling hidden-message filters.')
+        }
+        if (/MessageReaction/i.test(msg)) {
+            this._messageReactionTableAvailable = false
+            console.warn('[MessagingService] MessageReaction unavailable; disabling reactions includes.')
+        }
     }
 
     static markConversationSettingsUnavailable(error) {
@@ -301,25 +331,48 @@ export class MessagingService {
 
     static async getConversations(userId) {
         try {
-            const conversations = await prisma.conversation.findMany({
-                where: {
-                    participants: {
-                        some: { userId }
-                    }
-                },
-                orderBy: {
-                    updatedAt: 'desc'
-                },
-                include: {
-                    participants: true,
-                    messages: {
-                        take: 1,
-                        orderBy: {
-                            createdAt: 'desc'
+            let conversations
+            try {
+                conversations = await prisma.conversation.findMany({
+                    where: {
+                        participants: {
+                            some: { userId }
+                        }
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                    include: {
+                        participants: true,
+                        messages: {
+                            take: 1,
+                            orderBy: {
+                                createdAt: 'desc'
+                            }
                         }
                     }
-                }
-            })
+                })
+            } catch (error) {
+                this.markMessagingTableUnavailable(error)
+                conversations = await prisma.conversation.findMany({
+                    where: {
+                        participants: {
+                            some: { userId }
+                        }
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                    include: {
+                        participants: true,
+                        messages: {
+                            take: 1,
+                            orderBy: { createdAt: 'desc' },
+                            select: { id: true, content: true, type: true, mediaUrl: true, createdAt: true }
+                        }
+                    }
+                })
+            }
             
             // Map latest message to `lastMessage` and add small derived fields to make the response easier
             // to understand in Swagger while keeping backward compatibility for the client.
@@ -489,7 +542,7 @@ export class MessagingService {
         if (!userId) {
             return prisma.message.findMany({
                 where: { conversationId },
-                include: { reactions: true },
+                include: this.hasMessageReactionModel() ? { reactions: true } : undefined,
                 orderBy: { createdAt: 'asc' }
             })
         }
@@ -512,9 +565,9 @@ export class MessagingService {
         if (mode === '24h') createdAtFilter = new Date(now - 24 * 60 * 60 * 1000)
         if (mode === '7d') createdAtFilter = new Date(now - 7 * 24 * 60 * 60 * 1000)
 
-        const where = {
-            conversationId,
-            NOT: {
+        const where = { conversationId }
+        if (this.hasHiddenMessageModel()) {
+            where.NOT = {
                 hiddenBy: {
                     some: { userId }
                 }
@@ -522,19 +575,29 @@ export class MessagingService {
         }
         if (createdAtFilter) where.createdAt = { gte: createdAtFilter }
 
-        return prisma.message.findMany({
-            where,
-            include: {
-                reactions: true,
-                replyTo: {
-                    include: {
-                        sender: {
-                            select: { id: true, email: true, profile: true }
+        try {
+            return await prisma.message.findMany({
+                where,
+                include: {
+                    ...(this.hasMessageReactionModel() ? { reactions: true } : {}),
+                    replyTo: {
+                        include: {
+                            sender: {
+                                select: { id: true, email: true, profile: true }
+                            }
                         }
                     }
-                }
-            },
-            orderBy: { createdAt: 'asc' }
-        })
+                },
+                orderBy: { createdAt: 'asc' }
+            })
+        } catch (error) {
+            this.markMessagingTableUnavailable(error)
+            const safeWhere = { conversationId }
+            if (createdAtFilter) safeWhere.createdAt = { gte: createdAtFilter }
+            return prisma.message.findMany({
+                where: safeWhere,
+                orderBy: { createdAt: 'asc' }
+            })
+        }
     }
 }

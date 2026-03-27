@@ -20,6 +20,10 @@ info:
     ## Admin (`/api/admin/*`) — 401 / 403?
     Use **POST /api/auth/login** with an account whose `User.role` is **ADMIN** or **SUPER_ADMIN** (promote via `adminBackend`: `npm run promote-admin -- you@email.com`). The `accessToken` now includes `role` and works with **Authorize**. Alternatively, call **POST /api/admin/login** and paste the returned `data.token` in **Authorize**.
 
+    ## Admin verification queue (Swagger tag: **Verifications**)
+    - **GET /api/admin/verifications** — list requests (`type=BUSINESS`, `status=PENDING`, etc.)
+    - **PATCH /api/admin/verifications/{id}** — body `{"status":"APPROVED"}` or `{"status":"REJECTED"}`
+
     ## Proxied endpoints (Users, Posts, etc.)
     Endpoints like /api/users/*, /api/posts/* are proxied to microservices. Ensure those services are running (see ecosystem.config.js) or you may get 5xx.
   version: 1.0.0
@@ -31,6 +35,12 @@ servers:
     description: Current host (recommended)
 
 tags:
+  - name: Verifications
+    description: |
+      Admin verification queue (business / institutional requests). Use **Authorize** with an admin JWT from POST /api/admin/login or an ADMIN user via POST /api/auth/login. Operations: **GET /api/admin/verifications**, **PATCH /api/admin/verifications/{id}**.
+  - name: Admin
+    description: |
+      Admin panel APIs (dashboard, users, posts, reports, institutional, business, ads). Requires admin JWT in **Authorize** unless an operation sets security to none.
   - name: Messaging
     description: |
       **401 Unauthorized?** Call POST /api/auth/login first, copy accessToken, then click **Authorize** (lock icon) and paste the token.
@@ -63,9 +73,6 @@ components:
       type: apiKey
       in: cookie
       name: next-auth.session-token
-
-  security:
-    - bearerAuth: []
 
 paths:
   # ============ HEALTH ============
@@ -103,7 +110,7 @@ paths:
               email: user1@xclone.com
               password: password123
       responses:
-        '200': { description: Login successful, returns token and user }
+        '200': { description: "Login successful; returns token and user" }
         '400': { description: Validation error }
         '401': { description: Invalid credentials }
 
@@ -744,11 +751,11 @@ paths:
   /api/lists/discover:
     get:
       summary: Discover lists
+      description: Public list discovery. Bearer token is optional (personalizes results when provided).
       tags: [Lists]
-      security: [{ bearerAuth: [] }]
+      security: []
       responses:
         '200': { description: Lists }
-        '401': { description: Unauthorized - use Authorize with accessToken from login }
 
   /api/lists/yours:
     get:
@@ -799,9 +806,11 @@ paths:
       responses:
         '200': { description: Added }
         '401': { description: Unauthorized - use Authorize with accessToken from login }
+
+  /api/lists/{id}/members/{userId}:
     delete:
       summary: Remove member from list
-      description: Requires Bearer token. Use Authorize with accessToken from login.
+      description: Requires Bearer token. Use Authorize with accessToken from login. Path matches content-service DELETE /api/lists/:id/members/:userId.
       tags: [Lists]
       security: [{ bearerAuth: [] }]
       parameters:
@@ -2207,6 +2216,84 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Updated }
+
+  /api/admin/verifications:
+    get:
+      operationId: adminListVerifications
+      summary: GET /api/admin/verifications — list verification requests
+      description: |
+        Query params - type (e.g. BUSINESS), status (default PENDING). Proxied to admin backend via gateway.
+        **Auth:** click **Authorize**, paste admin JWT (from POST /api/admin/login `data.token`, or POST /api/auth/login `data.accessToken` for an ADMIN user). No "Bearer " prefix.
+        Or log in via POST /api/auth/login in this UI first — the `accessToken` cookie is sent on same-host requests.
+      tags: [Verifications, Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, example: BUSINESS }
+        - name: status
+          in: query
+          schema: { type: string, default: PENDING }
+      responses:
+        '200': { description: Verification request list }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden - JWT must have role ADMIN or SUPER_ADMIN }
+
+  /api/admin/verifications/{id}:
+    get:
+      operationId: adminGetVerificationById
+      summary: GET /api/admin/verifications/{id} — one request
+      description: |
+        Returns a single verification row (same shape as list items). Requires admin JWT — see list endpoint.
+      tags: [Verifications, Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Verification request }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden - not an admin token }
+        '404': { description: Not found }
+    patch:
+      operationId: adminPatchVerification
+      summary: PATCH /api/admin/verifications/{id} — approve or reject
+      description: |
+        Body.status must be APPROVED or REJECTED. Optional badgeType for institutional approvals (e.g. official).
+        **Auth:** click **Authorize** and paste admin JWT (same as GET list).
+      tags: [Verifications, Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [APPROVED, REJECTED, PENDING]
+                badgeType:
+                  type: string
+                  description: Optional; used when type is INSTITUTION / INSTITUTIONAL and status is APPROVED
+      responses:
+        '200': { description: Updated request row and side effects on profile }
+        '400': { description: Missing status }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden - not an admin token }
+        '404': { description: Request not found }
+        '500': { description: Server error }
 
   /api/admin/business:
     get:

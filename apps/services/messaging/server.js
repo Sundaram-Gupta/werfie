@@ -4,6 +4,7 @@ import { createServer } from 'http'
 import { parse } from 'url'
 import next from 'next'
 import cors from 'cors'
+import { PrismaClient } from '@prisma/client'
 import { getSocketServer } from './lib/socket.js'
 
 const dev = process.env.NODE_ENV !== 'production'
@@ -20,6 +21,63 @@ console.log('[MessagingService] Starting server in parallel with Next.js prepara
 
 const expressApp = express()
 const httpServer = createServer()
+const prisma = new PrismaClient()
+
+async function ensureMessagingSchemaCompatibility() {
+    // Self-heal for older DBs missing newer messaging columns.
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Message"
+        ADD COLUMN IF NOT EXISTS "replyToId" TEXT,
+        ADD COLUMN IF NOT EXISTS "isForwarded" BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS "forwardedFromId" TEXT,
+        ADD COLUMN IF NOT EXISTS "isEdited" BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS "editedAt" TIMESTAMP(3)
+    `)
+
+    await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "HiddenMessage" (
+            "id" TEXT NOT NULL,
+            "messageId" TEXT NOT NULL,
+            "userId" TEXT NOT NULL,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "HiddenMessage_pkey" PRIMARY KEY ("id"),
+            CONSTRAINT "HiddenMessage_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "Message"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT "HiddenMessage_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        )
+    `)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "HiddenMessage_messageId_userId_key" ON "HiddenMessage"("messageId", "userId")`)
+
+    await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "MessageReaction" (
+            "id" TEXT NOT NULL,
+            "messageId" TEXT NOT NULL,
+            "userId" TEXT NOT NULL,
+            "emoji" TEXT NOT NULL,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "MessageReaction_pkey" PRIMARY KEY ("id"),
+            CONSTRAINT "MessageReaction_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "Message"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT "MessageReaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        )
+    `)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "MessageReaction_messageId_userId_emoji_key" ON "MessageReaction"("messageId", "userId", "emoji")`)
+
+    await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "ConversationUserSetting" (
+            "id" TEXT NOT NULL,
+            "conversationId" TEXT NOT NULL,
+            "userId" TEXT NOT NULL,
+            "disappearingMode" TEXT NOT NULL DEFAULT 'off',
+            "blockScreenshots" BOOLEAN NOT NULL DEFAULT false,
+            "blockMessages" BOOLEAN NOT NULL DEFAULT false,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "ConversationUserSetting_pkey" PRIMARY KEY ("id"),
+            CONSTRAINT "ConversationUserSetting_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT "ConversationUserSetting_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        )
+    `)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ConversationUserSetting_conversationId_userId_key" ON "ConversationUserSetting"("conversationId", "userId")`)
+}
 
 // 1. CORS Middleware - Global (allow gateway + client for Swagger & app)
 const corsOptions = {
@@ -203,4 +261,11 @@ function startListening() {
     })
 }
 
-startListening()
+ensureMessagingSchemaCompatibility()
+    .then(() => {
+        startListening()
+    })
+    .catch((err) => {
+        console.error('[MessagingService] Failed to ensure schema compatibility on startup:', err)
+        process.exit(1)
+    })

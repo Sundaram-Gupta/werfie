@@ -2201,7 +2201,35 @@ const server = http.createServer(app);
 websocketService.init(server);
 
 const bindHost = process.env.BIND_HOST || '0.0.0.0';
-server.listen(PORT, bindHost, () => {
-    console.log(`Content Service with WebSockets running on port ${PORT} (bound to ${bindHost})`);
-    startScheduledPostPublisher(); // Kafka-driven scheduled post publishing (every 60s)
-});
+
+async function ensureArticleSchemaCompatibility() {
+    // Self-heal when DB misses the Article table but service code is already deployed.
+    await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Article" (
+            "id" TEXT NOT NULL,
+            "userId" TEXT NOT NULL,
+            "title" TEXT NOT NULL,
+            "content" TEXT NOT NULL,
+            "coverImage" TEXT,
+            "isPublished" BOOLEAN NOT NULL DEFAULT false,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "Article_pkey" PRIMARY KEY ("id"),
+            CONSTRAINT "Article_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Article_userId_idx" ON "Article"("userId")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Article_createdAt_idx" ON "Article"("createdAt")`);
+}
+
+ensureArticleSchemaCompatibility()
+    .then(() => {
+        server.listen(PORT, bindHost, () => {
+            console.log(`Content Service with WebSockets running on port ${PORT} (bound to ${bindHost})`);
+            startScheduledPostPublisher(); // Kafka-driven scheduled post publishing (every 60s)
+        });
+    })
+    .catch((err) => {
+        console.error('Failed to ensure article schema compatibility on startup:', err);
+        process.exit(1);
+    });

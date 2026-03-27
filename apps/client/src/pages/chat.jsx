@@ -71,6 +71,19 @@ function formatDayLabel(dateOrStr) {
     return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: '2-digit' }).format(d)
 }
 
+function parseSharedPostContent(content) {
+    if (typeof content !== "string") return null
+    const match = content.match(/^\[SHARED_POST:(.+)\]$/s)
+    if (!match?.[1]) return null
+    try {
+        const parsed = JSON.parse(match[1])
+        if (!parsed || typeof parsed !== "object") return null
+        return parsed
+    } catch {
+        return null
+    }
+}
+
 
 export default function Chat() {
     const { t } = useTranslation()
@@ -215,7 +228,8 @@ export default function Chat() {
                 const otherUser = (otherParticipant && userMap[otherParticipant.userId]) || { id: 'unknown', name: 'Unknown', handle: 'unknown' }
                 
                 const lastMsg = c.lastMessage || {}
-                const raw = lastMsg.content || (lastMsg.mediaUrl ? "Sent an attachment" : "")
+                const sharedPost = parseSharedPostContent(lastMsg.content)
+                const raw = sharedPost ? "Shared a post" : (lastMsg.content || (lastMsg.mediaUrl ? "Sent an attachment" : ""))
                 const lastMessageFromMe = lastMsg.senderId === currentUserId
 
                 return {
@@ -303,7 +317,9 @@ export default function Chat() {
 
                 // Update conversation details
                 let previewText = "Attachment";
-                if (message.content) previewText = message.content;
+                const sharedPost = parseSharedPostContent(message.content)
+                if (sharedPost) previewText = "Shared a post";
+                else if (message.content) previewText = message.content;
                 else if (message.type === 'image') previewText = "Sent an image";
                 else if (message.type === 'video') previewText = "Sent a video";
                 else if (message.type === 'audio') previewText = "Sent an audio clip";
@@ -410,6 +426,7 @@ export default function Chat() {
         id: msg.id,
         sender: msg.senderId === currentUser?.id ? "me" : "them",
         text: msg.content,
+        sharedPost: parseSharedPostContent(msg.content),
         mediaUrl: msg.mediaUrl,
         mediaType: msg.type,
         thumbnailUrl: msg.thumbnailUrl,
@@ -869,8 +886,60 @@ export default function Chat() {
                                                         )
                                                     )}
 
+                                                    {msg.sharedPost && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const targetUrl = msg.sharedPost?.postUrl || (msg.sharedPost?.id ? `/post/${msg.sharedPost.id}` : null)
+                                                                if (!targetUrl) return
+                                                                if (/^https?:\/\//i.test(targetUrl)) {
+                                                                    window.open(targetUrl, "_blank", "noopener,noreferrer")
+                                                                    return
+                                                                }
+                                                                navigate(targetUrl)
+                                                            }}
+                                                            className={cn(
+                                                                "mb-1.5 w-full max-w-[22rem] rounded-2xl border text-left overflow-hidden",
+                                                                msg.sender === "me"
+                                                                    ? "border-white/30 bg-white/10 hover:bg-white/15"
+                                                                    : "border-white/10 bg-black/20 hover:bg-black/30"
+                                                            )}
+                                                        >
+                                                            {msg.sharedPost?.media?.url && (
+                                                                msg.sharedPost.media.type === "video" ? (
+                                                                    <video
+                                                                        src={getMediaUrl(msg.sharedPost.media.url)}
+                                                                        poster={getMediaUrl(msg.sharedPost.media.thumbnailUrl)}
+                                                                        className="w-full h-40 object-cover bg-black"
+                                                                        muted
+                                                                    />
+                                                                ) : (
+                                                                    <img
+                                                                        src={getMediaUrl(msg.sharedPost.media.url)}
+                                                                        alt="Shared post"
+                                                                        className="w-full h-40 object-cover bg-black"
+                                                                    />
+                                                                )
+                                                            )}
+                                                            <div className="p-3">
+                                                                <div className="text-[12px] text-white/70 mb-1 truncate">
+                                                                    @{msg.sharedPost?.user?.handle || "unknown"}
+                                                                </div>
+                                                                {msg.sharedPost?.text ? (
+                                                                    <div className="text-[14px] leading-5 line-clamp-3 break-words [overflow-wrap:anywhere]">
+                                                                        {msg.sharedPost.text}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-[14px] leading-5 text-white/85">
+                                                                        Open shared post
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    )}
+
                                                     <div className="flex items-end gap-2 flex-wrap min-w-0 max-w-full pointer-events-none">
-                                                        {msg.text ? (
+                                                        {msg.text && !msg.sharedPost ? (
                                                             <span className="whitespace-pre-wrap break-words min-w-0 max-w-full [overflow-wrap:anywhere]">
                                                                 {msg.text}
                                                             </span>

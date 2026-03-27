@@ -676,6 +676,26 @@ export const adService = {
 
 // Business Services
 export const businessService = {
+    getAccess: async () => {
+        const { data } = await api.get('/api/business/access')
+        return data
+    },
+    createBusiness: async ({ companyName, handle }) => {
+        const { data } = await api.post('/api/business/create', { companyName, handle })
+        return data
+    },
+    completeOnboarding: async () => {
+        const { data } = await api.patch('/api/business/onboarding/complete')
+        return data
+    },
+    getBusinessById: async (id) => {
+        const { data } = await api.get(`/api/business/${id}`)
+        return data
+    },
+    inviteTeamMember: async (identifier, role = 'member') => {
+        const { data } = await api.post('/api/business/team', { identifier, role })
+        return data
+    },
     getStats: async () => {
         const { data } = await api.get('/api/business/stats')
         return data
@@ -696,12 +716,16 @@ export const businessService = {
         const { data } = await api.get('/api/business/team')
         return data
     },
-    addTeamMember: async (memberId, role) => {
-        const { data } = await api.post('/api/business/team', { memberId, role })
+    addTeamMember: async (identifier, role = 'member') => {
+        const { data } = await api.post('/api/business/team/invite', { identifier, role })
+        return data
+    },
+    updateTeamRole: async (memberId, role) => {
+        const { data } = await api.patch('/api/business/team/role', { memberId, role })
         return data
     },
     removeTeamMember: async (memberId) => {
-        const { data } = await api.delete(`/api/business/team/${memberId}`)
+        const { data } = await api.delete('/api/business/team/member', { data: { memberId } })
         return data
     },
     requestVerification: async () => {
@@ -961,7 +985,8 @@ export const articlesService = {
     },
     getArticle: async (id) => {
         const { data } = await api.get(`/api/articles/${id}`);
-        return data?.data ?? data;
+        const payload = data?.data ?? data ?? null;
+        return payload && typeof payload === 'object' && payload.id ? payload : null;
     },
     updateArticle: async (id, articleData) => {
         const { data } = await api.put(`/api/articles/${id}`, articleData);

@@ -6,19 +6,79 @@ const router = express.Router();
 const authenticateToken = require('../middleware/auth');
 console.log('Ads Routes Module Loaded');
 
-// GET /account: Fetch or create Ad Account (auto-create business + ad account if missing so campaign launch works)
-router.get('/account', authenticateToken, async (req, res) => {
-    try {
-        const userId = req.user.userId;
+const PERMISSIONS = {
+    AD_CREATE: 'AD_CREATE',
+    AD_MANAGE: 'AD_MANAGE',
+    VIEW_ANALYTICS: 'VIEW_ANALYTICS',
+    SETTINGS_UPDATE: 'SETTINGS_UPDATE'
+};
 
-        let business = await prisma.businessProfile.findUnique({
-            where: { userId }
+function normalizeRole(role) {
+    return String(role || 'member').toLowerCase() === 'admin' ? 'admin' : 'member';
+}
+
+function getRolePermissions(role) {
+    if (normalizeRole(role) === 'admin') {
+        return {
+            [PERMISSIONS.AD_CREATE]: true,
+            [PERMISSIONS.AD_MANAGE]: true,
+            [PERMISSIONS.VIEW_ANALYTICS]: true,
+            [PERMISSIONS.SETTINGS_UPDATE]: true
+        };
+    }
+    return {
+        [PERMISSIONS.AD_CREATE]: false,
+        [PERMISSIONS.AD_MANAGE]: false,
+        [PERMISSIONS.VIEW_ANALYTICS]: false,
+        [PERMISSIONS.SETTINGS_UPDATE]: false
+    };
+}
+
+async function resolveBusinessAccess(userId) {
+    const owned = await prisma.businessProfile.findUnique({ where: { userId } });
+    if (owned) {
+        await prisma.businessMember.upsert({
+            where: { businessId_userId: { businessId: owned.id, userId } },
+            create: { businessId: owned.id, userId, role: 'admin' },
+            update: { role: 'admin' }
         });
+        return { business: owned, role: 'admin', permissions: getRolePermissions('admin') };
+    }
+    const membership = await prisma.businessMember.findFirst({
+        where: { userId },
+        include: { business: true }
+    });
+    if (!membership?.business) return { business: null, role: null, permissions: getRolePermissions('member') };
+    const role = normalizeRole(membership.role);
+    return { business: membership.business, role, permissions: getRolePermissions(role) };
+}
+
+function requirePermission(permissionKey) {
+    return async (req, res, next) => {
+        try {
+            const userId = req.user.userId;
+            const access = await resolveBusinessAccess(userId);
+            req.businessAccess = access;
+            if (!access.permissions?.[permissionKey]) {
+                return res.status(403).json({ error: `Forbidden: ${permissionKey} required` });
+            }
+            return next();
+        } catch (error) {
+            console.error('[Ads RBAC] Permission check failed:', error);
+            return res.status(500).json({ error: 'Failed to validate permissions' });
+        }
+    };
+}
+
+// GET /account: Fetch or create Ad Account (auto-create business + ad account if missing so campaign launch works)
+router.get('/account', authenticateToken, requirePermission(PERMISSIONS.AD_MANAGE), async (req, res) => {
+    try {
+        let business = req.businessAccess?.business;
 
         if (!business) {
             business = await prisma.businessProfile.create({
                 data: {
-                    userId,
+                    userId: req.user.userId,
                     companyName: 'My Business'
                 }
             });
@@ -45,10 +105,9 @@ router.get('/account', authenticateToken, async (req, res) => {
 });
 
 // PUT /account: Update ad account
-router.put('/account', authenticateToken, async (req, res) => {
+router.put('/account', authenticateToken, requirePermission(PERMISSIONS.SETTINGS_UPDATE), async (req, res) => {
     try {
-        const userId = req.user.userId;
-        const business = await prisma.businessProfile.findUnique({ where: { userId } });
+        const business = req.businessAccess?.business;
         if (!business) {
             return res.status(404).json({ status: false, message: 'Business profile not found', data: null });
         }
@@ -78,13 +137,13 @@ router.put('/account', authenticateToken, async (req, res) => {
 });
 
 // GET /campaigns: Fetch all campaigns for user
-router.get('/campaigns', authenticateToken, async (req, res) => {
+router.get('/campaigns', authenticateToken, requirePermission(PERMISSIONS.AD_MANAGE), async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const businessId = req.businessAccess?.business?.id;
         const campaigns = await prisma.campaign.findMany({
             where: {
                 adAccount: {
-                    business: { userId }
+                    businessId
                 }
             },
             include: {
@@ -100,13 +159,20 @@ router.get('/campaigns', authenticateToken, async (req, res) => {
 });
 
 // POST /campaigns: Create new campaign
-router.post('/campaigns', authenticateToken, async (req, res) => {
+router.post('/campaigns', authenticateToken, requirePermission(PERMISSIONS.AD_CREATE), async (req, res) => {
     try {
         const { adAccountId, name, type, dailyBudget, startTime, endTime, targeting } = req.body;
 
         const budget = parseFloat(dailyBudget);
         if (isNaN(budget)) {
             return res.status(400).json({ error: 'Invalid daily budget. Please provide a valid number.' });
+        }
+
+        const ownedAdAccount = await prisma.adAccount.findFirst({
+            where: { id: adAccountId, businessId: req.businessAccess.business.id }
+        });
+        if (!ownedAdAccount) {
+            return res.status(403).json({ error: 'Ad account does not belong to your business' });
         }
 
         const campaign = await prisma.campaign.create({
@@ -129,7 +195,7 @@ router.post('/campaigns', authenticateToken, async (req, res) => {
 });
 
 // POST /ads: Create new ad creative
-router.post('/ads', authenticateToken, async (req, res) => {
+router.post('/ads', authenticateToken, requirePermission(PERMISSIONS.AD_CREATE), async (req, res) => {
     try {
         const {
             campaign_id,
@@ -143,6 +209,16 @@ router.post('/ads', authenticateToken, async (req, res) => {
             destination_url,
             status
         } = req.body;
+
+        const campaign = await prisma.campaign.findFirst({
+            where: {
+                id: campaign_id,
+                adAccount: { businessId: req.businessAccess.business.id }
+            }
+        });
+        if (!campaign) {
+            return res.status(403).json({ error: 'Campaign does not belong to your business' });
+        }
 
         const ad = await prisma.ad.create({
             data: {
@@ -166,14 +242,14 @@ router.post('/ads', authenticateToken, async (req, res) => {
 });
 
 // GET /creatives: Fetch all ads for user
-router.get('/creatives', authenticateToken, async (req, res) => {
+router.get('/creatives', authenticateToken, requirePermission(PERMISSIONS.AD_MANAGE), async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const businessId = req.businessAccess?.business?.id;
         const ads = await prisma.ad.findMany({
             where: {
                 campaign: {
                     adAccount: {
-                        business: { userId }
+                        businessId
                     }
                 }
             },
@@ -192,13 +268,9 @@ router.get('/creatives', authenticateToken, async (req, res) => {
 });
 
 // GET /performance: Fetch performance stats
-router.get('/performance', authenticateToken, async (req, res) => {
+router.get('/performance', authenticateToken, requirePermission(PERMISSIONS.VIEW_ANALYTICS), async (req, res) => {
     try {
-        const userId = req.user.userId;
-        const business = await prisma.businessProfile.findUnique({
-            where: { userId },
-            select: { totalSpent: true, totalImpressions: true }
-        });
+        const business = req.businessAccess?.business;
 
         // In a real app, calculate from Campaign/Ad models
         // For MVP, return stored snapshots or mock
@@ -207,7 +279,7 @@ router.get('/performance', authenticateToken, async (req, res) => {
             spent: business?.totalSpent || "$0",
             activeAds: await prisma.ad.count({
                 where: {
-                    campaign: { adAccount: { business: { userId } } },
+                    campaign: { adAccount: { businessId: business?.id } },
                     status: 'active'
                 }
             })
@@ -219,14 +291,11 @@ router.get('/performance', authenticateToken, async (req, res) => {
 });
 
 // PUT /account/billing: Update ad account billing details
-router.put('/account/billing', authenticateToken, async (req, res) => {
+router.put('/account/billing', authenticateToken, requirePermission(PERMISSIONS.SETTINGS_UPDATE), async (req, res) => {
     try {
-        const userId = req.user.userId;
         const { method, details } = req.body;
 
-        const business = await prisma.businessProfile.findUnique({
-            where: { userId }
-        });
+        const business = req.businessAccess?.business;
 
         if (!business) {
             return res.status(404).json({ error: 'Business profile not found' });

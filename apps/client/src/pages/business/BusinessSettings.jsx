@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -16,7 +17,8 @@ const defaultSettings = {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
 }
 
-export default function BusinessSettings({ onSwitchTab }) {
+export default function BusinessSettings() {
+    const navigate = useNavigate()
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
     const [settings, setSettings] = useState(defaultSettings)
@@ -148,14 +150,16 @@ export default function BusinessSettings({ onSwitchTab }) {
                 <h3 className="font-bold text-lg mb-4">Quick actions</h3>
                 <div className="space-y-2">
                     <button
-                        onClick={() => onSwitchTab?.("profile")}
+                        type="button"
+                        onClick={() => navigate("/business/profile")}
                         className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/[0.03] transition-colors text-left"
                     >
                         <span className="text-sm font-medium">Edit business profile</span>
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </button>
                     <button
-                        onClick={() => onSwitchTab?.("team")}
+                        type="button"
+                        onClick={() => navigate("/business/team")}
                         className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/[0.03] transition-colors text-left"
                     >
                         <span className="text-sm font-medium">Manage team members</span>

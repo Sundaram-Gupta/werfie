@@ -47,16 +47,22 @@ export async function middleware(req: NextRequest) {
     if (!path.startsWith('/api/admin') || path === '/api/admin/login' || path.startsWith('/api/admin/health')) {
         response = NextResponse.next();
     } else {
-        // Validation Logic
+        // Validation Logic — Bearer header, or accessToken cookie (gateway /api/auth/login on :3001 sets it for same-site Swagger)
         const authHeader = req.headers.get('authorization');
+        let token: string | null = null;
+        if (authHeader?.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1]?.trim() || null;
+        }
+        if (!token) {
+            token = req.cookies.get('accessToken')?.value?.trim() || null;
+        }
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        if (!token) {
             response = NextResponse.json(
                 { status: false, message: 'Unauthorized: No token provided', data: null },
                 { status: 401 }
             );
         } else {
-            const token = authHeader.split(' ')[1];
             try {
                 const { payload } = await jwtVerify(
                     token,

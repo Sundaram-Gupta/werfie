@@ -881,6 +881,21 @@ app.use((req, res) => {
 });
 
 const bindHost = process.env.BIND_HOST || '0.0.0.0';
-app.listen(PORT, bindHost, () => {
-    console.log(`User Service running on http://${bindHost}:${PORT} (LAN: use this machine's IP)`);
-});
+async function ensureBusinessSchemaCompatibility() {
+    // Self-heal for rolling deployments where code updates can arrive before DB migration.
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "BusinessProfile"
+        ADD COLUMN IF NOT EXISTS "onboardingCompleted" BOOLEAN NOT NULL DEFAULT false
+    `);
+}
+
+ensureBusinessSchemaCompatibility()
+    .then(() => {
+        app.listen(PORT, bindHost, () => {
+            console.log(`User Service running on http://${bindHost}:${PORT} (LAN: use this machine's IP)`);
+        });
+    })
+    .catch((err) => {
+        console.error('Failed to ensure schema compatibility on startup:', err);
+        process.exit(1);
+    });

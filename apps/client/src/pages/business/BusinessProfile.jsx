@@ -5,10 +5,13 @@ import { Save, Building, MapPin, Globe, Mail, Clock, ShieldCheck, Upload } from 
 import { businessService, userService, mediaService } from "@/services/api"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
-import { getMediaUrl } from "@/lib/utils"
+import { useBusinessAccess } from "@/context/BusinessAccessContext"
+import { getMediaUrl, cn } from "@/lib/utils"
 
 export default function BusinessProfile() {
     const { user, updateUser } = useAuth()
+    const { access } = useBusinessAccess()
+    const readOnly = access?.role === "member"
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
     const [formData, setFormData] = useState({
@@ -45,6 +48,8 @@ export default function BusinessProfile() {
                     })
                     setVerificationStatus(data.status || "idle")
                     setIsVerified(data.isVerified || false)
+                    setLogoUrl(data.logoUrl || access?.businessLogoUrl || access?.ownerAvatar || "")
+                    setBannerUrl(data.bannerUrl || access?.businessBannerUrl || access?.ownerBanner || "")
                 }
             } catch (err) {
                 console.error('Failed to fetch business profile:', err)
@@ -54,19 +59,26 @@ export default function BusinessProfile() {
             }
         }
         fetchProfile()
-    }, [])
+    }, [access?.businessLogoUrl, access?.businessBannerUrl, access?.ownerAvatar, access?.ownerBanner])
 
     useEffect(() => {
         if (!user) return
-        setLogoUrl(user.profile?.avatar || user.avatar || "")
-        setBannerUrl(user.profile?.banner || user.banner || "")
-    }, [user])
+        // Members should see workspace branding (owner/business), not their personal profile media.
+        if (readOnly) {
+            setLogoUrl((prev) => prev || access?.businessLogoUrl || access?.ownerAvatar || "")
+            setBannerUrl((prev) => prev || access?.businessBannerUrl || access?.ownerBanner || "")
+            return
+        }
+        setLogoUrl((prev) => prev || user.profile?.avatar || user.avatar || "")
+        setBannerUrl((prev) => prev || user.profile?.banner || user.banner || "")
+    }, [user, readOnly, access?.businessLogoUrl, access?.businessBannerUrl, access?.ownerAvatar, access?.ownerBanner])
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value })
     }
 
     const handleImageUpload = async (file, type) => {
+        if (readOnly) return
         if (!file) return
         if (!file.type?.startsWith("image/")) {
             toast.error("Please select an image file")
@@ -97,6 +109,7 @@ export default function BusinessProfile() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+        if (readOnly) return
         setLoading(true)
         try {
             // Only send fields that the backend actually supports.
@@ -149,6 +162,7 @@ export default function BusinessProfile() {
     }
 
     const handleRequestVerification = async () => {
+        if (readOnly) return
         if (!formData.companyName) {
             toast.error("Please set a business name before requesting verification")
             return
@@ -178,11 +192,13 @@ export default function BusinessProfile() {
                 <div className="mb-6 flex justify-between items-center">
                     <div>
                         <h2 className="text-xl font-bold">Business Profile</h2>
-                        <p className="text-sm text-muted-foreground">Manage your public business information</p>
+                        <p className="text-sm text-muted-foreground">
+                            {readOnly ? "View-only — admins update this page." : "Manage your public business information"}
+                        </p>
                     </div>
                     <Button
                         className="rounded-full bg-blue-500 text-white"
-                        disabled={loading || uploadingLogo || uploadingBanner}
+                        disabled={readOnly || loading || uploadingLogo || uploadingBanner}
                         type="submit"
                     >
                         {loading ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
@@ -214,6 +230,10 @@ export default function BusinessProfile() {
                         <Button disabled variant="outline" size="sm" className="bg-yellow-500/10 border-yellow-500/30 text-yellow-500">
                             Pending Review
                         </Button>
+                    ) : readOnly ? (
+                        <Button disabled variant="outline" size="sm" className="opacity-60">
+                            View only
+                        </Button>
                     ) : (
                         <Button 
                             variant="outline" 
@@ -233,19 +253,19 @@ export default function BusinessProfile() {
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Building className="w-4 h-4 text-muted-foreground" /> Business Name
                         </label>
-                        <Input name="companyName" value={formData.companyName} onChange={handleChange} className="bg-zinc-900 border-border" placeholder="Acme Corp" />
+                        <Input name="companyName" value={formData.companyName} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Acme Corp" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Industry</label>
-                            <Input name="industry" value={formData.industry} onChange={handleChange} className="bg-zinc-900 border-border" placeholder="Technology" />
+                            <Input name="industry" value={formData.industry} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Technology" />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium flex items-center gap-2">
                                 <Mail className="w-4 h-4 text-muted-foreground" /> Public Email
                             </label>
-                            <Input name="email" value={formData.email} onChange={handleChange} className="bg-zinc-900 border-border" placeholder="contact@acme.com" />
+                            <Input name="email" value={formData.email} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="contact@acme.com" />
                         </div>
                     </div>
 
@@ -253,21 +273,21 @@ export default function BusinessProfile() {
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Globe className="w-4 h-4 text-muted-foreground" /> Website
                         </label>
-                        <Input name="website" value={formData.website} onChange={handleChange} className="bg-zinc-900 border-border" placeholder="https://acme.com" />
+                        <Input name="website" value={formData.website} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="https://acme.com" />
                     </div>
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-muted-foreground" /> Location
                         </label>
-                        <Input name="location" value={formData.location} onChange={handleChange} className="bg-zinc-900 border-border" placeholder="Silicon Valley, CA" />
+                        <Input name="location" value={formData.location} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Silicon Valley, CA" />
                     </div>
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Clock className="w-4 h-4 text-muted-foreground" /> Business Hours
                         </label>
-                        <Input name="hours" value={formData.hours} onChange={handleChange} className="bg-zinc-900 border-border" placeholder="Mon-Fri: 9AM - 5PM" />
+                        <Input name="hours" value={formData.hours} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Mon-Fri: 9AM - 5PM" />
                     </div>
                 </div>
 
@@ -277,10 +297,13 @@ export default function BusinessProfile() {
                     <div className="flex gap-4">
                         <div
                             role="button"
-                            tabIndex={0}
-                            onClick={() => logoInputRef.current?.click()}
-                            onKeyDown={(e) => e.key === "Enter" && logoInputRef.current?.click()}
-                            className="w-24 h-24 bg-zinc-800 rounded-full flex items-center justify-center border border-dashed border-muted-foreground/50 hover:border-primary cursor-pointer transition-colors overflow-hidden"
+                            tabIndex={readOnly ? -1 : 0}
+                            onClick={() => !readOnly && logoInputRef.current?.click()}
+                            onKeyDown={(e) => e.key === "Enter" && !readOnly && logoInputRef.current?.click()}
+                            className={cn(
+                                "w-24 h-24 bg-zinc-800 rounded-full flex items-center justify-center border border-dashed border-muted-foreground/50 transition-colors overflow-hidden",
+                                readOnly ? "opacity-60 cursor-not-allowed" : "hover:border-primary cursor-pointer"
+                            )}
                         >
                             {logoUrl ? (
                                 <img src={getMediaUrl(logoUrl)} alt="Logo" className="w-full h-full object-cover" />
@@ -304,12 +327,17 @@ export default function BusinessProfile() {
                                 e.target.value = ""
                             }}
                         />
-                        <div className="flex-1 h-24 bg-zinc-800 rounded-xl flex flex-col items-center justify-center border border-dashed border-muted-foreground/50 hover:border-primary cursor-pointer transition-colors">
+                        <div
+                            className={cn(
+                                "flex-1 h-24 bg-zinc-800 rounded-xl flex flex-col items-center justify-center border border-dashed border-muted-foreground/50 transition-colors",
+                                readOnly ? "opacity-60 cursor-not-allowed" : "hover:border-primary cursor-pointer"
+                            )}
+                        >
                             <div
                                 role="button"
-                                tabIndex={0}
-                                onClick={() => bannerInputRef.current?.click()}
-                                onKeyDown={(e) => e.key === "Enter" && bannerInputRef.current?.click()}
+                                tabIndex={readOnly ? -1 : 0}
+                                onClick={() => !readOnly && bannerInputRef.current?.click()}
+                                onKeyDown={(e) => e.key === "Enter" && !readOnly && bannerInputRef.current?.click()}
                                 className="w-full h-full flex items-center justify-center"
                             >
                                 {bannerUrl ? (

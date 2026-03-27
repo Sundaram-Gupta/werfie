@@ -47,23 +47,25 @@
                 persistAuthorization: true,
                 // Force requests to use the same host you opened docs from.
                 // This prevents "localhost" from breaking auth/authorize on other devices.
+                // Keep relative /api/... URLs relative. Converting them to absolute URLs can cause
+                // Swagger UI's fetch layer to drop the Authorize header (401 "No token provided" on admin routes).
                 requestInterceptor: (req) => {
                     try {
                         const origin = window.location.origin;
                         if (origin && typeof req?.url === 'string') {
                             let u = req.url.trim();
-                            // Fix protocol-relative URLs like //host/path
                             if (u.startsWith('//')) {
                                 u = `${window.location.protocol}${u}`;
                             }
-                            // Fix relative URLs so browser never treats them as invalid CORS targets
-                            if (u.startsWith('/')) {
-                                u = `${origin}${u}`;
-                            } else if (!/^https?:\/\//i.test(u)) {
-                                u = `${origin}/${u.replace(/^\/+/, '')}`;
-                            }
-                            // Force loopback URLs to current origin (LAN-safe + no cross-origin surprises)
+                            // Only rewrite loopback absolute URLs to the host you opened docs from (LAN-safe).
                             u = u.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, origin);
+                            // If Swagger produced a full URL for this same origin, shorten to path+search (preserves Bearer auth).
+                            if (/^https?:\/\//i.test(u) && u.startsWith(origin)) {
+                                try {
+                                    const parsed = new URL(u);
+                                    u = parsed.pathname + parsed.search;
+                                } catch { /* keep u */ }
+                            }
                             req.url = u;
                         }
                     } catch { /* ignore */ }

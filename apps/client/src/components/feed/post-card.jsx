@@ -14,6 +14,7 @@ import { parsePollContent } from "@/lib/poll-utils"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/context/AuthContext"
+import { Button } from "@/components/ui/button"
 
 import { useTranslation } from "react-i18next"
 
@@ -225,7 +226,52 @@ function AutoPlayVideo({ src, poster, className, style, onError }) {
     )
 }
 
-export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete, onToggleHighlight }) {
+function DeferredImage({ src, alt, className, style, onClick, onError, priority = false }) {
+    const [shouldLoad, setShouldLoad] = useState(Boolean(priority))
+    const holderRef = useRef(null)
+
+    useEffect(() => {
+        if (priority || shouldLoad) return
+        const el = holderRef.current
+        if (!el || typeof window === "undefined" || typeof window.IntersectionObserver === "undefined") {
+            setShouldLoad(true)
+            return
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    setShouldLoad(true)
+                    observer.disconnect()
+                }
+            },
+            { rootMargin: "300px 0px", threshold: 0.01 }
+        )
+        observer.observe(el)
+        return () => observer.disconnect()
+    }, [priority, shouldLoad])
+
+    return (
+        <div ref={holderRef} className="w-full h-full bg-black/30">
+            {shouldLoad ? (
+                <img
+                    src={src}
+                    alt={alt}
+                    className={className}
+                    style={style}
+                    loading={priority ? "eager" : "lazy"}
+                    decoding="async"
+                    fetchpriority={priority ? "high" : "low"}
+                    onClick={onClick}
+                    onError={onError}
+                />
+            ) : (
+                <div className="w-full bg-black/20 animate-pulse" style={style} />
+            )}
+        </div>
+    )
+}
+
+export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete, onToggleHighlight, priorityMedia = false }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const { user: authUser } = useAuth()
@@ -523,11 +569,12 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                             return (
                                 <div key={media.id || index} className="relative bg-black">
                                     {isImage ? (
-                                        <img
+                                        <DeferredImage
                                             src={mediaUrl}
                                             alt="Post media"
                                             className="w-full h-auto object-cover cursor-zoom-in"
                                             style={{ maxHeight: post.media.length === 1 ? '500px' : '250px' }}
+                                            priority={priorityMedia && index === 0}
                                             onClick={(e) => {
                                                 e.preventDefault()
                                                 e.stopPropagation()

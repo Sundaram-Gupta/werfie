@@ -7,12 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "promote-admin": "node scripts/promote-admin.cjs"
+    "promote-admin": "node scripts/promote-admin.cjs",
+    "ensure-dev-admin": "node scripts/ensure-dev-admin.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/swagger-jsdoc": "^6.0.4",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^16.6.1",
     "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.3",
     "next": "16.1.6",

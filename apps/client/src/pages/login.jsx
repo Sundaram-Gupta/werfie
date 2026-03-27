@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { validateLoginForm } from '@/lib/validation'
 
 export default function Login() {
@@ -12,6 +12,8 @@ export default function Login() {
 
     const { login } = useAuth()
     const navigate = useNavigate()
+    const location = useLocation()
+    const from = typeof location.state?.from === 'string' ? location.state.from : '/'
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -29,7 +31,7 @@ export default function Login() {
 
         try {
             await login(email, password)
-            navigate('/')
+            navigate(from === '/login' ? '/' : from, { replace: true })
         } catch (error) {
             console.error('Login failed:', error)
             const isTimeout = error.code === 'ECONNABORTED' || (error.message || '').includes('timeout')

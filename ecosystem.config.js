@@ -1,5 +1,6 @@
 const path = require('path');
 const runNextDevScript = path.join(__dirname, 'scripts', 'run-next-dev.cjs');
+const runAdminBackendScript = path.join(__dirname, 'scripts', 'run-admin-backend.cjs');
 const runAuthGuardedScript = path.join(__dirname, 'scripts', 'run-auth-service-guarded.cjs');
 
 module.exports = {
@@ -392,7 +393,7 @@ module.exports = {
         {
             name: 'admin-backend',
             cwd: './adminBackend',
-            script: runNextDevScript,
+            script: runAdminBackendScript,
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,

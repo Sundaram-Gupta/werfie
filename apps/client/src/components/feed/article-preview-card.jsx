@@ -10,12 +10,25 @@ export function ArticlePreviewCard({ articleId }) {
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (articleId) {
-            articlesService.getArticle(articleId)
-                .then(res => setArticle(res.data || res))
-                .catch(err => console.error("Failed to fetch article preview:", err))
-                .finally(() => setLoading(false));
+        if (!articleId) {
+            setArticle(null);
+            setLoading(false);
+            return;
         }
+
+        setLoading(true);
+        articlesService
+            .getArticle(articleId)
+            .then((res) => {
+                // Service already unwraps payload; however keep this resilient for mixed response shapes.
+                const normalized = res?.data ?? res ?? null;
+                setArticle(normalized && normalized.id ? normalized : null);
+            })
+            .catch((err) => {
+                console.error("Failed to fetch article preview:", err);
+                setArticle(null);
+            })
+            .finally(() => setLoading(false));
     }, [articleId]);
 
     if (loading) return (
@@ -58,7 +71,7 @@ export function ArticlePreviewCard({ articleId }) {
                     {article.title}
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {article.content.substring(0, 150).replace(/[#*]/g, '')}...
+                    {String(article.content || "").substring(0, 150).replace(/[#*]/g, "")}...
                 </p>
             </div>
         </div>

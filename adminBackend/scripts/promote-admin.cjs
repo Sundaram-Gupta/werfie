@@ -1,9 +1,10 @@
 /**
  * Grant ADMIN role to an existing user (same DB as auth gateway).
- * Usage from repo root:
+ * Usage:
  *   cd adminBackend && node scripts/promote-admin.cjs you@email.com
  *
- * Then sign in at the admin panel with that email and password.
+ * For default dev Super Admin (admin@example.com / admin), run instead:
+ *   cd adminBackend && npm run ensure-dev-admin
  */
 const { PrismaClient } = require('@prisma/client');
 

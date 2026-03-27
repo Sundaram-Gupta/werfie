@@ -13,8 +13,9 @@ import {
     DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import { ComposeModal } from "@/components/feed/compose-modal"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
+import api from "@/lib/api"
 
 
 
@@ -24,6 +25,7 @@ export function Sidebar({ forceCollapsed = false } = {}) {
     const { user } = useAuth()
     const { t } = useTranslation()
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark")
+    const prefetchingHomeRef = useRef(false)
 
     useEffect(() => {
         const root = window.document.documentElement
@@ -53,6 +55,40 @@ export function Sidebar({ forceCollapsed = false } = {}) {
             } catch {
                 window.scrollTo(0, 0)
             }
+        }
+    }
+
+    const prefetchHomeFeed = async () => {
+        try {
+            if (prefetchingHomeRef.current) return
+            prefetchingHomeRef.current = true
+            const cacheKey = "werfie:posts:v1:for-you"
+            const tsKey = "werfie:posts:prefetchTs:v1:for-you"
+            const now = Date.now()
+            const lastTs = Number(sessionStorage.getItem(tsKey) || 0)
+            if (now - lastTs < 45_000) return
+
+            const [postsRes, annRes] = await Promise.all([
+                api.get("/api/posts", { params: { tab: "for-you", limit: 20, _ts: now }, timeout: 8000 }),
+                api.get("/api/announcements/feed", { params: { _ts: now }, timeout: 6000 }).catch(() => ({ data: [] })),
+            ])
+
+            const postsData = postsRes?.data
+            const posts = Array.isArray(postsData) ? postsData : (postsData?.posts || [])
+            const annData = annRes?.data
+            const announcements = (Array.isArray(annData) ? annData : (annData?.posts || [])).map((a) => ({
+                ...a,
+                isOfficialAnnouncement: true,
+            }))
+            const merged = [...posts, ...announcements]
+            if (merged.length > 0) {
+                sessionStorage.setItem(cacheKey, JSON.stringify(merged.slice(0, 50)))
+                sessionStorage.setItem(tsKey, String(now))
+            }
+        } catch {
+            // ignore prefetch failures
+        } finally {
+            prefetchingHomeRef.current = false
         }
     }
 
@@ -91,6 +127,7 @@ export function Sidebar({ forceCollapsed = false } = {}) {
                         forceCollapsed ? "p-2 mb-1 hover:bg-white/5" : "p-3 mb-1 xl:ml-0 hover:bg-muted/50"
                     )}
                     onClick={triggerHomeRefresh}
+                    onMouseEnter={prefetchHomeFeed}
                 >
                     <img
                         src="/werfie.png"
@@ -222,6 +259,7 @@ export function Sidebar({ forceCollapsed = false } = {}) {
                                 item.gradient && "bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-cyan-500/10 hover:from-purple-500/20 hover:via-blue-500/20 hover:to-cyan-500/20"
                             )}
                             onClick={item.path === "/" ? triggerHomeRefresh : undefined}
+                            onMouseEnter={item.path === "/" ? prefetchHomeFeed : undefined}
                         >
                             {isActive && item.filledIcon ? (
                                 <item.filledIcon

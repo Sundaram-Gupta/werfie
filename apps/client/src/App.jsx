@@ -12,7 +12,12 @@ import Explore from "@/pages/explore"
 import Profile from "@/pages/profile"
 import Lists from "@/pages/lists"
 import ListDetail from "@/pages/list-detail"
-import Business from "@/pages/business"
+import BusinessLayout from "@/pages/business/BusinessLayout"
+import BusinessDashboard from "@/pages/business/BusinessDashboard"
+import BusinessProfile from "@/pages/business/BusinessProfile"
+import ProductManagement from "@/pages/business/ProductManagement"
+import TeamManagement from "@/pages/business/TeamManagement"
+import BusinessSettings from "@/pages/business/BusinessSettings"
 import Ads from "@/pages/ads"
 import Spaces from "@/pages/spaces"
 import CreatorStudio from "@/pages/creator-studio"
@@ -48,9 +53,15 @@ import ArticleDetail from "@/pages/articles/ArticleDetail"
 import { AuthModalProvider } from "./components/auth/auth-modal-context"
 import { AuthModal } from "./components/auth/auth-modal"
 import { AuthProvider } from "./context/AuthContext"
+import { BusinessAccessProvider } from "./context/BusinessAccessContext"
 import { SocketProvider } from "./context/SocketContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { Toaster } from "sonner"
+import BusinessIndexRedirect from "@/pages/business/BusinessIndexRedirect"
+import BusinessOnboarding from "@/pages/business/BusinessOnboarding"
+import BusinessNoAccess from "@/pages/business/BusinessNoAccess"
+import BusinessDashboardGate from "@/pages/business/BusinessDashboardGate"
+import BusinessAdminRoute from "@/pages/business/BusinessAdminRoute"
 
 function App() {
   return (
@@ -114,7 +125,41 @@ function App() {
 
               {/* Protected Standalone Layouts (No Main Sidebar) */}
               <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-                 <Route path="/business" element={<Business />} />
+                 <Route
+                   path="/business"
+                   element={
+                     <BusinessAccessProvider>
+                       <Outlet />
+                     </BusinessAccessProvider>
+                   }
+                 >
+                   <Route index element={<BusinessIndexRedirect />} />
+                   <Route path="onboarding" element={<BusinessOnboarding />} />
+                   <Route path="no-access" element={<BusinessNoAccess />} />
+                   <Route element={<BusinessDashboardGate />}>
+                     <Route element={<BusinessLayout />}>
+                       <Route path="dashboard" element={<BusinessDashboard />} />
+                       <Route path="profile" element={<BusinessProfile />} />
+                      <Route path="products" element={<ProductManagement />} />
+                       <Route
+                         path="team"
+                         element={
+                          <BusinessAdminRoute requiredPermission="TEAM_MANAGE">
+                             <TeamManagement />
+                           </BusinessAdminRoute>
+                         }
+                       />
+                       <Route
+                         path="settings"
+                         element={
+                          <BusinessAdminRoute requiredPermission="SETTINGS_UPDATE">
+                             <BusinessSettings />
+                           </BusinessAdminRoute>
+                         }
+                       />
+                     </Route>
+                   </Route>
+                 </Route>
                  <Route path="/ads" element={<Ads />} />
                  <Route path="/monetization/*" element={<Monetization />} />
               </Route>

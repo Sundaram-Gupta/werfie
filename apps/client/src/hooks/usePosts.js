@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 // Use same-origin when unset so Vite proxies /api (REST). WebSockets use getGatewayUrl() to hit gateway directly.
 const API_URL = import.meta.env.VITE_API_URL || ''
 
-const FEED_PAGE_SIZE = 30
+const FEED_PAGE_SIZE = 20
 
 function dedupeById(items) {
     const seen = new Set()
@@ -296,6 +296,17 @@ async function hydratePosts(fetchedPosts) {
     });
 }
 
+function normalizePostsFast(items) {
+    return (items || []).map(item => {
+        if (item?.isOfficialAnnouncement) return item
+        const bookmarks = Array.isArray(item?.bookmarks) ? item.bookmarks : []
+        const userId = item?.userId
+        const existing = item?.user
+        const resolvedUser = normalizeUser(existing || { id: userId }, userId)
+        return { ...item, bookmarks, user: resolvedUser }
+    })
+}
+
 export function usePosts(params = {}) {
     const { user: currentUser } = useAuth()
     const { noFetch } = params
@@ -398,18 +409,21 @@ export function usePosts(params = {}) {
             } else if (tabVal === 'for-you') {
                 // Generate a fresh seed for every new starting fetch
                 forYouSeedRef.current = Math.floor(Math.random() * 1000000)
-                
-                data = await api.get('/api/posts', {
-                    params: { ...baseParams, limit: FEED_PAGE_SIZE, seed: forYouSeedRef.current, _ts: Date.now() },
-                    timeout: 10000,
-                    signal: ctrl.signal,
-                }).then(r => r.data)
-
-                announcementsData = await api.get('/api/announcements/feed', {
-                    params: { _ts: Date.now() },
-                    timeout: 8000,
-                    signal: ctrl.signal,
-                }).then(r => r.data).then(d => (Array.isArray(d) ? d : (d?.posts || []))).catch(() => [])
+                const [postsResp, annResp] = await Promise.all([
+                    api.get('/api/posts', {
+                        params: { ...baseParams, limit: FEED_PAGE_SIZE, seed: forYouSeedRef.current, _ts: Date.now() },
+                        timeout: 10000,
+                        signal: ctrl.signal,
+                    }),
+                    api.get('/api/announcements/feed', {
+                        params: { _ts: Date.now() },
+                        timeout: 8000,
+                        signal: ctrl.signal,
+                    }).catch(() => ({ data: [] })),
+                ])
+                data = postsResp?.data
+                const annData = annResp?.data
+                announcementsData = Array.isArray(annData) ? annData : (annData?.posts || [])
             } else {
                 data = await api.get('/api/posts', {
                     params: { ...baseParams, limit: limitVal ?? FEED_PAGE_SIZE, offset: offsetRef.current || 0, _ts: Date.now() },
@@ -453,8 +467,8 @@ export function usePosts(params = {}) {
                 fetchedPosts = [...fetchedPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             }
 
-            fetchedPosts = await hydratePosts(dedupeById(fetchedPosts));
-            fetchedPosts = ensureNoConsecutiveSameUser(fetchedPosts, postUserKey);
+            fetchedPosts = dedupeById(fetchedPosts)
+            const quickPosts = ensureNoConsecutiveSameUser(normalizePostsFast(fetchedPosts), postUserKey)
 
             if (!isMounted.current) return
             setPosts(prev => {
@@ -462,18 +476,37 @@ export function usePosts(params = {}) {
                 // If we already have posts (e.g. from cache) and it's the discovery feed,
                 // merging unseen posts prevents the DOM from completely replacing and jumping.
                 if (tabVal === 'for-you' && prevList.length > 0) {
-                    const unseenNew = filterUnseen(fetchedPosts)
+                    const unseenNew = filterUnseen(quickPosts)
                     if (unseenNew.length === 0) return prevList
                     const newBatch = interleaveRandomNoAdjacent(unseenNew, postUserKey)
                     return ensureNoConsecutiveSameUser(dedupeById([...newBatch, ...prevList]), postUserKey)
                 }
-                return fetchedPosts
+                return quickPosts
             })
-            markSeen(fetchedPosts.filter(p => !p?.isOfficialAnnouncement))
+            markSeen(quickPosts.filter(p => !p?.isOfficialAnnouncement))
             setNextCursor(next)
             nextCursorRef.current = next
             setHasMore(more)
             hasMoreRef.current = more
+
+            // Hydrate missing user details in background so first paint is instant.
+            const needsHydration = quickPosts.some(p => {
+                if (p?.isOfficialAnnouncement) return false
+                const u = p?.user
+                return !(u?.profile?.handle || u?.handle || u?.profile?.name || u?.name || u?.email)
+            })
+            if (needsHydration) {
+                ;(async () => {
+                    try {
+                        const hydrated = await hydratePosts(fetchedPosts)
+                        if (!isMounted.current) return
+                        const hydratedById = new Map((hydrated || []).map(p => [String(p?.id), p]))
+                        setPosts(prev => (prev || []).map(p => hydratedById.get(String(p?.id)) || p))
+                    } catch (e) {
+                        console.warn('[usePosts] background hydration skipped:', e?.message || e)
+                    }
+                })()
+            }
         } catch (err) {
             if (axios.isCancel(err)) return
             if (!isMounted.current) return

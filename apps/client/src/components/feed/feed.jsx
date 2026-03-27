@@ -88,7 +88,7 @@ export function Feed({ tab = 'for-you', ...rest }) {
             )}
 
             <div className="divide-y divide-border">
-            {posts.map((item) => {
+            {posts.map((item, index) => {
                 if (item.isOfficialAnnouncement) {
                     return <AnnouncementFeedCard key={`ann-${item.id}`} announcement={item} />
                 }
@@ -96,6 +96,7 @@ export function Feed({ tab = 'for-you', ...rest }) {
                     <PostCard
                         key={item.id}
                         post={item}
+                        priorityMedia={index < 2}
                         onLike={likePost}
                         onUnlike={unlikePost}
                         onRetweet={retweetPost}

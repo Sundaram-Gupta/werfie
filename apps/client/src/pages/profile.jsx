@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PostCard } from "@/components/feed/post-card"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { cn, getMediaUrl } from "@/lib/utils"
 import { getApiBase } from "@/lib/api"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -38,12 +38,17 @@ export default function Profile() {
     const [highlights, setHighlights] = useState([])
     const [articles, setArticles] = useState([])
     const [mediaLightbox, setMediaLightbox] = useState(null) // { url, isVideo, post }
+    const debugSignatureRef = useRef(null)
 
+    const currentUserId = currentUser?.id || currentUser?._id || currentUser?.userId
+    const debugTabsMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugTabs") === "1"
     // Determine which user ID to fetch
-    const profileUserId = userId || currentUser?.id
+    const profileUserId = userId || currentUserId
 
     const fetchProfile = async () => {
         try {
+            let fetchedRepliesCount = 0
+            let fetchedHighlightsCount = 0
             // First fetch user profile details
             const userData = await userService.getUser(profileUserId)
             setProfile(userData)
@@ -55,9 +60,12 @@ export default function Profile() {
 
 
             // Check if current user is following this profile (only if viewing someone else's profile)
-            if (currentUser?.id && profileUserId !== currentUser.id) {
+            if (currentUserId && profileUserId !== currentUserId) {
                 try {
-                    const followingList = await userService.getFollowing(currentUser.id, { limit: 100 })
+                    const followingListRaw = await userService.getFollowing(currentUserId, { limit: 100 })
+                    const followingList = Array.isArray(followingListRaw)
+                        ? followingListRaw
+                        : (Array.isArray(followingListRaw?.users) ? followingListRaw.users : [])
                     const isCurrentlyFollowing = followingList.some(user => user.id === profileUserId)
                     setIsFollowing(isCurrentlyFollowing)
                 } catch (err) {
@@ -67,23 +75,26 @@ export default function Profile() {
 
             // Then fetch user's posts
             const userPosts = await postService.getPosts({ userId: profileUserId })
-            const hydratedPosts = userPosts.posts.map(post => ({
+            const userPostsList = Array.isArray(userPosts?.posts) ? userPosts.posts : (Array.isArray(userPosts) ? userPosts : [])
+            const hydratedPosts = userPostsList.map(post => ({
                 ...post,
                 user: post.user || userData
             }))
             setPosts(hydratedPosts)
             // If backend count is missing/outdated, fall back to fetched length
-            if (!userData._count?.posts && Array.isArray(userPosts?.posts)) {
-                setPostCount(userPosts.posts.length)
+            if (!userData._count?.posts) {
+                setPostCount(userPostsList.length)
             }
 
             // Fetch user's replies (posts where replyToId is not null)
             const userReplies = await postService.getPosts({ userId: profileUserId, repliesOnly: true })
-            const hydratedReplies = userReplies.posts.map(post => ({
+            const userRepliesList = Array.isArray(userReplies?.posts) ? userReplies.posts : (Array.isArray(userReplies) ? userReplies : [])
+            const hydratedReplies = userRepliesList.map(post => ({
                 ...post,
                 user: post.user || userData
             }))
             setReplies(hydratedReplies)
+            fetchedRepliesCount = userRepliesList.length
 
             // Fetch posts this user has liked (for Likes tab)
             try {
@@ -107,11 +118,13 @@ export default function Profile() {
             // Fetch Highlights
             try {
                 const highlightsData = await highlightsService.getHighlights(profileUserId)
-                const hydratedHighlights = highlightsData.map(post => ({
+                const highlightsList = Array.isArray(highlightsData) ? highlightsData : []
+                const hydratedHighlights = highlightsList.map(post => ({
                     ...post,
                     user: post.user || userData
                 }))
                 setHighlights(hydratedHighlights)
+                fetchedHighlightsCount = highlightsList.length
             } catch (hErr) {
                 console.warn('Failed to fetch highlights:', hErr)
                 setHighlights([])
@@ -120,9 +133,29 @@ export default function Profile() {
             // Fetch Articles
             try {
                 // For own profile, show drafts too. For others, only published.
-                const publishedOnly = profileUserId !== currentUser?.id
+                const publishedOnly = profileUserId !== currentUserId
                 const articlesData = await articlesService.getArticles(profileUserId, publishedOnly)
-                setArticles(articlesData)
+                const normalizedArticles = Array.isArray(articlesData) ? articlesData : []
+                setArticles(normalizedArticles)
+
+                if (debugTabsMode) {
+                    const summary = {
+                        userId: profileUserId,
+                        posts: userPostsList.length,
+                        replies: fetchedRepliesCount,
+                        highlights: fetchedHighlightsCount,
+                        articles: normalizedArticles.length,
+                        publishedOnly,
+                    }
+                    console.table(summary)
+                    const signature = JSON.stringify(summary)
+                    if (debugSignatureRef.current !== signature) {
+                        debugSignatureRef.current = signature
+                        toast.info(
+                            `Tabs debug -> replies: ${summary.replies}, highlights: ${summary.highlights}, articles: ${summary.articles}`
+                        )
+                    }
+                }
             } catch (aErr) {
                 console.warn('Failed to fetch articles:', aErr)
                 setArticles([])
@@ -325,7 +358,7 @@ export default function Profile() {
             profile: { ...prev.profile, ...updatedProfile }
         }))
         // Update global auth state so sidebar/header reflect changes
-        if (currentUser?.id === profile.id) {
+        if (currentUserId === profile.id) {
             console.log('ProfilePage: Updating global auth user')
             updateUser({
                 profile: updatedProfile
@@ -424,7 +457,7 @@ export default function Profile() {
                                 </div>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
-                                {currentUser?.id !== profile.id && (
+                                {currentUserId !== profile.id && (
                                     <DropdownMenuItem onClick={() => navigate('/chat', { state: { userId: profile.id, userName: name, userHandle: handle } })}>
                                         <MessageCircle className="w-4 h-4 mr-2" />
                                         {t('profile.message_user', { handle })}
@@ -432,7 +465,7 @@ export default function Profile() {
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        {currentUser?.id === profile.id ? (
+                        {currentUserId === profile.id ? (
                             <EditProfileModal user={profile} onUpdate={handleProfileUpdate}>
                                 <Button
                                     variant="outline"
@@ -529,15 +562,15 @@ export default function Profile() {
                 {/* Follower/Following Counts - clickable only for own profile (links to /follow) */}
                 <div className="flex gap-4 text-[15px] mb-4">
                     <div
-                        className={currentUser?.id === profile.id ? "hover:underline cursor-pointer" : ""}
-                        onClick={() => currentUser?.id === profile.id && navigate('/follow?tab=following')}
+                        className={currentUserId === profile.id ? "hover:underline cursor-pointer" : ""}
+                        onClick={() => currentUserId === profile.id && navigate('/follow?tab=following')}
                     >
                         <span className="font-bold text-foreground">{followingCount}</span>
                         <span className="text-muted-foreground"> {t('profile.following_count')}</span>
                     </div>
                     <div
-                        className={currentUser?.id === profile.id ? "hover:underline cursor-pointer" : ""}
-                        onClick={() => currentUser?.id === profile.id && navigate('/follow?tab=followers')}
+                        className={currentUserId === profile.id ? "hover:underline cursor-pointer" : ""}
+                        onClick={() => currentUserId === profile.id && navigate('/follow?tab=followers')}
                     >
                         <span className="font-bold text-foreground">{followerCount}</span>
                         <span className="text-muted-foreground"> {t('profile.followers_count')}</span>
@@ -564,7 +597,7 @@ export default function Profile() {
                 </TabsList>
 
                 <TabsContent value="posts" className="mt-0">
-                    {currentUser?.id === profile.id && <SetupProgress />}
+                    {currentUserId === profile.id && <SetupProgress />}
                     <div className="divide-y divide-border/50">
                         {posts.map(post => (
                             <PostCard
@@ -624,7 +657,7 @@ export default function Profile() {
                         ))}
                         {highlights.length === 0 && (
                             <div className="p-8 text-center text-muted-foreground">
-                                {profile.id === currentUser?.id 
+                                {profile.id === currentUserId 
                                     ? "Showcase your best posts here by adding them to your highlights."
                                     : "No highlights to show yet."
                                 }
@@ -635,7 +668,7 @@ export default function Profile() {
 
                 <TabsContent value="articles" className="mt-0">
                     <div className="flex flex-col">
-                        {currentUser?.id === profile.id && (
+                        {currentUserId === profile.id && (
                              <div className="p-4 flex justify-center border-b border-border/50">
                                  <Button variant="outline" onClick={() => navigate('/articles/new')} className="rounded-full font-bold min-w-[200px]">
                                      Write an Article
@@ -663,7 +696,7 @@ export default function Profile() {
                             ))}
                             {articles.length === 0 && (
                                 <div className="p-8 text-center text-muted-foreground">
-                                    {profile.id === currentUser?.id 
+                                    {profile.id === currentUserId 
                                         ? "Share your thoughts in long-form articles."
                                         : "No articles published yet."
                                     }

@@ -126,7 +126,7 @@ export default function TeamManagement() {
                                     </SelectTrigger>
                                     <SelectContent className="bg-zinc-900 border-border">
                                         <SelectItem value="admin">Admin (Full Access)</SelectItem>
-                                        <SelectItem value="member">Member (Content & Ads)</SelectItem>
+                                        <SelectItem value="member">Member (Posts, replies, products)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

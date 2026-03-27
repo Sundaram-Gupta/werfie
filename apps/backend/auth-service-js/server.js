@@ -66,6 +66,15 @@ proxy.on('error', (err, req, res) => {
 });
 
 proxy.on('proxyReq', (proxyReq, req, res, options) => {
+    // Ensure admin / proxied routes keep auth that browsers send (Swagger UI + cookies).
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader) {
+        proxyReq.setHeader('Authorization', authHeader);
+    }
+    const cookieHeader = req.headers.cookie || req.headers.Cookie;
+    if (cookieHeader) {
+        proxyReq.setHeader('Cookie', cookieHeader);
+    }
     // Forward user headers if injected by injectUserFromToken
     // Forward user headers if injected by injectUserFromToken
     if (req._gatewayUser) {
@@ -99,8 +108,34 @@ mainServer.use(cors({
     origin: corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id', 'X-Api-Version', 'X-CSRF-Token']
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'Accept',
+        'Origin',
+        'X-User-Id',
+        'X-Api-Version',
+        'X-CSRF-Token',
+        'Cache-Control',
+        'Pragma'
+    ]
 }));
+
+// Explicit preflight handler: mirror requested headers to avoid browser-specific CORS blocks.
+mainServer.options('*', (req, res) => {
+    const origin = req.headers.origin || '*';
+    const requested = req.headers['access-control-request-headers'];
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+    res.header(
+        'Access-Control-Allow-Headers',
+        requested || 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-User-Id, X-Api-Version, X-CSRF-Token, Cache-Control, Pragma'
+    );
+    return res.sendStatus(204);
+});
 
 // Auth login on Express so POST /api/auth/login always works (Next custom server can miss App Router POST → "Cannot POST /api/auth/login")
 const { gatewayLogin } = require('./lib/gateway-auth-login.cjs');

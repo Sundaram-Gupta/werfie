@@ -24,6 +24,9 @@ servers:
     description: Local development server
 
 tags:
+  - name: Verifications
+    description: |
+      Admin verification queue. Base URL already includes /api. Full paths: GET /admin/verifications, PATCH /admin/verifications/{id}. Requires admin Bearer token.
   - name: Authentication
     description: User registration, login, and session management
   - name: Users
@@ -664,3 +667,97 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Post'
+
+  /admin/verifications:
+    get:
+      tags:
+        - Verifications
+      operationId: openapiAdminListVerifications
+      summary: GET /api/admin/verifications (list verification requests)
+      description: |
+        Use **Authorize** (Bearer) with token from POST /api/admin/login or ADMIN user's POST /api/auth/login. Token only, no "Bearer " prefix in the dialog.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            example: BUSINESS
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            default: PENDING
+      responses:
+        '200':
+          description: List of verification requests
+        '401':
+          description: Unauthorized
+
+  /admin/verifications/{id}:
+    get:
+      tags:
+        - Verifications
+      operationId: openapiAdminGetVerificationById
+      summary: GET /api/admin/verifications/{id} (single request)
+      description: Requires admin Bearer token from Authorize, or accessToken cookie after POST /api/auth/login on this host as ADMIN.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    patch:
+      tags:
+        - Verifications
+      operationId: openapiAdminPatchVerification
+      summary: PATCH /api/admin/verifications/{id} (approve or reject)
+      description: Body JSON with status APPROVED or REJECTED. Optional badgeType for institutional flows.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [APPROVED, REJECTED, PENDING]
+                badgeType:
+                  type: string
+                  description: Optional; e.g. official (institutional approval)
+      responses:
+        '200':
+          description: Request updated
+        '400':
+          description: Bad request
+        '404':
+          description: Not found
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
