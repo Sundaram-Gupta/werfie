@@ -6,6 +6,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -1500,18 +1501,46 @@ app.get('/following', authenticateToken, async (req, res) => {
         res.setHeader('Expires', '0');
         res.setHeader('Surrogate-Control', 'no-store');
 
-        const currentUserId = req.user.userId;
+        const currentUserId = req.user?.userId || req.user?.id;
+        if (!currentUserId) {
+            return res.status(401).json({ error: 'Unauthorized', posts: [], nextCursor: null, hasMore: false });
+        }
         const { limit, offset, skip, cursor, excludeReplies, topLevelOnly, seed } = req.query;
 
         console.log(`[ContentService] Following Feed Params:`, { excludeReplies, query: req.query });
 
-        // Get list of users the current user is following
+        // Primary source: local follow table in this service DB.
         const following = await prisma.follow.findMany({
             where: { followerId: currentUserId },
             select: { followingId: true }
         });
 
-        const followingIds = following.map(f => f.followingId);
+        let followingIds = following.map(f => f.followingId).filter(Boolean);
+
+        // Fallback source: user-service (authoritative follow graph in some deployments).
+        if (followingIds.length === 0) {
+            try {
+                const gatewayBase = process.env.GATEWAY_URL || 'http://localhost:3001';
+                const authHeader = req.headers?.authorization || '';
+                const resp = await axios.get(
+                    `${gatewayBase.replace(/\/$/, '')}/api/users/${currentUserId}/following`,
+                    {
+                        headers: authHeader ? { Authorization: authHeader } : {},
+                        timeout: 4000
+                    }
+                );
+                const remote = Array.isArray(resp.data) ? resp.data : [];
+                followingIds = remote
+                    .map((u) => u?.id)
+                    .filter(Boolean);
+            } catch (fallbackErr) {
+                console.warn('[ContentService] Following fallback (user-service) failed:', fallbackErr?.message || fallbackErr);
+            }
+        }
+
+        if (followingIds.length === 0) {
+            return res.json({ posts: [], nextCursor: null, hasMore: false });
+        }
 
         const takeRaw = parseInt(limit, 10);
         const requestedLimit = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 20;
@@ -1555,7 +1584,10 @@ app.get('/following', authenticateToken, async (req, res) => {
         });
         
         // Step 3 - Take the top N IDs and fetch their full content
-        const targetIds = interleavedRaw.slice(0, requestedLimit).map(p => p.id);
+        const targetIds = interleavedRaw.slice(0, requestedLimit).map(p => p.id).filter(Boolean);
+        if (targetIds.length === 0) {
+            return res.json({ posts: [], nextCursor: null, hasMore: false });
+        }
         
         // hasMore is true if we have more interleaved posts left, OR if the rawBatch was full (suggesting more in DB)
         const hasMore = interleavedRaw.length > requestedLimit || rawBatch.length >= 1000;
