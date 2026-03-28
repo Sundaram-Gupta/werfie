@@ -2,9 +2,10 @@ import React from 'react';
 import { useAuditLogsQuery } from '@/hooks/useAdminQueries';
 import { getAuditLogs } from '@/services/crisis-admin.api';
 import { AdminDataTable } from '@/components/admin/AdminDataTable';
-import { AdminQueryState, AdminTableSkeleton } from '@/components/admin/AdminStates';
+import { AdminAuditLogRow } from '@/components/admin/AdminAuditLogRow';
+import { AdminTableSkeleton } from '@/components/admin/AdminStates';
 import { AdminResourcePage } from '@/components/admin/AdminResourcePage';
-import { AdminEntityHeader } from '@/components/admin/AdminEntityHeader';
+import { AdminPageSection } from '@/components/admin/AdminPageSection';
 import { usePaginatedPrefetch } from '@/hooks/usePaginatedPrefetch';
 import { useAdminPageController } from '@/hooks/useAdminPageController';
 
@@ -26,17 +27,10 @@ export default function AdminLogs() {
 
     return (
         <AdminResourcePage className="space-y-0">
-            <div className="pb-4">
-                <AdminEntityHeader
-                    title="Audit Logs"
-                    subtitle="Trace privileged actions and operational history."
-                />
-            </div>
-            <AdminQueryState
-                isLoading={state.queryState.isLoading}
-                isError={state.queryState.isError}
-                error={state.queryState.error}
-                isEmpty={state.queryState.isEmpty}
+            <AdminPageSection
+                title="Audit Logs"
+                subtitle="Trace privileged actions and operational history."
+                queryState={state.queryState}
                 skeleton={<AdminTableSkeleton rows={8} cols={4} />}
                 emptyTitle="No audit logs found"
                 emptySubtitle="No audit records available for this page."
@@ -51,16 +45,9 @@ export default function AdminLogs() {
                     pages={state.tablePagination.pages}
                     isFetching={state.tablePagination.isFetching}
                     onPageChange={state.tablePagination.onPageChange}
-                    renderRow={(l) => (
-                        <tr key={l.id} className="border-t border-white/10">
-                            <td className="px-3 py-2">{l.userId}</td>
-                            <td className="px-3 py-2">{l.action}</td>
-                            <td className="px-3 py-2">{l.entityType}:{l.entityId}</td>
-                            <td className="px-3 py-2">{new Date(l.timestamp).toLocaleString()}</td>
-                        </tr>
-                    )}
+                    renderRow={(l) => <AdminAuditLogRow entry={l} />}
                 />
-            </AdminQueryState>
+            </AdminPageSection>
         </AdminResourcePage>
     );
 }

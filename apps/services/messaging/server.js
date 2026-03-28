@@ -171,12 +171,15 @@ expressApp.post('/api/messages/upload', upload.any(), async (req, res) => {
                  const videoContent = fs.readFileSync(result.video.path);
                  const videoUrl = await uploadToR2(videoContent, result.video.mimeType, 'chat/videos');
                  
-                 const thumbContent = fs.readFileSync(result.thumbnail.path);
-                 const thumbUrl = await uploadToR2(thumbContent, result.thumbnail.mimeType, 'chat/thumbnails');
+                 let thumbnailUrl = null;
+                 if (result.thumbnail && fs.existsSync(result.thumbnail.path)) {
+                     const thumbContent = fs.readFileSync(result.thumbnail.path);
+                     thumbnailUrl = await uploadToR2(thumbContent, result.thumbnail.mimeType, 'chat/thumbnails');
+                 }
                  
                  return res.status(200).json({
                      status: true, message: 'Media uploaded successfully',
-                     data: { url: videoUrl, thumbnailUrl: thumbUrl, duration: result.duration, mimeType: result.video.mimeType }
+                     data: { url: videoUrl, thumbnailUrl: thumbnailUrl, duration: result.duration, mimeType: result.video.mimeType }
                  });
              } finally {
                  try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch(e){}

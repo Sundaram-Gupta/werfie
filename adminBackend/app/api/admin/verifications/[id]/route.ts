@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             LEFT JOIN "BusinessProfile" bp ON vr."businessId" IS NOT NULL AND CAST(vr."businessId" AS TEXT) = CAST(bp.id AS TEXT)
             WHERE CAST(vr.id AS TEXT) = '${id}'
             LIMIT 1`
-        );
+        ) as any[];
         if (!rows.length) {
             return apiError('Verification request not found', 404);
         }

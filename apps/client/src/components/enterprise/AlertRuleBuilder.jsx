@@ -79,6 +79,19 @@ export default function AlertRuleBuilder() {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to remove this alert rule?")) return;
+        try {
+            const { deleteAlertRule } = await import('../../services/enterprise.api');
+            await deleteAlertRule(id);
+            toast.success("Alert Rule Removed");
+            fetchRules();
+        } catch (error) {
+            toast.error("Failed to remove rule");
+            console.error(error);
+        }
+    };
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Rule Builder Form */}
@@ -164,7 +177,6 @@ export default function AlertRuleBuilder() {
                             >
                                 <option value="web">In-App Dashboard Only</option>
                                 <option value="email">Email Real-time</option>
-                                <option value="webhook">External Webhook</option>
                             </select>
                         </div>
 
@@ -209,7 +221,12 @@ export default function AlertRuleBuilder() {
                                             {rule.regions && rule.regions.length > 0 && <span>Regions: {rule.regions.join(', ')}</span>}
                                         </div>
                                     </div>
-                                    <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 border-destructive/20">
+                                    <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="text-destructive hover:bg-destructive/10 border-destructive/20"
+                                        onClick={() => handleDelete(rule.id)}
+                                    >
                                         Remove
                                     </Button>
                                 </div>

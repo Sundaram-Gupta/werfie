@@ -51,9 +51,9 @@ proxy.on('error', (err, req, res) => {
     console.error(`[Gateway] Proxy Error [${req.url}]:`, err.message);
     if (res && res.writeHead && !res.headersSent) {
         const isConnRefused = err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
-        const status = isConnRefused ? 503 : 502;
+        const status = 200; // Force 200 per user request
         const hint = isConnRefused && req.url?.includes('creator-studio')
-            ? ' Run: pm2 start ecosystem.config.js --only analytics-service'
+            ? ' (Service may be down)'
             : '';
         res.writeHead(status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -136,6 +136,8 @@ mainServer.options('*', (req, res) => {
     );
     return res.sendStatus(204);
 });
+
+
 
 // Auth login on Express so POST /api/auth/login always works (Next custom server can miss App Router POST → "Cannot POST /api/auth/login")
 const { gatewayLogin } = require('./lib/gateway-auth-login.cjs');
@@ -347,7 +349,7 @@ mainServer.all('/api/articles*', (req, res) => {
 
 mainServer.all('/api/enterprise*', (req, res) => {
     injectUserFromToken(req);
-    proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
+    proxy.web(req, res, { target: USER_SERVICE_TARGET });
 });
 mainServer.all('/api/media*', (req, res) => {
     injectUserFromToken(req);
@@ -463,6 +465,23 @@ mainServer.all('*', (req, res) => {
     handle(req, res, parsedUrl);
 });
 
+// Final catch-all Error Handler to ensure "All API responses are 200" for testing
+mainServer.use((err, req, res, next) => {
+    console.error(`[Gateway] Unhandled Error [${req.method} ${req.url}]:`, err.message);
+    const status = 200; // Force 200 per user request
+    const message = err instanceof SyntaxError ? "JSON Syntax Error: " + err.message : (err.message || "Internal Server Error");
+    
+    return res.status(status).json({
+        status: false,
+        message,
+        data: {
+            error: err.name || "Error",
+            details: err.stack?.split('\n').slice(0, 3).join('\n'), // small snippet for debugging
+            path: req.url
+        }
+    });
+});
+
 // 6. WebSocket Upgrade Handling
 httpServer.on('upgrade', (req, socket, head) => {
     try {
@@ -492,6 +511,9 @@ httpServer.on('upgrade', (req, socket, head) => {
         } else if (pathname.startsWith('/ws/world-leaders')) {
             console.log('[Gateway] Proxying World Leaders WebSocket to Content Service');
             proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3003' });
+        } else if (pathname.startsWith('/ws/enterprise-signals')) {
+            console.log('[Gateway] Proxying Enterprise Signals WebSocket to User Service');
+            proxy.ws(req, socket, head, { target: 'ws://127.0.0.1:3002' });
         } else {
             console.warn(`[Gateway] No upgrade handler for ${pathname}`);
             socket.destroy();

@@ -31,10 +31,16 @@ model User {
   posts         Post[]
   likes         Like[]
   retweets      Retweet[]
+  bookmarks     Bookmark[]
   followers     Follow[]     @relation("UserFollowers")
   following     Follow[]     @relation("UserFollowing")
   notifications Notification[] @relation("NotificationRecipient")
   triggeredNotifications Notification[] @relation("NotificationActor")
+  businessReviews        BusinessReview[]
+  
+  // Highlights & Articles
+  highlights    Highlight[]
+  articles      Article[]
   
   // Relations from Business & Ads
   businessProfile BusinessProfile?
@@ -53,15 +59,139 @@ model User {
   followedLists   ListFollower[]
   
   // Relations from Messaging
-  conversations Participant[]
-  messagesSent  Message[]
+  conversations    Participant[]
+  sentMessages     Message[]
+  messageReactions MessageReaction[]
+  hiddenMessages   HiddenMessage[]
+  conversationSettings ConversationUserSetting[]
   
   // Relations from Communities & Spaces
   communityMemberships  CommunityMember[]
   moderatedCommunities  CommunityModerator[]
   hostedSpaces          Space[]
   verificationRequests  VerificationRequest[]
-  institutionalProfile  InstitutionalProfile?
+  
+  // Relations from Institutional
+  institutionalProfile InstitutionalProfile?
+
+  // Relations from Enterprise
+  enterpriseUser      EnterpriseUser?
+  enterpriseAlertRules EnterpriseAlertRule[]
+}
+
+model InstitutionalProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  
+  // 1. Basic Institution Information
+  institutionName String
+  institutionType String   // e.g., "government", "ministry", "central_bank", etc.
+  country         String?
+  state           String?
+  website         String?
+  officialEmailDomain String?
+  description     String?  @db.Text
+  logoUrl         String?
+  bannerUrl       String?
+  
+  // 2. Authorized Representative Details
+  repFullName     String?
+  repJobTitle     String?
+  repDepartment   String?
+  repOfficialEmail String?
+  repPhone        String?
+  repIdUrl        String?  // URL to government/work ID
+  repLinkedInUrl  String?
+  repAuthLetterUrl String? // URL to authorization letter
+  
+  // 3. Account Credentials & Access Control
+  twoFactorEnabled Boolean @default(false)
+  primaryRole      String  @default("publisher") // publisher, editor, viewer, admin
+  recoveryEmail    String?
+  recoveryPhone    String?
+
+  // 4. Verification & Trust Information
+  isVerified      Boolean  @default(false)
+  isDomainVerified Boolean @default(false)
+  supportingDocs  Json?    // Array of URLs or metadata
+  transparencyAccepted Boolean @default(false)
+  termsAccepted      Boolean @default(false)
+  
+  // 4. Public Profile Settings
+  publicDisplayName String?
+  publicBio         String?  @db.Text
+  headquarters      String?
+  categories        Json?    // Array of categories: ["Economy", "Health", etc.]
+  languages         Json?    // Array of languages
+  
+  // 5. Admin Review Fields
+  status          String   @default("pending") // pending, under_review, approved, rejected
+  adminNotes      String?  @db.Text
+  badgeType       String?  // official, sovereign, emergency
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  worldLeaders    WorldLeader[]
+  announcements   Announcement[]
+}
+
+model WorldLeader {
+  id              String   @id @default(uuid())
+  institutionId   String
+  leaderName      String
+  title           String
+  profileImage    String?
+  region          String
+  country         String
+  priorityRank    Int      @default(0)
+  autoPushEnabled Boolean  @default(false)
+  verifiedStatus  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  institution     InstitutionalProfile @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+}
+
+model EnterpriseUser {
+  id                String   @id @default(uuid())
+  organizationName  String
+  userId            String   @unique
+  subscriptionTier  String   @default("standard") // standard, premium, elite
+  apiAccessEnabled  Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EnterpriseAlertRule {
+  id                String   @id @default(uuid())
+  userId            String
+  categories        Json?    // ["Markets", "Economy"]
+  regions           Json?    // ["North America", "Europe"]
+  severityThreshold Int      @default(0)
+  impactThreshold   Int      @default(50)
+  keywords          Json?    // ["inflation", "rates"]
+  deliveryMethod    String   @default("web") // web, email, webhook
+  
+  createdAt         DateTime @default(now())
+  
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs              EnterpriseAlertLog[]
+}
+
+model EnterpriseAlertLog {
+  id                String   @id @default(uuid())
+  ruleId            String
+  signalId          String
+  triggeredAt       DateTime @default(now())
+  deliveryStatus    String   @default("pending") // pending, sent, failed
+  
+  rule              EnterpriseAlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  signal            MarketSignal        @relation(fields: [signalId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
@@ -103,6 +233,7 @@ model Post {
   userId      String
   content     String
   mediaUrls   String? // JSON array of media URLs (Legacy/User Service compatibility)
+  scheduledAt DateTime? // When set, post is hidden until this time
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -115,12 +246,21 @@ model Post {
 
   likes       Like[]
   retweets    Retweet[]
+  bookmarks   Bookmark[]
   notifications Notification[]
   communityPosts CommunityPost[]
+  highlightedIn Highlight[]
   
-  @@index([userId])
+  isPinned       Boolean         @default(false)
+  productId      String?
+  product        Product?        @relation(fields: [productId], references: [id])
+  ctaLink        String?
+  ctaLabel       String?
+
+  @@index([userId, createdAt(sort: Desc)])
   @@index([replyToId])
   @@index([createdAt])
+  @@index([scheduledAt])
 }
 
 model PostMedia {
@@ -168,6 +308,20 @@ model Retweet {
   @@index([userId])
 }
 
+model Bookmark {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String   // recipient
@@ -192,8 +346,8 @@ model Follow {
   followingId String
   createdAt   DateTime @default(now())
   
-  follower  User @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
   @@unique([followerId, followingId])
 }
 
@@ -222,6 +376,25 @@ model Conversation {
   
   participants Participant[]
   messages     Message[] @relation("ConversationMessages")
+  settings     ConversationUserSetting[]
+}
+
+model ConversationUserSetting {
+  id                String       @id @default(uuid())
+  conversationId    String
+  userId            String
+  disappearingMode  String       @default("off") // off, 1h, 24h, 7d
+  blockScreenshots  Boolean      @default(false)
+  blockMessages     Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([conversationId])
+  @@index([userId])
 }
 
 model Participant {
@@ -256,9 +429,47 @@ model Message {
   isLastMessageFor Conversation? @relation("LastMessage")
   sender         User         @relation(fields: [senderId], references: [id])
   
+  // New fields for Reply, Forward, and Edit
+  replyToId      String?
+  isForwarded    Boolean      @default(false)
+  forwardedFromId String?
+  isEdited       Boolean      @default(false)
+  editedAt       DateTime?
+  
+  replyTo        Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies        Message[]    @relation("MessageReplies")
+  
+  reactions      MessageReaction[]
+  hiddenBy       HiddenMessage[]
+  
   @@index([conversationId])
   @@index([createdAt])
   @@index([senderId])
+}
+
+model HiddenMessage {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
 }
 
 // Communities & Spaces Models
@@ -269,6 +480,7 @@ model Community {
   avatar        String?
   banner        String?
   membersCount  String   // Stored as string like "125K"
+  rules         Json?    // Array of rule strings
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -351,8 +563,8 @@ model BusinessProfile {
   industry        String?
   location        String?
   website         String?
-  onboardingCompleted Boolean @default(false)
-
+  onboardingCompleted Boolean  @default(false)
+  
   // Verification & Status
   isVerified      Boolean  @default(false)
   verificationDoc String?  // URL to doc
@@ -365,9 +577,55 @@ model BusinessProfile {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   adAccounts      AdAccount[]
   members         BusinessMember[]
+  products        Product[]
+  reviews         BusinessReview[]
+  ctas            BusinessCTA[]
+}
+
+model Product {
+  id          String          @id @default(uuid())
+  businessId  String
+  name        String
+  description String?
+  price       Float?
+  currency    String          @default("USD")
+  imageUrl    String?
+  ctaUrl      String?
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  posts       Post[]
+
+  @@index([businessId])
+}
+
+model BusinessReview {
+  id          String          @id @default(uuid())
+  businessId  String
+  userId      String
+  rating      Int
+  comment     String?
+  createdAt   DateTime        @default(now())
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+model BusinessCTA {
+  id          String          @id @default(uuid())
+  businessId  String
+  type        String          // e.g., "shop", "book", "contact", "subscribe"
+  label       String
+  url         String
+  createdAt   DateTime        @default(now())
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
 }
 
 model BusinessMember {
@@ -391,6 +649,8 @@ model AdAccount {
   status          String   @default("active") // active, suspended
   currency        String   @default("USD")
   balance         Float    @default(0.0)
+  paymentMethod   String?  // card, upi
+  paymentDetails  String?  // JSON
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -429,17 +689,18 @@ model Campaign { // Renamed from AdCampaign for clarity
 
 model Ad {
   id              String   @id @default(uuid())
-  campaignId      String
-  name            String
-  status          String   @default("active") // active, paused, rejected
+  campaignId      String   @map("campaign_id")
+  name            String   @map("ad_name")
+  status          String   @default("active")  // active, paused
   
   // Creative
-  headline        String
-  bodyText        String?
-  primaryMediaUrl String   // Image or Video
-  mediaType       String   // "image" | "video"
-  linkUrl         String?
-  ctaType         String   @default("LEARN_MORE")
+  adType          String   @map("ad_type")      // image, video, text
+  primaryText     String   @map("primary_text")
+  headline        String?  @map("headline")
+  mediaUrl        String?  @map("media_url")
+  thumbnailUrl    String?  @map("thumbnail_url")
+  ctaType         String?  @map("cta_type")      // LEARN_MORE, INSTALL, SIGN_UP, etc.
+  destinationUrl  String?  @map("destination_url")
   
   // Metrics
   impressions     Int      @default(0)
@@ -531,7 +792,9 @@ model List {
   name            String
   description     String?
   isPrivate       Boolean  @default(false)
-  banner          String?  // Optional banner image
+  banner          String?  // Optional banner/cover image
+  avatar          String?  // Optional list profile/thumbnail image
+  isPinned        Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -561,10 +824,12 @@ model ListFollower {
   listId          String
   userId          String
   followedAt      DateTime @default(now())
-  
+  /// Pinned for this follower only (List.isPinned is owner-global)
+  isPinned        Boolean  @default(false)
+
   list            List     @relation(fields: [listId], references: [id], onDelete: Cascade)
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@unique([listId, userId])
   @@index([listId])
   @@index([userId])
@@ -606,7 +871,7 @@ model VerificationRequest {
   userId     String
   businessId String?
   type       String   @default("INDIVIDUAL") // INDIVIDUAL, BUSINESS, INSTITUTION
-  status     String   @default("PENDING")
+  status     String   @default("PENDING")    // PENDING, APPROVED, REJECTED
   notes      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -614,56 +879,6 @@ model VerificationRequest {
 
   @@index([status])
 }
-
-model InstitutionalProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  
-  institutionName String
-  institutionType String
-  country         String?
-  state           String?
-  website         String?
-  officialEmailDomain String?
-  description     String?
-  logoUrl         String?
-  bannerUrl       String?
-  
-  repFullName     String?
-  repJobTitle     String?
-  repDepartment   String?
-  repOfficialEmail String?
-  repPhone        String?
-  repIdUrl        String?
-  repLinkedInUrl  String?
-  repAuthLetterUrl String?
-  
-  // Missing fields from user-service
-  twoFactorEnabled     Boolean       @default(false)
-  primaryRole          String        @default("publisher")
-  recoveryEmail        String?
-  recoveryPhone        String?
-  isVerified           Boolean       @default(false)
-  isDomainVerified     Boolean       @default(false)
-  supportingDocs       Json?
-  transparencyAccepted Boolean       @default(false)
-  termsAccepted        Boolean       @default(false)
-  publicDisplayName    String?
-  publicBio            String?
-  headquarters         String?
-  categories           Json?
-  languages            Json?
-
-  status          String   @default("pending") // pending, under_review, approved, rejected
-  adminNotes      String?
-  badgeType       String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 
 model ApiKey {
   id          String    @id @default(uuid())
@@ -711,4 +926,339 @@ model PushTemplate {
   category  String   @default("system")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Announcement {
+  id                    String    @id @default(uuid())
+  institutionId         String    // Link to InstitutionalProfile in User Service
+  title                 String
+  content               String    @db.Text
+  category              String    // Markets, Health, Conflict, Policy, etc.
+  severityLevel         Int       @default(1) // 1 to 5
+  regions               Json      // Array of strings: ["Global", "Country", etc.]
+  attachments           Json      // Array of {url, type, name}
+  livestreamUrl         String?
+  effectiveDate         DateTime  @default(now())
+  expiryDate            DateTime?
+  lockDurationMinutes   Int       @default(0)
+  aiSummary             String?   @db.Text
+  immutableHash         String    @unique // SHA256 of title + content + institutionId
+  status                String    @default("draft") // draft, published, archived
+  
+  // World Leaders Module extensions
+  isWorldLeaderPost     Boolean   @default(false)
+  leaderId              String?   // ID reference to WorldLeader in User Service (No strict FK cross-service)
+  leaderPriorityScore   Int       @default(0)
+  isLive                Boolean   @default(false)
+  transcriptUrl         String?
+  speechVideoUrl        String?
+  importanceScore       Float?    // Future AI scoring
+ 
+  institution           InstitutionalProfile @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  createdBy             String    // User ID
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  revisions             AnnouncementRevision[]
+  translations          AnnouncementTranslation[]
+  marketSignals         MarketSignal[]
+  comments              StructuredComment[]
+  crisisId              String?
+  crisis                CrisisEvent? @relation(fields: [crisisId], references: [id], onDelete: SetNull)
+}
+
+model MarketSignal {
+  id              String   @id @default(uuid())
+  announcementId  String
+  institutionId   String
+  category        String
+  region          String
+  sector          String?
+  severity        Int
+  impactScore     Int
+  volatilityIndex Float?
+  confidenceScore Int
+  detectedKeywords Json?
+  createdAt       DateTime @default(now())
+
+  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  alertLogs       EnterpriseAlertLog[]
+}
+
+model AnnouncementTranslation {
+  id              String   @id @default(uuid())
+  announcementId  String
+  languageCode    String   // 'en', 'es', 'fr', 'ar', 'hi', etc.
+  title           String
+  content         String   @db.Text
+  status          String   @default("pending") // pending, completed, failed
+  aiModelUsed     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, languageCode])
+}
+
+model AnnouncementRevision {
+  id              String   @id @default(uuid())
+  announcementId  String
+  version         Int
+  editedBy        String
+  changes         Json     // Object containing changed fields
+  timestamp       DateTime @default(now())
+
+  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Structured Comments & Moderation Queue (Enterprise / Locked Discussion)
+// -----------------------------------------------------------------------------
+
+model StructuredComment {
+  id                String   @id @default(uuid())
+  announcementId    String
+  userId            String   // Validated against authenticated / verified User
+  parentCommentId   String?  // Nullable to allow up to depth 3 threading
+  content           String
+  factFlag          Boolean  @default(false)
+  credibilityScore  Int?
+  moderationStatus  String   @default("pending") // pending, approved, rejected
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  announcement      Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  parent            StructuredComment? @relation("CommentToComment", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  replies           StructuredComment[] @relation("CommentToComment")
+  moderationQueue   CommentModerationQueue[]
+  reports           CommentReport[]
+}
+
+model CommentModerationQueue {
+  id            String   @id @default(uuid())
+  commentId     String
+  reviewerId    String?  // Admin/Mod ID
+  reviewStatus  String   @default("pending") // pending, approved, rejected
+  notes         String?
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  comment       StructuredComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+}
+
+model CommentReport {
+  id          String   @id @default(uuid())
+  commentId   String
+  reporterId  String   // User ID
+  reason      String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+
+  comment     StructuredComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Crisis Command & Real-time Monitoring
+// -----------------------------------------------------------------------------
+
+model CrisisEvent {
+  id                    String         @id @default(uuid())
+  title                 String
+  description           String         @db.Text
+  region                String
+  country               String
+  latitude              Float
+  longitude             Float
+  severity              Int            @default(1) // 1-5
+  status                String         @default("active") // active, monitoring, resolved
+  linkedAnnouncementIds String[]       @default([])
+  startTime           DateTime       @default(now())
+  lastUpdateTime      DateTime       @default(now()) @updatedAt
+  createdBy             String
+  createdAt             DateTime       @default(now())
+  
+  updates               CrisisUpdate[]
+  streams               CrisisStream[]
+  announcements         Announcement[]
+}
+
+model CrisisUpdate {
+  id              String      @id @default(uuid())
+  crisisId        String
+  announcementId  String?
+  updateText      String      @db.Text
+  timestamp       DateTime    @default(now())
+  createdBy       String
+  
+  crisis          CrisisEvent @relation(fields: [crisisId], references: [id], onDelete: Cascade)
+}
+
+model CrisisStream {
+  id        String      @id @default(uuid())
+  crisisId  String
+  streamUrl String
+  platform  String
+  isLive    Boolean     @default(true)
+  startedAt DateTime    @default(now())
+  crisis    CrisisEvent @relation(fields: [crisisId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Soapbox Mode (Structured Timed Statements System)
+// -----------------------------------------------------------------------------
+
+model SoapboxSession {
+  id                String            @id @default(uuid())
+  institutionId     String
+  leaderId          String?
+  title             String
+  description       String            @db.Text
+  startTime         DateTime
+  durationMinutes   Int
+  countdownEndTime  DateTime?
+  status            String            @default("scheduled") // scheduled, live, completed, archived
+  transcriptText    String?           @db.Text
+  aiSummary         String?           @db.Text
+  videoUrl          String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  statements        SoapboxStatement[]
+  rebuttals         SoapboxRebuttal[]
+}
+
+model SoapboxStatement {
+  id            String         @id @default(uuid())
+  sessionId     String
+  speakerId     String
+  content       String         @db.Text
+  timestamp     DateTime       @default(now())
+  sequenceOrder Int
+
+  session       SoapboxSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model SoapboxRebuttal {
+  id                String         @id @default(uuid())
+  sessionId         String
+  institutionId     String
+  userId            String
+  rebuttalText      String         @db.Text
+  moderationStatus  String         @default("pending") // pending, approved, rejected
+  submittedAt       DateTime       @default(now())
+
+  session           SoapboxSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Global Debate Framework System
+// -----------------------------------------------------------------------------
+
+model DebateSession {
+  id                    String    @id @default(uuid())
+  title                 String
+  topic                 String
+  participantAId        String    // Link to InstitutionalProfile or User
+  participantBId        String    // Link to InstitutionalProfile or User
+  moderatorId           String?   // Optional moderator
+  startTime             DateTime?
+  endTime               DateTime?
+  roundDurationMinutes  Int       @default(5)
+  totalRounds           Int       @default(3)
+  status                String    @default("scheduled") // scheduled, live, completed, archived
+  transcriptText        String?   @db.Text
+  aiSummary             String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  rounds                DebateRound[]
+  votes                 DebateVote[]
+}
+
+model DebateRound {
+  id              String         @id @default(uuid())
+  sessionId       String
+  roundNumber     Int
+  speakerId       String
+  startTime       DateTime?
+  endTime         DateTime?
+  status          String         @default("pending") // pending, active, completed
+
+  session         DebateSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  arguments       DebateArgument[]
+
+  @@unique([sessionId, roundNumber, speakerId])
+}
+
+model DebateArgument {
+  id              String         @id @default(uuid())
+  roundId         String
+  speakerId       String
+  argumentText    String         @db.Text
+  timestamp       DateTime       @default(now())
+  factCheckRefs   Json?          // Array of { title: string, url: string }
+  createdAt       DateTime       @default(now())
+
+  round           DebateRound    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  factChecks      DebateFactCheck[]
+}
+
+model DebateFactCheck {
+  id                  String         @id @default(uuid())
+  argumentId          String
+  referenceTitle      String
+  referenceUrl        String?
+  reviewerId          String?
+  verificationStatus  String         @default("pending") // pending, verified, disputed
+  notes               String?        @db.Text
+
+  argument            DebateArgument @relation(fields: [argumentId], references: [id], onDelete: Cascade)
+}
+
+model DebateVote {
+  id              String         @id @default(uuid())
+  sessionId       String
+  userId          String
+  voteChoice      String         // participant_a, participant_b, inconclusive
+  submittedAt     DateTime       @default(now())
+
+  session         DebateSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+}
+
+// -----------------------------------------------------------------------------
+// Highlights & Articles System
+// -----------------------------------------------------------------------------
+
+model Highlight {
+  id          String   @id @default(uuid())
+  userId      String
+  postId      String
+  createdAt   DateTime @default(now())
+  orderIndex  Int      @default(0)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId])
+}
+
+model Article {
+  id            String   @id @default(uuid())
+  userId        String
+  title         String
+  content       String   @db.Text
+  coverImage    String?
+  isPublished   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }

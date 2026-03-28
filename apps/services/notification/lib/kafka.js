@@ -3,7 +3,7 @@ import { Kafka, logLevel } from 'kafkajs'
 
 const kafka = new Kafka({
     clientId: process.env.SERVICE_NAME || 'timeline-service',
-    brokers: [process.env.KAFKA_BROKER || 'kafka:9092'],
+    brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
     logLevel: logLevel.ERROR,
     retry: {
         retries: 5,

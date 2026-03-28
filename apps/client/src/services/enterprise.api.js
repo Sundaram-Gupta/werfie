@@ -3,7 +3,7 @@ import api from '@/lib/api';
 export const getDashboardMetrics = async () => {
     try {
         const { data } = await api.get('/api/enterprise/metrics/overview');
-        return data;
+        return data?.data;
     } catch (error) {
         console.error("Error fetching enterprise metrics:", error);
         throw error;
@@ -13,7 +13,7 @@ export const getDashboardMetrics = async () => {
 export const getMarketSignals = async () => {
     try {
         const { data } = await api.get('/api/enterprise/signals');
-        return data?.signals || [];
+        return data?.data || [];
     } catch (error) {
         console.error("Error fetching market signals:", error);
         throw error;
@@ -33,9 +33,19 @@ export const createAlertRule = async (ruleData) => {
 export const getAlertRules = async () => {
     try {
         const { data } = await api.get('/api/enterprise/alerts/list');
-        return data?.rules || [];
+        return data?.data || [];
     } catch (error) {
         console.error("Error fetching alert rules:", error);
+        throw error;
+    }
+};
+
+export const deleteAlertRule = async (id) => {
+    try {
+        const { data } = await api.delete(`/api/enterprise/alerts/delete/${id}`);
+        return data;
+    } catch (error) {
+        console.error("Error deleting alert rule:", error);
         throw error;
     }
 };

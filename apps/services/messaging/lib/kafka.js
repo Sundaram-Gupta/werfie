@@ -2,6 +2,7 @@
 import { Kafka, logLevel } from 'kafkajs'
 
 const kafkaBroker = process.env.KAFKA_BROKER || 'localhost:9092'
+console.log(`[Kafka] Initializing with broker: ${kafkaBroker}`)
 const kafka = new Kafka({
     clientId: process.env.SERVICE_NAME || 'messaging-service',
     brokers: [kafkaBroker],

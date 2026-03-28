@@ -80,7 +80,7 @@ function App() {
       <SocketProvider>
         <BrowserRouter>
           <AuthModalProvider>
-            <Toaster position="bottom-center" richColors theme="dark" />
+            <Toaster position="top-right" richColors theme="dark" />
             <AuthModal />
             <Routes>
               {/* Protected Routes - Require Login */}

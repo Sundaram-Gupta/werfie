@@ -7,9 +7,9 @@ import {
 import { getAdminUsers } from '@/services/crisis-admin.api';
 import { AdminDataTable } from '@/components/admin/AdminDataTable';
 import { AdminUserRow } from '@/components/admin/AdminUserRow';
-import { AdminQueryState, AdminTableSkeleton } from '@/components/admin/AdminStates';
+import { AdminTableSkeleton } from '@/components/admin/AdminStates';
 import { AdminResourcePage } from '@/components/admin/AdminResourcePage';
-import { AdminEntityHeader } from '@/components/admin/AdminEntityHeader';
+import { AdminPageSection } from '@/components/admin/AdminPageSection';
 import { usePaginatedPrefetch } from '@/hooks/usePaginatedPrefetch';
 import { useAdminPageController } from '@/hooks/useAdminPageController';
 import { useRowAsyncAction } from '@/hooks/useRowAsyncAction';
@@ -37,17 +37,10 @@ export default function AdminUsers() {
 
     return (
         <AdminResourcePage className="space-y-0">
-            <div className="pb-4">
-                <AdminEntityHeader
-                    title="User Management"
-                    subtitle="Manage platform roles and account status."
-                />
-            </div>
-            <AdminQueryState
-                isLoading={state.queryState.isLoading}
-                isError={state.queryState.isError}
-                error={state.queryState.error}
-                isEmpty={state.queryState.isEmpty}
+            <AdminPageSection
+                title="User Management"
+                subtitle="Manage platform roles and account status."
+                queryState={state.queryState}
                 skeleton={<AdminTableSkeleton rows={6} cols={5} />}
                 emptyTitle="No users found"
                 emptySubtitle="No users available for this page/filter."
@@ -66,7 +59,6 @@ export default function AdminUsers() {
                         const actions = rowAction.bindEntity(u.id);
                         return (
                             <AdminUserRow
-                                key={u.id}
                                 user={u}
                                 roles={ROLES}
                                 roleLoading={actions.isActive('role')}
@@ -83,7 +75,7 @@ export default function AdminUsers() {
                         );
                     }}
                 />
-            </AdminQueryState>
+            </AdminPageSection>
         </AdminResourcePage>
     );
 }

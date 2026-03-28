@@ -1,17 +1,31 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Save, Building, MapPin, Globe, Mail, Clock, ShieldCheck, Upload } from "lucide-react"
+import { Save, Pencil, Building, MapPin, Globe, Mail, Clock, ShieldCheck, Upload } from "lucide-react"
 import { businessService, userService, mediaService } from "@/services/api"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
 import { useBusinessAccess } from "@/context/BusinessAccessContext"
 import { getMediaUrl, cn } from "@/lib/utils"
 
+/** Merge GET/POST business profile into form state without wiping fields the API omits (e.g. email/hours). */
+function mergeBusinessFormFromApi(apiData, prevForm, userEmailFallback = "") {
+    if (!apiData || typeof apiData !== "object") return prevForm
+    return {
+        companyName: apiData.companyName ?? prevForm.companyName ?? "",
+        industry: apiData.industry ?? prevForm.industry ?? "",
+        email: apiData.email ?? prevForm.email ?? userEmailFallback,
+        website: apiData.website ?? prevForm.website ?? "",
+        location: apiData.location ?? prevForm.location ?? "",
+        hours: apiData.hours ?? prevForm.hours ?? ""
+    }
+}
+
 export default function BusinessProfile() {
     const { user, updateUser } = useAuth()
     const { access } = useBusinessAccess()
     const readOnly = access?.role === "member"
+    const [isEditing, setIsEditing] = useState(false)
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
     const [formData, setFormData] = useState({
@@ -38,14 +52,9 @@ export default function BusinessProfile() {
             try {
                 const data = await businessService.getProfile()
                 if (data) {
-                    setFormData({
-                        companyName: data.companyName || "",
-                        industry: data.industry || "",
-                        email: data.email || "",
-                        website: data.website || "",
-                        location: data.location || "",
-                        hours: data.hours || ""
-                    })
+                    setFormData((prev) =>
+                        mergeBusinessFormFromApi(data, prev, user?.email || "")
+                    )
                     setVerificationStatus(data.status || "idle")
                     setIsVerified(data.isVerified || false)
                     setLogoUrl(data.logoUrl || access?.businessLogoUrl || access?.ownerAvatar || "")
@@ -59,7 +68,7 @@ export default function BusinessProfile() {
             }
         }
         fetchProfile()
-    }, [access?.businessLogoUrl, access?.businessBannerUrl, access?.ownerAvatar, access?.ownerBanner])
+    }, [access?.businessLogoUrl, access?.businessBannerUrl, access?.ownerAvatar, access?.ownerBanner, user?.email])
 
     useEffect(() => {
         if (!user) return
@@ -73,12 +82,30 @@ export default function BusinessProfile() {
         setBannerUrl((prev) => prev || user.profile?.banner || user.banner || "")
     }, [user, readOnly, access?.businessLogoUrl, access?.businessBannerUrl, access?.ownerAvatar, access?.ownerBanner])
 
+    const fieldsLocked = readOnly || !isEditing
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value })
     }
 
+    const handleCancelEdit = async () => {
+        setIsEditing(false)
+        try {
+            const data = await businessService.getProfile()
+            if (data) {
+                setFormData((prev) => mergeBusinessFormFromApi(data, prev, user?.email || ""))
+                setVerificationStatus(data.status || "idle")
+                setIsVerified(data.isVerified || false)
+                setLogoUrl(data.logoUrl || access?.businessLogoUrl || access?.ownerAvatar || "")
+                setBannerUrl(data.bannerUrl || access?.businessBannerUrl || access?.ownerBanner || "")
+            }
+        } catch (err) {
+            console.error("Failed to reload business profile:", err)
+        }
+    }
+
     const handleImageUpload = async (file, type) => {
-        if (readOnly) return
+        if (fieldsLocked) return
         if (!file) return
         if (!file.type?.startsWith("image/")) {
             toast.error("Please select an image file")
@@ -109,7 +136,7 @@ export default function BusinessProfile() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        if (readOnly) return
+        if (readOnly || !isEditing) return
         setLoading(true)
         try {
             // Only send fields that the backend actually supports.
@@ -120,7 +147,7 @@ export default function BusinessProfile() {
                 website: formData.website?.trim() || undefined
             }
 
-            await businessService.updateProfile(businessPayload)
+            const updated = await businessService.updateProfile(businessPayload)
 
             // Persist branding (logo/banner) to the user's public Profile.
             if (user?.id) {
@@ -131,25 +158,32 @@ export default function BusinessProfile() {
             }
 
             toast.success("Business profile saved successfully!")
+            setIsEditing(false)
 
-            // Refresh UI from backend so previews stay in sync.
+            // Apply saved row immediately so the UI reflects persisted fields without waiting on a second round-trip.
+            if (updated && typeof updated === "object") {
+                setFormData((prev) => mergeBusinessFormFromApi(updated, prev, user?.email || ""))
+                setVerificationStatus(updated.status || "idle")
+                setIsVerified(!!updated.isVerified)
+            }
+
+            // Refresh from backend and merge (keeps email/hours if still not stored server-side).
             try {
                 const refreshed = await businessService.getProfile()
                 if (refreshed) {
-                    setFormData({
-                        companyName: refreshed.companyName || "",
-                        industry: refreshed.industry || "",
-                        email: refreshed.email || "",
-                        website: refreshed.website || "",
-                        location: refreshed.location || "",
-                        hours: refreshed.hours || ""
-                    })
+                    setFormData((prev) => mergeBusinessFormFromApi(refreshed, prev, user?.email || ""))
                     setVerificationStatus(refreshed.status || "idle")
-                    setIsVerified(refreshed.isVerified || false)
+                    setIsVerified(!!refreshed.isVerified)
                 }
                 if (user?.id) {
                     const me = await userService.getMyProfile()
-                    if (me) updateUser(me)
+                    if (me) {
+                        updateUser(me)
+                        const av = me.profile?.avatar || me.avatar
+                        const bn = me.profile?.banner || me.banner
+                        if (av) setLogoUrl(av)
+                        if (bn) setBannerUrl(bn)
+                    }
                 }
                 // eslint-disable-next-line no-empty
             } catch (_) {}
@@ -196,13 +230,36 @@ export default function BusinessProfile() {
                             {readOnly ? "View-only — admins update this page." : "Manage your public business information"}
                         </p>
                     </div>
-                    <Button
-                        className="rounded-full bg-blue-500 text-white"
-                        disabled={readOnly || loading || uploadingLogo || uploadingBanner}
-                        type="submit"
-                    >
-                        {loading ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
-                    </Button>
+                    {!readOnly && (
+                        isEditing ? (
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full"
+                                    disabled={loading || uploadingLogo || uploadingBanner}
+                                    onClick={() => void handleCancelEdit()}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    className="rounded-full bg-blue-500 text-white"
+                                    disabled={loading || uploadingLogo || uploadingBanner}
+                                    type="submit"
+                                >
+                                    {loading ? "Saving..." : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button
+                                type="button"
+                                className="rounded-full bg-blue-500 text-white"
+                                onClick={() => setIsEditing(true)}
+                            >
+                                <Pencil className="w-4 h-4 mr-2" /> Edit Profile
+                            </Button>
+                        )
+                    )}
                 </div>
 
                 <div className="space-y-6">
@@ -247,25 +304,34 @@ export default function BusinessProfile() {
                     )}
                 </div>
 
-                {/* Main Form */}
-                <div className="bg-zinc-900/50 border border-border/50 rounded-xl p-6 space-y-4">
+                {/* Main Form — inputs use zinc-900 + autofill overrides in index.css (.dark) */}
+                <div className="bg-zinc-900/50 border border-border/50 rounded-xl p-6 space-y-4 business-profile-fields">
                     <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Building className="w-4 h-4 text-muted-foreground" /> Business Name
                         </label>
-                        <Input name="companyName" value={formData.companyName} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Acme Corp" />
+                        <Input name="companyName" value={formData.companyName} onChange={handleChange} disabled={fieldsLocked} className="bg-zinc-900 border-border text-zinc-100 placeholder:text-zinc-500" placeholder="Acme Corp" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Industry</label>
-                            <Input name="industry" value={formData.industry} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Technology" />
+                            <Input name="industry" value={formData.industry} onChange={handleChange} disabled={fieldsLocked} className="bg-zinc-900 border-border text-zinc-100 placeholder:text-zinc-500" placeholder="Technology" />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium flex items-center gap-2">
                                 <Mail className="w-4 h-4 text-muted-foreground" /> Public Email
                             </label>
-                            <Input name="email" value={formData.email} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="contact@acme.com" />
+                            <Input
+                                name="email"
+                                type="email"
+                                autoComplete="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                disabled={fieldsLocked}
+                                className="bg-zinc-900 border-border text-zinc-100 placeholder:text-zinc-500"
+                                placeholder="contact@acme.com"
+                            />
                         </div>
                     </div>
 
@@ -273,21 +339,21 @@ export default function BusinessProfile() {
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Globe className="w-4 h-4 text-muted-foreground" /> Website
                         </label>
-                        <Input name="website" value={formData.website} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="https://acme.com" />
+                        <Input name="website" value={formData.website} onChange={handleChange} disabled={fieldsLocked} className="bg-zinc-900 border-border text-zinc-100 placeholder:text-zinc-500" placeholder="https://acme.com" />
                     </div>
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-muted-foreground" /> Location
                         </label>
-                        <Input name="location" value={formData.location} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Silicon Valley, CA" />
+                        <Input name="location" value={formData.location} onChange={handleChange} disabled={fieldsLocked} className="bg-zinc-900 border-border text-zinc-100 placeholder:text-zinc-500" placeholder="Silicon Valley, CA" />
                     </div>
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Clock className="w-4 h-4 text-muted-foreground" /> Business Hours
                         </label>
-                        <Input name="hours" value={formData.hours} onChange={handleChange} disabled={readOnly} className="bg-zinc-900 border-border" placeholder="Mon-Fri: 9AM - 5PM" />
+                        <Input name="hours" value={formData.hours} onChange={handleChange} disabled={fieldsLocked} className="bg-zinc-900 border-border text-zinc-100 placeholder:text-zinc-500" placeholder="Mon-Fri: 9AM - 5PM" />
                     </div>
                 </div>
 
@@ -297,12 +363,12 @@ export default function BusinessProfile() {
                     <div className="flex gap-4">
                         <div
                             role="button"
-                            tabIndex={readOnly ? -1 : 0}
-                            onClick={() => !readOnly && logoInputRef.current?.click()}
-                            onKeyDown={(e) => e.key === "Enter" && !readOnly && logoInputRef.current?.click()}
+                            tabIndex={fieldsLocked ? -1 : 0}
+                            onClick={() => !fieldsLocked && logoInputRef.current?.click()}
+                            onKeyDown={(e) => e.key === "Enter" && !fieldsLocked && logoInputRef.current?.click()}
                             className={cn(
                                 "w-24 h-24 bg-zinc-800 rounded-full flex items-center justify-center border border-dashed border-muted-foreground/50 transition-colors overflow-hidden",
-                                readOnly ? "opacity-60 cursor-not-allowed" : "hover:border-primary cursor-pointer"
+                                fieldsLocked ? "opacity-60 cursor-not-allowed" : "hover:border-primary cursor-pointer"
                             )}
                         >
                             {logoUrl ? (
@@ -330,14 +396,14 @@ export default function BusinessProfile() {
                         <div
                             className={cn(
                                 "flex-1 h-24 bg-zinc-800 rounded-xl flex flex-col items-center justify-center border border-dashed border-muted-foreground/50 transition-colors",
-                                readOnly ? "opacity-60 cursor-not-allowed" : "hover:border-primary cursor-pointer"
+                                fieldsLocked ? "opacity-60 cursor-not-allowed" : "hover:border-primary cursor-pointer"
                             )}
                         >
                             <div
                                 role="button"
-                                tabIndex={readOnly ? -1 : 0}
-                                onClick={() => !readOnly && bannerInputRef.current?.click()}
-                                onKeyDown={(e) => e.key === "Enter" && !readOnly && bannerInputRef.current?.click()}
+                                tabIndex={fieldsLocked ? -1 : 0}
+                                onClick={() => !fieldsLocked && bannerInputRef.current?.click()}
+                                onKeyDown={(e) => e.key === "Enter" && !fieldsLocked && bannerInputRef.current?.click()}
                                 className="w-full h-full flex items-center justify-center"
                             >
                                 {bannerUrl ? (

@@ -12,6 +12,7 @@ const businessRoutes = require('./routes/businessRoutes');
 const institutionalRoutes = require('./routes/institutionalRoutes');
 const worldLeaderRoutes = require('./routes/worldLeaderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const enterpriseRoutes = require('./routes/enterpriseRoutes');
 
 app.use(cors({
     origin: true,
@@ -304,6 +305,10 @@ app.use('/api/business', businessRoutes);
 app.use('/business', businessRoutes);
 app.use('/api/leaders', worldLeaderRoutes);
 app.use('/leaders', worldLeaderRoutes);
+
+// 4. Enterprise Routes
+app.use('/api/enterprise', enterpriseRoutes);
+app.use('/enterprise', enterpriseRoutes);
 
 // Debug Middleware
 app.use((req, res, next) => {
@@ -889,9 +894,14 @@ async function ensureBusinessSchemaCompatibility() {
     `);
 }
 
+const http = require('http');
+const server = http.createServer(app);
+const { initWebSocketServer } = require('./websocket');
+
 ensureBusinessSchemaCompatibility()
     .then(() => {
-        app.listen(PORT, bindHost, () => {
+        initWebSocketServer(server);
+        server.listen(PORT, bindHost, () => {
             console.log(`User Service running on http://${bindHost}:${PORT} (LAN: use this machine's IP)`);
         });
     })

@@ -241,7 +241,7 @@ export default function BusinessDashboard() {
                 </h2>
                 <p className="text-[15px] text-muted-foreground max-w-xl leading-relaxed">
                     Complete a few steps so followers recognize your brand, unlock verification, and use ads and
-                    analytics—similar to how X guides professional accounts from one hub.
+                    analytics.
                 </p>
                 {handle ? (
                     <p className="text-[14px] text-muted-foreground mt-3">

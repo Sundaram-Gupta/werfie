@@ -73,6 +73,35 @@
     @apply bg-background text-foreground antialiased;
   }
 
+  /*
+   * Dark UI: prevent Chrome/Safari autofill from painting inputs bright grey/white
+   * (common on email fields). Keeps filled inputs visually consistent with the theme.
+   */
+  .dark input:-webkit-autofill,
+  .dark input:-webkit-autofill:hover,
+  .dark input:-webkit-autofill:focus,
+  .dark input:-webkit-autofill:active,
+  .dark textarea:-webkit-autofill,
+  .dark textarea:-webkit-autofill:hover,
+  .dark textarea:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px hsl(var(--input)) inset !important;
+    box-shadow: 0 0 0 1000px hsl(var(--input)) inset !important;
+    -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground));
+    transition: background-color 99999s ease-out 0s;
+  }
+
+  /* Business profile card: match autofill to same zinc-900 as manual inputs */
+  .dark .business-profile-fields input:-webkit-autofill,
+  .dark .business-profile-fields input:-webkit-autofill:hover,
+  .dark .business-profile-fields input:-webkit-autofill:focus,
+  .dark .business-profile-fields input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px rgb(24 24 27) inset !important;
+    box-shadow: 0 0 0 1000px rgb(24 24 27) inset !important;
+    -webkit-text-fill-color: rgb(244 244 245) !important;
+    caret-color: rgb(244 244 245);
+  }
+
   /* Utilities for strict X.com styling */
   .layout-grid {
     display: grid;

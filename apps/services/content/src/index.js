@@ -99,7 +99,8 @@ const MediaService = require('./services/media.service');
 app.use('/ads', adsRoutes);
 app.use('/announcements', announcementRoutes);
 app.use('/feed', worldLeaderFeedRoutes);
-app.use('/enterprise', enterpriseRoutes);
+// DEPRECATED: Enterprise moved to User Service
+// app.use('/enterprise', enterpriseRoutes);
 app.use('/comments', commentRoutes);
 app.use('/crisis', crisisRoutes);
 app.use('/soapbox', soapboxRoutes);

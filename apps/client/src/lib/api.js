@@ -36,6 +36,16 @@ export const getContentServiceUrl = () => {
   return import.meta.env.VITE_CONTENT_SERVICE_URL || 'http://localhost:3003'
 }
 
+export const getUserServiceUrl = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    if (host.startsWith('192.168.') || host.startsWith('10.') || (host.startsWith('172.') && /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host))) {
+      return `${window.location.protocol}//${host}:3002`
+    }
+  }
+  return import.meta.env.VITE_USER_SERVICE_URL || 'http://localhost:3002'
+}
+
 export const API_BASE_URL = getApiBase()
 
 // Create axios instance

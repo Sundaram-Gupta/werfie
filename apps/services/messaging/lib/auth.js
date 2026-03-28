@@ -46,24 +46,37 @@ export function withAuth(handler, options = {}) {
     return async (request, context) => {
         let user = null
 
-        const gatewayVerified = request.headers.get('x-verified-gateway')
-        const gatewayUserId = request.headers.get('x-user-id')
+        const getHeader = (name) => {
+            if (typeof request.headers.get === 'function') return request.headers.get(name);
+            return request.headers[name] || request.headers[name.toLowerCase()];
+        };
+
+        const gatewayVerified = getHeader('x-verified-gateway');
+        const gatewayUserId = getHeader('x-user-id');
         if (gatewayVerified === 'true' && gatewayUserId) {
-            user = { userId: gatewayUserId, email: request.headers.get('x-user-email') || '' }
+            user = { userId: gatewayUserId, email: getHeader('x-user-email') || '' };
         } else {
-            const authHeader = request.headers.get('authorization')
+            const authHeader = getHeader('authorization');
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
                 if (options.gracefulGet && request.method === 'GET' && request.url?.includes('/conversations')) {
-                    return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 })
+                    if (typeof Response !== 'undefined') {
+                        return Response.json({ status: true, message: 'OK', data: [] }, { status: 200 });
+                    }
                 }
-                return new Response(JSON.stringify({ status: false, message: 'Unauthorized', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+                const errorBody = JSON.stringify({ status: false, message: 'Unauthorized', data: null });
+                if (typeof Response !== 'undefined') {
+                    return new Response(errorBody, { status: 401, headers: { 'Content-Type': 'application/json' } });
+                }
+                return { status: 401, error: 'Unauthorized' };
             }
             try {
-                user = await verifyJWT(authHeader.split(' ')[1])
+                user = await verifyJWT(authHeader.split(' ')[1]);
             } catch (error) {
-                // If a token was provided but is invalid/expired, DO NOT mask it as "200 []".
-                // Returning 401 makes Swagger/debugging accurate; the UI can handle 401 by re-login/refresh.
-                return new Response(JSON.stringify({ status: false, message: 'Invalid token', data: null }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+                const errorBody = JSON.stringify({ status: false, message: 'Invalid token', data: null });
+                if (typeof Response !== 'undefined') {
+                    return new Response(errorBody, { status: 401, headers: { 'Content-Type': 'application/json' } });
+                }
+                return { status: 401, error: 'Invalid token' };
             }
         }
 
@@ -75,13 +88,18 @@ export function withAuth(handler, options = {}) {
 export async function getUserFromRequest(request) {
     const ctx = authContext.getStore()
     if (ctx) return ctx
-    const headerUserId = request.headers.get('x-user-id')
-    if (headerUserId) return { userId: headerUserId, email: request.headers.get('x-user-email') || '' }
-    const authHeader = request.headers.get('authorization')
+    const getHeader = (name) => {
+        if (typeof request.headers.get === 'function') return request.headers.get(name);
+        return request.headers[name] || request.headers[name.toLowerCase()];
+    };
+
+    const headerUserId = getHeader('x-user-id');
+    if (headerUserId) return { userId: headerUserId, email: getHeader('x-user-email') || '' };
+    const authHeader = getHeader('authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
         try {
-            return await verifyJWT(authHeader.split(' ')[1])
-        } catch { return { userId: null } }
+            return await verifyJWT(authHeader.split(' ')[1]);
+        } catch { return { userId: null }; }
     }
-    return { userId: null }
+    return { userId: null };
 }

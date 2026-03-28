@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage, getAvatarColor } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { BadgeCheck, Mail, Search, Settings, MessageSquarePlus, Smile, Send, MoreVertical, X, Users2, Plus, Check, ArrowLeft, ArrowRight, Link2, Phone, Video, User, Clock, CameraOff, Ban, MessageCircle, Forward, Copy, Info, Trash2, MoreHorizontal } from "lucide-react"
+import { BadgeCheck, Mail, Search, Settings, MessageSquarePlus, Smile, Send, MoreVertical, X, Users2, Plus, Check, ArrowLeft, ArrowRight, Link2, Phone, Video, Image, Mic, User, Clock, CameraOff, Ban, MessageCircle, Forward, Copy, Info, Trash2, MoreHorizontal } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import { useState, useRef, useEffect } from "react"
@@ -229,13 +229,14 @@ export default function Chat() {
                 
                 const lastMsg = c.lastMessage || {}
                 const sharedPost = parseSharedPostContent(lastMsg.content)
-                const raw = sharedPost ? "Shared a post" : (lastMsg.content || (lastMsg.mediaUrl ? "Sent an attachment" : ""))
+                const raw = sharedPost ? "Shared a post" : (lastMsg.content || "")
                 const lastMessageFromMe = lastMsg.senderId === currentUserId
 
                 return {
                     id: c.id,
                     user: otherUser,
                     lastMessage: raw,
+                    lastMessageType: lastMsg.type || 'text',
                     lastMessageFromMe,
                     timestamp: formatRelativeTime(c.lastMessageAt || c.updatedAt),
                     unread: false // logic for unread count pending
@@ -326,7 +327,8 @@ export default function Chat() {
 
                 updatedConversations[existingIndex] = {
                     ...conversation,
-                    lastMessage: previewText,
+                    lastMessage: message.content || "",
+                    lastMessageType: message.type || 'text',
                     lastMessageFromMe: message.senderId === currentUser?.id,
                     timestamp: formatRelativeTime(message.createdAt),
                     unread: selectedChat?.id !== message.conversationId
@@ -369,7 +371,8 @@ export default function Chat() {
             const chatObj = {
                 id: newConv.id,
                 user: userData,
-                lastMessage: lastMsg.content || (lastMsg.mediaUrl ? "Sent an attachment" : "New Message"),
+                lastMessage: lastMsg.content || "",
+                lastMessageType: lastMsg.type || 'text',
                 lastMessageFromMe: lastMsg.senderId === currentUser?.id,
                 timestamp: formatRelativeTime(newConv.lastMessageAt || newConv.updatedAt),
                 unread: true
@@ -777,9 +780,20 @@ export default function Chat() {
                                             </div>
                                             <span className="text-muted-foreground text-[14px] shrink-0">{chat.timestamp}</span>
                                         </div>
-                                        <p className={cn("text-[15px] truncate mt-0.5", chat.unread ? "text-white font-medium" : "text-muted-foreground")}>
-                                            {chat.lastMessage ? (chat.lastMessageFromMe ? `You: ${chat.lastMessage}` : chat.lastMessage) : t('chat.start_conversation')}
-                                        </p>
+                                        <div className={cn("text-[15px] truncate mt-0.5 flex items-center gap-1", chat.unread ? "text-white font-medium" : "text-muted-foreground")}>
+                                            {chat.lastMessageFromMe && <span>You: </span>}
+                                            {chat.lastMessageType === 'image' && <Image className="w-4 h-4 shrink-0" />}
+                                            {chat.lastMessageType === 'video' && <Video className="w-4 h-4 shrink-0" />}
+                                            {chat.lastMessageType === 'audio' && <Mic className="w-4 h-4 shrink-0" />}
+                                            <span className="truncate">
+                                                {chat.lastMessage || (
+                                                    chat.lastMessageType === 'image' ? 'Photo' :
+                                                    chat.lastMessageType === 'video' ? 'Video' :
+                                                    chat.lastMessageType === 'audio' ? 'Audio clip' :
+                                                    t('chat.start_conversation')
+                                                )}
+                                            </span>
+                                        </div>
                                     </div>
                                 </button>
                             ))
@@ -867,8 +881,8 @@ export default function Chat() {
                                                                     poster={getMediaUrl(msg.thumbnailUrl)}
                                                                     className="rounded-2xl max-h-[300px] w-full object-cover bg-black"
                                                                 />
-                                                                {msg.duration && (
-                                                                    <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[11px] font-bold px-1.5 rounded">
+                                                                {msg.duration > 0 && (
+                                                                    <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-medium backdrop-blur-sm">
                                                                         {new Date(msg.duration * 1000).toISOString().substr(14, 5)}
                                                                     </span>
                                                                 )}

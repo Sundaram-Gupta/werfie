@@ -707,11 +707,14 @@ export const businessService = {
     },
     getProfile: async () => {
         const { data } = await api.get('/api/business')
-        return data
+        // Gateway or legacy handlers may wrap as { data: profile }
+        const payload = data?.data ?? data
+        return payload
     },
     updateProfile: async (profileData) => {
         const { data } = await api.post('/api/business', profileData)
-        return data
+        const payload = data?.data ?? data
+        return payload
     },
     getTeamMembers: async () => {
         const { data } = await api.get('/api/business/team')
