@@ -50,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         } catch {
             return apiError('Invalid verification id (use UUID from list `id` field)', 400);
         }
-        const rows = await prisma.$queryRawUnsafe(
+        const rows = (await prisma.$queryRawUnsafe(
             `SELECT 
                 vr.*,
                 u.email as "user_email",
@@ -64,11 +64,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             LEFT JOIN "BusinessProfile" bp ON vr."businessId" IS NOT NULL AND CAST(vr."businessId" AS TEXT) = CAST(bp.id AS TEXT)
             WHERE CAST(vr.id AS TEXT) = '${id}'
             LIMIT 1`
-        ) as any[];
-        if (!rows.length) {
+        )) as any[];
+        if (!rows || rows.length === 0) {
             return apiError('Verification request not found', 404);
         }
-        return apiSuccess(mapVerificationRow((rows as any[])[0]), 'Verification request fetched');
+        return apiSuccess(mapVerificationRow(rows[0]), 'Verification request fetched');
     } catch (error: any) {
         console.error('[Admin Verifications GET id]', error);
         return apiError('Failed to fetch verification request', 500, { details: error.message });
@@ -108,10 +108,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             return apiError('Verification request not found', 404);
         }
 
-        const reqs = await prisma.$queryRawUnsafe(
+        const reqs = (await prisma.$queryRawUnsafe(
             `SELECT * FROM "VerificationRequest" WHERE CAST("id" AS TEXT) = '${id}' LIMIT 1`
-        );
-        const request = (reqs as any[])[0];
+        )) as any[];
+        const request = reqs[0];
 
         if (!request) {
             return apiError('Request not found after update', 404);
