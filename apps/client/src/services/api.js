@@ -651,6 +651,10 @@ export const messagingService = {
         const { data } = await messagingApi.post(`/api/messages/conversations/${conversationId}/delete`)
         return data
     },
+    searchMessages: async (conversationId, query) => {
+        const { data } = await messagingApi.get('/api/messages/chat/search', { params: { conversationId, q: query } })
+        return data
+    },
     createConversation: async (recipientId) => {
         const { data } = await messagingApi.post('/api/messages/conversations', { recipientId })
         return data

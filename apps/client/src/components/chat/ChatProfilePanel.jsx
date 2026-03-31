@@ -171,22 +171,72 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
         }
     };
 
-    const startCall = async (type) => {
-        if (settings.isBlocked || settings.amIBlocked) {
-            return toast.error("Cannot call blocked user");
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearchingLoading, setIsSearchingLoading] = useState(false);
+
+    const handleSearchInput = async (e) => {
+        const val = e.target.value;
+        setSearchQuery(val);
+        if (!val.trim()) {
+            setSearchResults([]);
+            return;
         }
-        toast.info(`Starting ${type} call...`);
+        setIsSearchingLoading(true);
         try {
-            await api.post('/api/messages/chat/call/start', { targetUserId: targetUser.id, callType: type });
-        } catch (error) {
-            toast.error("Could not reach user");
+            const data = await messagingService.searchMessages(conversationId, val);
+            setSearchResults(data.data || []);
+        } catch (err) {
+            console.error("Search error", err);
+        } finally {
+            setIsSearchingLoading(false);
         }
     };
 
     if (!targetUser) return null;
 
+    if (isSearching) {
+        return (
+            <div className="flex flex-col h-full max-h-[90vh] bg-black text-white overflow-hidden">
+                <div className="p-4 border-b border-border flex items-center gap-3">
+                    <button onClick={() => { setIsSearching(false); setSearchQuery(''); setSearchResults([]); }} className="p-2 hover:bg-white/10 rounded-full">
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input 
+                            autoFocus
+                            value={searchQuery}
+                            onChange={handleSearchInput}
+                            placeholder="Search messages..."
+                            className="w-full bg-border/20 border-none rounded-full pl-10 pr-4 py-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {isSearchingLoading ? (
+                        <div className="flex justify-center p-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+                    ) : searchResults.length > 0 ? (
+                        searchResults.map(msg => (
+                            <div key={msg.id} className="p-3 hover:bg-white/5 rounded-xl border border-transparent hover:border-border/50 transition-all cursor-pointer">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="text-sm font-bold text-primary">@{msg.sender?.profile?.handle || 'user'}</span>
+                                    <span className="text-[11px] text-gray-500">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                                </div>
+                                <p className="text-[15px] text-gray-200 line-clamp-3">{msg.content}</p>
+                            </div>
+                        ))
+                    ) : searchQuery && (
+                        <div className="text-center py-12 text-gray-500">No messages found matching "{searchQuery}"</div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="flex flex-col h-full max-h-[90vh] bg-black text-white overflow-y-auto relative">
+        <div className="flex flex-col h-full max-h-[90vh] bg-black text-white overflow-y-auto relative no-scrollbar">
             {/* Header */}
             <div className="sticky top-0 bg-black/95 backdrop-blur z-10 flex items-center p-4 border-b border-border">
                 <button 
@@ -205,14 +255,14 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
                     {/* Profile Banner */}
                     <div className="flex flex-col items-center py-8">
                         {targetUser.avatarUrl || targetUser.profile?.avatarUrl ? (
-                            <img src={targetUser.avatarUrl || targetUser.profile?.avatarUrl} alt={targetUser.name} className="w-24 h-24 rounded-full object-cover mb-4" />
+                            <img src={targetUser.avatarUrl || targetUser.profile?.avatarUrl} alt={targetUser.name} className="w-24 h-24 rounded-full object-cover mb-4 border-2 border-border/30" />
                         ) : (
-                            <div className="w-24 h-24 rounded-full bg-orange-500 flex items-center justify-center text-4xl font-bold mb-4">
+                            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-4xl font-bold mb-4 shadow-lg">
                                 {targetUser.name?.[0]?.toUpperCase() || 'U'}
                             </div>
                         )}
                         <h2 className="text-xl font-bold">{targetUser.name}</h2>
-                        <span className="text-gray-400">@{targetUser.handle}</span>
+                        <span className="text-gray-400">@{targetUser.handle || targetUser.profile?.handle}</span>
                     </div>
 
                     {/* Quick Actions */}
@@ -223,14 +273,14 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
                         
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <button className="flex flex-col items-center gap-2 group">
-                                    <div className="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white/20 transition-colors flex items-center justify-center text-white">
+                                <button className="flex flex-col items-center gap-2 group outline-none">
+                                    <div className="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white/20 transition-all flex items-center justify-center text-white ring-0 group-focus:ring-2 group-focus:ring-primary/50">
                                         <MoreHorizontal size={20} />
                                     </div>
                                     <span className="text-xs font-semibold text-gray-400 group-hover:text-white transition-colors">More</span>
                                 </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-[250px] bg-black border-border shadow-2xl p-2 rounded-2xl">
+                            <DropdownMenuContent align="end" className="w-[250px] bg-black border-border shadow-2xl p-2 rounded-2xl animate-in fade-in zoom-in-95">
                                 <DropdownMenuItem 
                                     onClick={handleMuteToggle}
                                     className="flex items-center gap-3 p-3 text-[15px] font-semibold rounded-xl focus:bg-white/10 cursor-pointer"
@@ -249,7 +299,7 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
 
                                 <DropdownMenuItem 
                                     className="flex items-center gap-3 p-3 text-[15px] font-semibold rounded-xl focus:bg-white/10 cursor-pointer"
-                                    onClick={() => toast.info("Search in conversation coming soon")}
+                                    onClick={() => setIsSearching(true)}
                                 >
                                     <Search className="w-5 h-5" />
                                     <span>Search</span>
@@ -276,42 +326,47 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
                         </DropdownMenu>
                     </div>
 
-                    <div className="h-2 w-full bg-border/20" /> {/* Divider */}
+                    <div className="h-2 w-full bg-border/10" />
 
                     {/* Privacy Settings */}
                     <div className="flex flex-col px-4 py-2">
                         <SettingsItem 
                             icon={<Clock size={20} />}
                             title="Disappearing Messages"
+                            description="Automatically remove messages after X time."
                             value={settings.disappearingMode === 'off' ? 'Off' : settings.disappearingMode}
                             onClick={handleDisappearingChange}
                         />
                         <SettingsItem 
                             icon={<ShieldX size={20} />}
                             title="Block Screenshots"
+                            description="Warn or prevent screenshots in this chat."
                             value={settings.screenshotBlock ? 'On' : 'Off'}
                             onClick={handleScreenshotToggle}
                         />
                     </div>
 
-                    <div className="h-2 w-full bg-border/20" /> {/* Divider */}
+                    <div className="h-2 w-full bg-border/10" />
 
                     {/* Danger Zone */}
                     <div className="flex flex-col px-4 py-2 mt-2">
                         <button 
                             onClick={handleBlockToggle}
-                            className="flex items-center gap-4 text-red-500 hover:bg-red-500/5 p-4 rounded-xl transition-colors text-left"
+                            className="flex items-center gap-4 text-red-500 hover:bg-red-500/5 p-4 rounded-xl transition-all text-left"
                         >
                             <Ban size={20} />
-                            <span className="text-lg font-semibold">
-                                {settings.isBlocked ? 'Unblock Messages' : 'Block Messages'}
-                            </span>
+                            <div className="flex flex-col">
+                                <span className="text-lg font-bold">
+                                    {settings.isBlocked ? 'Unblock Messages' : 'Block Messages'}
+                                </span>
+                                <span className="text-xs text-gray-500">They won't be able to message you.</span>
+                            </div>
                         </button>
                     </div>
 
                     {/* Notice */}
                     {(settings.isBlocked || settings.amIBlocked) && (
-                        <div className="m-4 p-4 rounded-xl bg-red-950/30 border border-red-900 text-red-400 text-sm">
+                        <div className="m-4 p-4 rounded-xl bg-red-950/30 border border-red-900 text-red-400 text-[13px] leading-tight">
                             {settings.amIBlocked ? "You cannot send messages to this user." : "You have blocked this user. They cannot send you messages."}
                         </div>
                     )}
@@ -332,19 +387,22 @@ function ActionButton({ icon, label, onClick }) {
     );
 }
 
-function SettingsItem({ icon, title, value, onClick }) {
+function SettingsItem({ icon, title, description, value, onClick }) {
     return (
         <div 
             onClick={onClick}
-            className="flex items-center justify-between p-4 hover:bg-white/5 rounded-xl transition-colors cursor-pointer group"
+            className="flex items-center justify-between p-4 hover:bg-white/5 rounded-xl transition-all cursor-pointer group"
         >
             <div className="flex items-center gap-4 text-gray-200">
-                <div className="text-gray-400">{icon}</div>
-                <span className="text-[17px] font-medium">{title}</span>
+                <div className="text-gray-400 group-hover:text-primary transition-colors">{icon}</div>
+                <div className="flex flex-col">
+                    <span className="text-[17px] font-semibold">{title}</span>
+                    {description && <span className="text-xs text-gray-500">{description}</span>}
+                </div>
             </div>
-            <div className="flex items-center gap-2 text-gray-500 group-hover:text-gray-400">
+            <div className="flex items-center gap-2 text-gray-500 group-hover:text-gray-300">
                 <span className="text-[15px]">{value}</span>
-                <span className="text-gray-600">{`>`}</span>
+                <span className="text-gray-600 transition-transform group-hover:translate-x-0.5">{`>`}</span>
             </div>
         </div>
     );

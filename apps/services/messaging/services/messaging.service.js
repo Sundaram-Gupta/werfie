@@ -149,6 +149,20 @@ export class MessagingService {
                     if (recipientSettings?.blockMessages) {
                         throw new Error("This user is not accepting messages in this conversation")
                     }
+
+                    // Check global user-to-user block (new spec)
+                    const globalSetting = await prisma.chatSetting.findUnique({
+                        where: { 
+                            userId_targetUserId: { 
+                                userId: recipient.userId, 
+                                targetUserId: senderId 
+                            } 
+                        },
+                        select: { isBlocked: true }
+                    })
+                    if (globalSetting?.isBlocked) {
+                        throw new Error("You are blocked by this user.")
+                    }
                 } catch (error) {
                     // If the table doesn't exist in DB yet, disable settings and proceed.
                     this.markConversationSettingsUnavailable(error)
@@ -631,5 +645,61 @@ export class MessagingService {
                 orderBy: { createdAt: 'asc' }
             })
         }
+    }
+
+    static async searchMessages(conversationId, userId, query) {
+        await this.ensureParticipant(conversationId, userId)
+        if (!query) return []
+
+        const participant = await prisma.participant.findUnique({
+            where: { userId_conversationId: { userId, conversationId } },
+            select: { clearedAt: true }
+        })
+
+        let settings = null
+        if (this.hasConversationSettingsModel()) {
+            try {
+                settings = await prisma.conversationUserSetting.findUnique({
+                    where: { conversationId_userId: { conversationId, userId } },
+                    select: { disappearingMode: true }
+                })
+            } catch (error) {
+                this.markConversationSettingsUnavailable(error)
+            }
+        }
+        const mode = settings?.disappearingMode || 'off'
+        const now = Date.now()
+        let disappearingFilter
+        if (mode === '1h') disappearingFilter = new Date(now - 60 * 60 * 1000)
+        if (mode === '24h') disappearingFilter = new Date(now - 24 * 60 * 60 * 1000)
+        if (mode === '7d') disappearingFilter = new Date(now - 7 * 24 * 60 * 60 * 1000)
+
+        const where = {
+            conversationId,
+            content: { contains: query, mode: 'insensitive' }
+        }
+
+        const filters = []
+        if (participant?.clearedAt) filters.push({ gte: participant.clearedAt })
+        if (disappearingFilter) filters.push({ gte: disappearingFilter })
+
+        if (filters.length > 0) {
+            let finalGte = null
+            filters.forEach(f => {
+                if (!finalGte || f.gte > finalGte) finalGte = f.gte
+            })
+            where.createdAt = { gte: finalGte }
+        }
+
+        return prisma.message.findMany({
+            where,
+            include: {
+                sender: {
+                    select: { id: true, email: true, profile: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        })
     }
 }
