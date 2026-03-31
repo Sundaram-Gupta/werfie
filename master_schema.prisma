@@ -329,7 +329,7 @@ model CommunityPost {
 model Conversation {
   id                                           String                    @id @default(uuid())
   type                                         String                    @default("direct")
-  updatedAt                                    DateTime
+  updatedAt                                    DateTime                  @default(now()) @updatedAt
   lastMessageAt                                DateTime                  @default(now())
   lastMessageId                                String?                   @unique
   Message_Conversation_lastMessageIdToMessage  Message?                  @relation("Conversation_lastMessageIdToMessage", fields: [lastMessageId], references: [id])
@@ -346,7 +346,7 @@ model ConversationUserSetting {
   blockScreenshots Boolean      @default(false)
   blockMessages    Boolean      @default(false)
   createdAt        DateTime     @default(now())
-  updatedAt        DateTime
+  updatedAt        DateTime     @default(now()) @updatedAt
   Conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   User             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
