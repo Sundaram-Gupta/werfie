@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import { getUserFromRequest } from '../../../../../../lib/auth.js';
 import { getChatSetting } from '../../../../../../lib/chat-settings.js';
 
