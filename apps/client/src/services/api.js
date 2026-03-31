@@ -634,6 +634,23 @@ export const messagingService = {
         const { data } = await messagingApi.get(`/api/messages/${messageId}`)
         return data
     },
+    // Settings & Actions
+    muteChat: async (targetUserId, isMuted) => {
+        const { data } = await messagingApi.put('/api/messages/chat/mute', { targetUserId, isMuted })
+        return data
+    },
+    blockUser: async (targetUserId, isBlocked) => {
+        const { data } = await messagingApi.put('/api/messages/chat/block', { targetUserId, isBlocked })
+        return data
+    },
+    clearConversation: async (conversationId) => {
+        const { data } = await messagingApi.post(`/api/messages/conversations/${conversationId}/clear`)
+        return data
+    },
+    deleteConversation: async (conversationId) => {
+        const { data } = await messagingApi.post(`/api/messages/conversations/${conversationId}/delete`)
+        return data
+    },
     createConversation: async (recipientId) => {
         const { data } = await messagingApi.post('/api/messages/conversations', { recipientId })
         return data

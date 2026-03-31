@@ -1224,14 +1224,19 @@ export default function Chat() {
                     )}
                 </div>
 
-                {/* Right Info Panel Sliding Column */}
-                {selectedChat && showUserInfoModal && (
-                    <div className={cn("w-full md:w-[350px] lg:w-[400px] shrink-0 border-l border-border h-full bg-black z-20 transition-all", showUserInfoModal ? "absolute md:relative right-0 inset-y-0" : "hidden")}>
-                        <ChatProfilePanel targetUser={selectedChat.user} onClose={() => setShowUserInfoModal(false)} />
-                    </div>
-                )}
                 </div>
             </div>
+
+            {/* User Details Modal (X.com style) */}
+            <Dialog open={showUserInfoModal} onOpenChange={setShowUserInfoModal}>
+                <DialogContent className="sm:max-w-[450px] bg-black border-border p-0 overflow-hidden outline-none [&>button]:hidden">
+                    <ChatProfilePanel 
+                        targetUser={selectedChat?.user} 
+                        conversationId={selectedChat?.id} 
+                        onClose={() => setShowUserInfoModal(false)} 
+                    />
+                </DialogContent>
+            </Dialog>
 
             {/* New Message Modal */}
             <Dialog open={showNewMessageModal} onOpenChange={setShowNewMessageModal}>

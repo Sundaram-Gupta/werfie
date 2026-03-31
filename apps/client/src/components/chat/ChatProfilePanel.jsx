@@ -1,10 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Phone, Video, User, MoreHorizontal, Clock, ShieldX, Ban } from 'lucide-react';
+import { 
+    ArrowLeft, Phone, Video, User, MoreHorizontal, Clock, 
+    ShieldX, Ban, Search, BellOff, Trash2, X 
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
+import { messagingService } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { useSocket } from '@/context/SocketContext';
 import { toast } from 'sonner';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export default function ChatProfilePanel({ targetUser, onClose, conversationId }) {
     const navigate = useNavigate();
@@ -97,24 +108,65 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
         }
     };
 
+    const handleMuteToggle = async () => {
+        const nextState = !settings.isMuted;
+        setSettings(prev => ({ ...prev, isMuted: nextState }));
+        try {
+            await messagingService.muteChat(targetUser.id, nextState);
+            toast.success(nextState ? "Conversation muted" : "Conversation unmuted");
+        } catch (error) {
+            toast.error("Failed to update mute settings");
+            setSettings(prev => ({ ...prev, isMuted: !nextState }));
+        }
+    };
+
     const handleBlockToggle = async () => {
         if (settings.isBlocked) {
             try {
-                await api.delete(`/api/messages/chat/block/${targetUser.id}`);
+                await messagingService.blockUser(targetUser.id, false);
                 setSettings(prev => ({ ...prev, isBlocked: false }));
                 toast.success("User unblocked");
             } catch (error) {
                 toast.error("Failed to unblock user");
             }
         } else {
-            if (window.confirm(`Are you sure you want to block ${targetUser.name}? You won't receive messages from them.`)) {
+            if (window.confirm(`Are you sure you want to block ${targetUser.name || 'this user'}? You won't receive messages from them.`)) {
                 try {
-                    await api.post('/api/messages/chat/block', { targetUserId: targetUser.id });
+                    await messagingService.blockUser(targetUser.id, true);
                     setSettings(prev => ({ ...prev, isBlocked: true }));
                     toast.error("User blocked");
                 } catch (error) {
                     toast.error("Failed to block user");
                 }
+            }
+        }
+    };
+
+    const handleClearConversation = async () => {
+        if (!conversationId) return toast.error("Conversation ID missing");
+        if (window.confirm("Are you sure you want to clear this conversation? This will hide all current messages for you.")) {
+            try {
+                await messagingService.clearConversation(conversationId);
+                toast.success("Conversation history cleared");
+                onClose(); // Close modal after clearing
+                // Refreshing chat state might be needed, usually handled by parent or shared state
+                window.location.reload(); // Simple way to refresh UI state for now
+            } catch (error) {
+                toast.error("Failed to clear conversation");
+            }
+        }
+    };
+
+    const handleDeleteConversation = async () => {
+        if (!conversationId) return toast.error("Conversation ID missing");
+        if (window.confirm("Delete conversation? This will remove it from your chat list.")) {
+            try {
+                await messagingService.deleteConversation(conversationId);
+                toast.success("Conversation deleted");
+                onClose();
+                window.location.reload(); 
+            } catch (error) {
+                toast.error("Failed to delete conversation");
             }
         }
     };
@@ -134,9 +186,9 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
     if (!targetUser) return null;
 
     return (
-        <div className="flex flex-col h-full bg-[#15202b] text-white overflow-y-auto animate-slide-in-right relative">
+        <div className="flex flex-col h-full max-h-[90vh] bg-black text-white overflow-y-auto relative">
             {/* Header */}
-            <div className="sticky top-0 bg-[#15202b]/95 backdrop-blur z-10 flex items-center p-4 border-b border-gray-800">
+            <div className="sticky top-0 bg-black/95 backdrop-blur z-10 flex items-center p-4 border-b border-border">
                 <button 
                     onClick={onClose}
                     className="p-2 rounded-full hover:bg-white/10 transition-colors mr-2"
@@ -152,11 +204,11 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
                 <div className="flex flex-col pb-20">
                     {/* Profile Banner */}
                     <div className="flex flex-col items-center py-8">
-                        {targetUser.avatarUrl ? (
-                            <img src={targetUser.avatarUrl} alt={targetUser.name} className="w-24 h-24 rounded-full object-cover mb-4" />
+                        {targetUser.avatarUrl || targetUser.profile?.avatarUrl ? (
+                            <img src={targetUser.avatarUrl || targetUser.profile?.avatarUrl} alt={targetUser.name} className="w-24 h-24 rounded-full object-cover mb-4" />
                         ) : (
                             <div className="w-24 h-24 rounded-full bg-orange-500 flex items-center justify-center text-4xl font-bold mb-4">
-                                {targetUser.name?.[0]?.toUpperCase()}
+                                {targetUser.name?.[0]?.toUpperCase() || 'U'}
                             </div>
                         )}
                         <h2 className="text-xl font-bold">{targetUser.name}</h2>
@@ -168,10 +220,63 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
                         <ActionButton icon={<Phone size={20} />} label="Voice" onClick={() => startCall('voice')} />
                         <ActionButton icon={<Video size={20} />} label="Video" onClick={() => startCall('video')} />
                         <ActionButton icon={<User size={20} />} label="Profile" onClick={() => navigate(`/profile/${targetUser.id}`)} />
-                        <ActionButton icon={<MoreHorizontal size={20} />} label="More" onClick={() => {}} />
+                        
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button className="flex flex-col items-center gap-2 group">
+                                    <div className="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white/20 transition-colors flex items-center justify-center text-white">
+                                        <MoreHorizontal size={20} />
+                                    </div>
+                                    <span className="text-xs font-semibold text-gray-400 group-hover:text-white transition-colors">More</span>
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-[250px] bg-black border-border shadow-2xl p-2 rounded-2xl">
+                                <DropdownMenuItem 
+                                    onClick={handleMuteToggle}
+                                    className="flex items-center gap-3 p-3 text-[15px] font-semibold rounded-xl focus:bg-white/10 cursor-pointer"
+                                >
+                                    <BellOff className="w-5 h-5" />
+                                    <span>{settings.isMuted ? 'Unmute' : 'Mute'}</span>
+                                </DropdownMenuItem>
+                                
+                                <DropdownMenuItem 
+                                    onClick={handleBlockToggle}
+                                    className="flex items-center gap-3 p-3 text-[15px] font-semibold rounded-xl focus:bg-white/10 cursor-pointer"
+                                >
+                                    <Ban className="w-5 h-5" />
+                                    <span>{settings.isBlocked ? 'Unblock Messages' : 'Block Messages'}</span>
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem 
+                                    className="flex items-center gap-3 p-3 text-[15px] font-semibold rounded-xl focus:bg-white/10 cursor-pointer"
+                                    onClick={() => toast.info("Search in conversation coming soon")}
+                                >
+                                    <Search className="w-5 h-5" />
+                                    <span>Search</span>
+                                </DropdownMenuItem>
+
+                                <DropdownMenuSeparator className="bg-border my-1" />
+
+                                <DropdownMenuItem 
+                                    onClick={handleClearConversation}
+                                    className="flex items-center gap-3 p-3 text-[15px] font-semibold text-red-500 rounded-xl focus:bg-red-500/10 hover:text-red-500 cursor-pointer"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                    <span>Clear conversation</span>
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem 
+                                    onClick={handleDeleteConversation}
+                                    className="flex items-center gap-3 p-3 text-[15px] font-semibold text-red-500 rounded-xl focus:bg-red-500/10 hover:text-red-500 cursor-pointer"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                    <span>Delete conversation</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
 
-                    <div className="h-2 w-full bg-gray-900" /> {/* Divider */}
+                    <div className="h-2 w-full bg-border/20" /> {/* Divider */}
 
                     {/* Privacy Settings */}
                     <div className="flex flex-col px-4 py-2">
@@ -189,16 +294,16 @@ export default function ChatProfilePanel({ targetUser, onClose, conversationId }
                         />
                     </div>
 
-                    <div className="h-2 w-full bg-gray-900" /> {/* Divider */}
+                    <div className="h-2 w-full bg-border/20" /> {/* Divider */}
 
                     {/* Danger Zone */}
                     <div className="flex flex-col px-4 py-2 mt-2">
                         <button 
                             onClick={handleBlockToggle}
-                            className="flex items-center gap-4 text-red-500 hover:bg-white/5 p-4 rounded-xl transition-colors text-left"
+                            className="flex items-center gap-4 text-red-500 hover:bg-red-500/5 p-4 rounded-xl transition-colors text-left"
                         >
                             <Ban size={20} />
-                            <span className="text-lg">
+                            <span className="text-lg font-semibold">
                                 {settings.isBlocked ? 'Unblock Messages' : 'Block Messages'}
                             </span>
                         </button>
@@ -234,12 +339,12 @@ function SettingsItem({ icon, title, value, onClick }) {
             className="flex items-center justify-between p-4 hover:bg-white/5 rounded-xl transition-colors cursor-pointer group"
         >
             <div className="flex items-center gap-4 text-gray-200">
-                {icon}
-                <span className="text-lg">{title}</span>
+                <div className="text-gray-400">{icon}</div>
+                <span className="text-[17px] font-medium">{title}</span>
             </div>
             <div className="flex items-center gap-2 text-gray-500 group-hover:text-gray-400">
-                <span>{value}</span>
-                <span>{`>`}</span>
+                <span className="text-[15px]">{value}</span>
+                <span className="text-gray-600">{`>`}</span>
             </div>
         </div>
     );

@@ -377,7 +377,15 @@ export class MessagingService {
             // Map latest message to `lastMessage` and add small derived fields to make the response easier
             // to understand in Swagger while keeping backward compatibility for the client.
             return conversations.map(conv => {
-                const lastMessage = conv.messages?.[0] || null
+                const me = conv.participants.find(p => p.userId === userId)
+                const clearedAt = me?.clearedAt || null
+                
+                let lastMessage = conv.messages?.[0] || null
+                // If the last message is older than clearedAt, don't show it
+                if (lastMessage && clearedAt && new Date(lastMessage.createdAt) < new Date(clearedAt)) {
+                    lastMessage = null
+                }
+
                 const participantUserIds = (conv.participants || []).map(p => p.userId)
                 const otherParticipantUserIds = participantUserIds.filter(id => String(id) !== String(userId))
                 const otherUserId = conv.type === 'direct' ? (otherParticipantUserIds[0] || null) : null
@@ -529,12 +537,19 @@ export class MessagingService {
         })
     }
 
-    static async hideMessage(messageId, userId) {
-        return prisma.hiddenMessage.create({
-            data: {
-                messageId,
-                userId
-            }
+    static async clearConversation(conversationId, userId) {
+        await this.ensureParticipant(conversationId, userId)
+        return prisma.participant.update({
+            where: { userId_conversationId: { userId, conversationId } },
+            data: { clearedAt: new Date() }
+        })
+    }
+
+    static async deleteConversation(conversationId, userId) {
+        await this.ensureParticipant(conversationId, userId)
+        // We delete the participant record so it no longer appears in the user's list
+        return prisma.participant.delete({
+            where: { userId_conversationId: { userId, conversationId } }
         })
     }
 
@@ -546,7 +561,12 @@ export class MessagingService {
                 orderBy: { createdAt: 'asc' }
             })
         }
-        await this.ensureParticipant(conversationId, userId)
+        const participant = await prisma.participant.findUnique({
+             where: { userId_conversationId: { userId, conversationId } },
+             select: { clearedAt: true }
+        })
+        if (!participant) throw new Error("Unauthorized to access this conversation")
+
         let settings = null
         if (this.hasConversationSettingsModel()) {
             try {
@@ -560,10 +580,10 @@ export class MessagingService {
         }
         const mode = settings?.disappearingMode || 'off'
         const now = Date.now()
-        let createdAtFilter
-        if (mode === '1h') createdAtFilter = new Date(now - 60 * 60 * 1000)
-        if (mode === '24h') createdAtFilter = new Date(now - 24 * 60 * 60 * 1000)
-        if (mode === '7d') createdAtFilter = new Date(now - 7 * 24 * 60 * 60 * 1000)
+        let disappearingFilter
+        if (mode === '1h') disappearingFilter = new Date(now - 60 * 60 * 1000)
+        if (mode === '24h') disappearingFilter = new Date(now - 24 * 60 * 60 * 1000)
+        if (mode === '7d') disappearingFilter = new Date(now - 7 * 24 * 60 * 60 * 1000)
 
         const where = { conversationId }
         if (this.hasHiddenMessageModel()) {
@@ -573,7 +593,21 @@ export class MessagingService {
                 }
             }
         }
-        if (createdAtFilter) where.createdAt = { gte: createdAtFilter }
+
+        // Combine filters: Must be after clearedAt AND after disappearingFilter
+        const filters = []
+        if (participant.clearedAt) filters.push({ gte: participant.clearedAt })
+        if (disappearingFilter) filters.push({ gte: disappearingFilter })
+
+        if (filters.length > 0) {
+            // Prisma gte filters can be combined using math logic or overlapping
+            // For chronological history, we want messages where createdAt is >= MAX(clearedAt, disappearingFilter)
+            let finalGte = null
+            filters.forEach(f => {
+                if (!finalGte || f.gte > finalGte) finalGte = f.gte
+            })
+            where.createdAt = { gte: finalGte }
+        }
 
         try {
             return await prisma.message.findMany({
@@ -592,10 +626,8 @@ export class MessagingService {
             })
         } catch (error) {
             this.markMessagingTableUnavailable(error)
-            const safeWhere = { conversationId }
-            if (createdAtFilter) safeWhere.createdAt = { gte: createdAtFilter }
             return prisma.message.findMany({
-                where: safeWhere,
+                where: { conversationId },
                 orderBy: { createdAt: 'asc' }
             })
         }
