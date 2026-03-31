@@ -327,15 +327,15 @@ model CommunityPost {
 }
 
 model Conversation {
-  id                                           String                    @id
+  id                                           String                    @id @default(uuid())
   type                                         String                    @default("direct")
   updatedAt                                    DateTime
   lastMessageAt                                DateTime                  @default(now())
   lastMessageId                                String?                   @unique
   Message_Conversation_lastMessageIdToMessage  Message?                  @relation("Conversation_lastMessageIdToMessage", fields: [lastMessageId], references: [id])
   ConversationUserSetting                      ConversationUserSetting[]
-  Message_Message_conversationIdToConversation Message[]                 @relation("Message_conversationIdToConversation")
-  Participant                                  Participant[]
+  messages                                     Message[]                 @relation("Message_conversationIdToConversation")
+  participants                                 Participant[]
 }
 
 model ConversationUserSetting {
@@ -652,7 +652,7 @@ model MarketSignal {
 }
 
 model Message {
-  id                                                String            @id
+  id                                                String            @id @default(uuid())
   conversationId                                    String
   senderId                                          String
   content                                           String?
@@ -728,7 +728,7 @@ model Notification {
 }
 
 model Participant {
-  id             String       @id
+  id             String       @id @default(uuid())
   userId         String
   conversationId String
   lastReadAt     DateTime     @default(now())
@@ -1065,12 +1065,12 @@ model User {
   List                                    List[]
   ListFollower                            ListFollower[]
   ListMember                              ListMember[]
-  Message                                 Message[]
+  messages                                Message[]
   MessageReaction                         MessageReaction[]
   MonetizationProfile                     MonetizationProfile?
   Notification_Notification_actorIdToUser Notification[]            @relation("Notification_actorIdToUser")
   Notification_Notification_userIdToUser  Notification[]            @relation("Notification_userIdToUser")
-  Participant                             Participant[]
+  participants                            Participant[]
   Post                                    Post[]
   Profile                                 Profile?
   RefreshToken                            RefreshToken[]
