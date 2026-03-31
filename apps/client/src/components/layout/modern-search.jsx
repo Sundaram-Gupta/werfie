@@ -16,8 +16,9 @@ function HighlightText({ text, highlight }) {
     const terms = highlight.trim().split(/\s+/).filter(t => t.length > 0);
     if (terms.length === 0) return <span>{text}</span>
     
-    // Create a regex that matches any of the terms
-    const regex = new RegExp(`(${terms.join('|')})`, 'gi')
+    // Escape special regex characters in each term
+    const escapedTerms = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escapedTerms.join('|')})`, 'gi')
     const parts = text.split(regex)
     
     return (
@@ -40,6 +41,7 @@ export function ModernSearch() {
     const [loading, setLoading] = useState(false)
     const [userResults, setUserResults] = useState([])
     const [postResults, setPostResults] = useState([])
+    const [mediaResults, setMediaResults] = useState([])
     const [recentSearches, setRecentSearches] = useState([])
     const [activeIndex, setActiveIndex] = useState(-1)
     const containerRef = useRef(null)
@@ -98,16 +100,15 @@ export function ModernSearch() {
         setLoading(true)
         const timeoutId = setTimeout(async () => {
             try {
-                const [users, posts] = await Promise.all([
-                    searchService.searchUsers(q, { limit: 5 }),
-                    searchService.searchPosts(q, { limit: 5 })
-                ])
-                setUserResults(Array.isArray(users) ? users : (users?.users || users?.data || []))
-                setPostResults(Array.isArray(posts) ? posts : (posts?.posts || posts?.data || []))
+                const results = await searchService.searchUnified(q)
+                setUserResults(results?.users || [])
+                setPostResults(results?.posts || [])
+                setMediaResults(results?.media || [])
             } catch (err) {
                 console.error('Search error:', err)
                 setUserResults([])
                 setPostResults([])
+                setMediaResults([])
             } finally {
                 setLoading(false)
             }
@@ -144,7 +145,10 @@ export function ModernSearch() {
     }
 
     const handleKeyDown = (e) => {
-        const resultsCount = query.trim() ? (userResults.length + postResults.length) : recentSearches.length
+        const resultsCount = query.trim() 
+            ? (userResults.length + postResults.length + mediaResults.length) 
+            : recentSearches.length
+        
         if (e.key === 'ArrowDown') {
             e.preventDefault()
             setActiveIndex(prev => (prev < resultsCount - 1 ? prev + 1 : prev))
@@ -158,8 +162,10 @@ export function ModernSearch() {
                 if (query.trim()) {
                     if (activeIndex < userResults.length) {
                         handleSelectUser(userResults[activeIndex])
+                    } else if (activeIndex < userResults.length + postResults.length) {
+                        handleSearchSubmit(query)
                     } else {
-                        // It's a post result, navigate to full search
+                        // Media section selection - navigate to post or media search result
                         handleSearchSubmit(query)
                     }
                 } else {
@@ -178,17 +184,19 @@ export function ModernSearch() {
         <div ref={containerRef} className="relative w-full group">
             {/* Search Input Container */}
             <div 
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-full transition-all duration-200 border
+                className={`flex items-center gap-3 px-4 py-2 rounded-full transition-all duration-200 border w-full
                     ${isFocused 
-                        ? 'bg-background border-primary ring-1 ring-primary' 
-                        : 'bg-muted/50 border-transparent group-hover:bg-muted/70'}`}
+                        ? 'bg-black border-primary ring-[1px] ring-primary' 
+                        : 'bg-[#202327] border-transparent group-hover:bg-[#272b2f]'}`}
             >
-                <Search className={`w-5 h-5 transition-colors ${isFocused ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div className="flex-shrink-0 flex items-center justify-center">
+                    <Search className={`w-[18px] h-[18px] transition-colors ${isFocused ? 'text-primary' : 'text-[#71767b]'}`} />
+                </div>
                 <input
                     ref={inputRef}
                     type="text"
                     placeholder={t('right_sidebar.search_placeholder') || 'Search'}
-                    className="bg-transparent border-none outline-none text-[15px] text-foreground placeholder-muted-foreground w-full h-full"
+                    className="bg-transparent border-none outline-none text-[15px] text-[#e7e9ea] placeholder-[#71767b] w-full h-[32px]"
                     value={query}
                     onFocus={() => setIsFocused(true)}
                     onChange={(e) => {
@@ -199,10 +207,10 @@ export function ModernSearch() {
                 />
                 {query && (
                     <button 
-                        onClick={() => setQuery('')}
-                        className="p-1 hover:bg-primary/10 rounded-full transition text-primary"
+                        onClick={() => { setQuery(''); inputRef.current?.focus(); }}
+                        className="p-1 hover:bg-primary/10 rounded-full transition group/btn"
                     >
-                        <X className="w-4 h-4 fill-current" />
+                        <X className="w-4 h-4 fill-primary text-primary" />
                     </button>
                 )}
             </div>
@@ -213,11 +221,11 @@ export function ModernSearch() {
                     {/* Recent Searches Header */}
                     {!query.trim() && (
                         <>
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-                                <span className="font-bold text-[20px]">Recent</span>
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-border/10">
+                                <span className="font-extrabold text-[20px] text-[#e7e9ea]">Recent</span>
                                 {recentSearches.length > 0 && (
                                     <button 
-                                        onClick={clearAllRecent}
+                                        onClick={(e) => { e.stopPropagation(); clearAllRecent(); }}
                                         className="text-primary text-[14px] hover:bg-primary/10 px-3 py-1 rounded-full transition font-semibold"
                                     >
                                         Clear all
@@ -362,6 +370,40 @@ export function ModernSearch() {
                                                     </div>
                                                 </div>
                                             ))}
+                                        </div>
+                                    )}
+
+                                    {/* Media Section */}
+                                    {mediaResults.length > 0 && (
+                                        <div className="mb-2">
+                                            <div className="px-4 py-2 text-[11px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/20 border-t border-border/30">
+                                                Media
+                                            </div>
+                                            <div className="p-2 grid grid-cols-3 gap-1">
+                                                {mediaResults.map((post, i) => {
+                                                    const medias = post.media || []
+                                                    const firstImg = medias[0]?.mediaUrl || (post.mediaUrls ? JSON.parse(post.mediaUrls)[0] : null)
+                                                    return (
+                                                        <div 
+                                                            key={post.id} 
+                                                            onClick={() => handleSearchSubmit(query)}
+                                                            className={`aspect-square bg-muted rounded overflow-hidden cursor-pointer relative group/img border-2 transition
+                                                                ${activeIndex === (userResults.length + postResults.length + i) ? 'border-primary' : 'border-transparent'}`}
+                                                        >
+                                                            {firstImg ? (
+                                                                <img src={getMediaUrl(firstImg)} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center bg-primary/5">
+                                                                    <MessageSquare className="w-4 h-4 text-primary opacity-20" />
+                                                                </div>
+                                                            )}
+                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center">
+                                                                <Search className="w-4 h-4 text-white" />
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
                                         </div>
                                     )}
 

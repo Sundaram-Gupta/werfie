@@ -21,7 +21,8 @@ console.log('[MessagingService] Starting server in parallel with Next.js prepara
 
 const expressApp = express()
 const httpServer = createServer()
-const prisma = new PrismaClient()
+const prisma = global.prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') global.prisma = prisma;
 
 async function ensureMessagingSchemaCompatibility() {
     // Self-heal for older DBs missing newer messaging columns.
@@ -77,6 +78,25 @@ async function ensureMessagingSchemaCompatibility() {
         )
     `)
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ConversationUserSetting_conversationId_userId_key" ON "ConversationUserSetting"("conversationId", "userId")`)
+
+    // Added ChatSetting for User-to-User settings based on requirements
+    await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "ChatSetting" (
+            "id" TEXT NOT NULL,
+            "userId" TEXT NOT NULL,
+            "targetUserId" TEXT NOT NULL,
+            "isBlocked" BOOLEAN NOT NULL DEFAULT false,
+            "isMuted" BOOLEAN NOT NULL DEFAULT false,
+            "disappearingMode" TEXT NOT NULL DEFAULT 'off',
+            "screenshotBlock" BOOLEAN NOT NULL DEFAULT false,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "ChatSetting_pkey" PRIMARY KEY ("id"),
+            CONSTRAINT "ChatSetting_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT "ChatSetting_targetUserId_fkey" FOREIGN KEY ("targetUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        )
+    `)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ChatSetting_userId_targetUserId_key" ON "ChatSetting"("userId", "targetUserId")`)
 }
 
 // 1. CORS Middleware - Global (allow gateway + client for Swagger & app)

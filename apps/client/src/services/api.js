@@ -427,6 +427,11 @@ export const searchService = {
         return data
     },
 
+    // Unified search for users, posts, and media in one call
+    searchUnified: async (query) => {
+        const { data } = await api.get('/api/search', { params: { q: query } })
+        return data
+    },
 
     // Get Trends (spike-based hashtags from posts; optional region for "Trending in X")
     getTrends: async (params = {}) => {

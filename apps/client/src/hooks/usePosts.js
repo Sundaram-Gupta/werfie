@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 // Use same-origin when unset so Vite proxies /api (REST). WebSockets use getGatewayUrl() to hit gateway directly.
 const API_URL = import.meta.env.VITE_API_URL || ''
 
-const FEED_PAGE_SIZE = 20
+const FEED_PAGE_SIZE = 15
 
 function dedupeById(items) {
     const seen = new Set()
@@ -187,27 +187,34 @@ function interleaveRandomNoAdjacent(items, getKey, opts = {}) {
     return out
 }
 
-// Ensure the last item of `head` doesn't have the same key as `nextKey` (boundary fix).
 // Does a single pass swap from the end; does not reshuffle the whole list.
 function avoidBoundarySameUser(head, nextKey, getKey) {
     const list = Array.isArray(head) ? head.slice() : []
     if (!nextKey || list.length < 2) return list
     const forbidden = String(nextKey)
-    const lastKey = String(getKey(list[list.length - 1]) ?? '')
+
+    // Find the real LAST element that isn't null/undefined
+    let lastValidIdx = list.length - 1
+    while (lastValidIdx >= 0 && !list[lastValidIdx]) lastValidIdx--
+    if (lastValidIdx < 0) return list
+
+    const lastKey = String(getKey(list[lastValidIdx]) ?? '')
     if (!lastKey || lastKey !== forbidden) return list
 
-    for (let i = list.length - 2; i >= 0; i--) {
+    for (let i = lastValidIdx - 1; i >= 0; i--) {
+        if (!list[i]) continue
         const k = String(getKey(list[i]) ?? '')
         if (k && k !== forbidden) {
             const tmp = list[i]
-            list[i] = list[list.length - 1]
-            list[list.length - 1] = tmp
+            list[i] = list[lastValidIdx]
+            list[lastValidIdx] = tmp
             return list
         }
     }
     return list
 }
 
+// Ensure the last item of `head` doesn't have the same key as `nextKey` (boundary fix).
 // Universal pass: reorder so no two consecutive posts have the same user key.
 // Used for all tabs so the feed never shows back-to-back posts from one user.
 function ensureNoConsecutiveSameUser(list, getKey) {
@@ -241,6 +248,16 @@ function ensureNoConsecutiveSameUser(list, getKey) {
         }
     }
     return arr
+}
+
+function pullPinnedToFront(list, pinId) {
+    if (!pinId || !list || !list.length) return list
+    const idx = list.findIndex(p => String(p?.id) === pinId)
+    if (idx > 0) {
+        const [pinned] = list.splice(idx, 1)
+        list.unshift(pinned)
+    }
+    return list
 }
 
 function postUserKey(p) {
@@ -334,12 +351,12 @@ export function usePosts(params = {}) {
     const fetchCtrlRef = useRef(null)
     const pinnedPostIdRef = useRef(null)
     const warnedTimeoutRef = useRef(false)
-    const hasMoreRef = useRef(false)
-    const nextCursorRef = useRef(null)
     const isLoadingRef = useRef(false)
-    const isLoadingMoreRef = useRef(false)
+    const nextCursorRef = useRef(null)
+    const hasMoreRef = useRef(false)
+    const lastPostTimestampRef = useRef(0)
 
-    // Destructure params to ensure stable dependencies for useCallback
+    // Store references to dynamically evaluated values for fast, un-memoized access inside callbacks to ensure stable dependencies for useCallback
     const tabVal = params.tab
     const userIdVal = params.userId
     const excludeRepliesVal = params.excludeReplies
@@ -656,7 +673,8 @@ export function usePosts(params = {}) {
                 } else {
                     nextList = dedupeById([...(prevList || []), ...(hydrated || [])])
                 }
-                return ensureNoConsecutiveSameUser(nextList, postUserKey)
+                const enforced = ensureNoConsecutiveSameUser(nextList, postUserKey)
+                return pullPinnedToFront(enforced, pinnedPostIdRef.current)
             })
             markSeen(unseen)
             setNextCursor(next)
@@ -708,8 +726,32 @@ export function usePosts(params = {}) {
     fetchRef.current = fetchPosts
     useEffect(() => {
         const onRefresh = () => refreshNewPosts()
+        const onNewPost = (e) => {
+            if (!e.detail) return
+            lastPostTimestampRef.current = Date.now()
+            pinnedPostIdRef.current = String(e.detail.id)
+            // Instantly unshift the newly drafted post to the front of the timeline feed
+            setPosts(prev => {
+                const list = Array.isArray(prev) ? [...prev] : []
+                // Prevent complete duplicate if optimistic UI already added it via local hook
+                if (list.some(p => String(p.id) === String(e.detail.id))) {
+                    return pullPinnedToFront(list, pinnedPostIdRef.current)
+                }
+                const enforced = ensureNoConsecutiveSameUser([e.detail, ...list], postUserKey)
+                return pullPinnedToFront(enforced, pinnedPostIdRef.current)
+            })
+        }
+        const onCreatingPost = () => {
+            lastPostTimestampRef.current = Date.now()
+        }
         window.addEventListener('feed-refresh', onRefresh)
-        return () => window.removeEventListener('feed-refresh', onRefresh)
+        window.addEventListener('feed-new-post', onNewPost)
+        window.addEventListener('feed-creating-post', onCreatingPost)
+        return () => {
+            window.removeEventListener('feed-refresh', onRefresh)
+            window.removeEventListener('feed-new-post', onNewPost)
+            window.removeEventListener('feed-creating-post', onCreatingPost)
+        }
     }, [])
 
     // Full refresh: always re-fetch/rebuild the feed state (even if no unseen posts exist).
@@ -739,7 +781,10 @@ export function usePosts(params = {}) {
             timeout: 12000,
         })
 
-        socket.on('post_published', () => refreshNewPosts())
+        socket.on('post_published', () => {
+            if (Date.now() - lastPostTimestampRef.current < 10000) return
+            refreshNewPosts()
+        })
         // Keep console clean: warn once per mount if it can't connect.
         let warned = false
         socket.on('connect_error', (err) => {
@@ -752,24 +797,45 @@ export function usePosts(params = {}) {
     }, [noFetch])
 
     const createPost = async (content, mediaUrls = [], replyToId = null) => {
+        // Optimistic update
+        const tempId = `temp-${Date.now()}`
+        const optimisticPost = {
+            id: tempId,
+            userId: userIdVal,
+            content,
+            mediaUrls: JSON.stringify(mediaUrls),
+            media: mediaUrls.map((url, i) => ({ id: `${tempId}-${i}`, mediaUrl: url, type: 'image' })),
+            createdAt: new Date().toISOString(),
+            _count: { replies: 0, likes: 0, retweets: 0 },
+            user: currentUser || { id: userIdVal, profile: { name: 'Me', handle: 'me', avatar: null } },
+            likes: [],
+            bookmarks: [],
+            retweets: [],
+            isOptimistic: true
+        }
+
+        const previousPosts = [...posts]
+        setPosts(prev => {
+            const next = ensureNoConsecutiveSameUser([optimisticPost, ...(prev || [])], postUserKey)
+            return pullPinnedToFront(next, tempId)
+        })
+
         try {
             const newPost = await postService.createPost(content, mediaUrls, replyToId)
             pinnedPostIdRef.current = newPost?.id != null ? String(newPost.id) : null
-            // Optimistically add current user details
-            const postWithUser = {
-                ...newPost,
-                user: currentUser || { id: newPost.userId, name: 'Me', handle: 'me' }
-            }
+            
+            // Replace optimistic post with real post from server
             setPosts(prev => {
-                const prevList = Array.isArray(prev) ? prev : []
-                const next = ensureNoConsecutiveSameUser([postWithUser, ...(prevList || [])], postUserKey)
-                return next
+                const list = (prev || []).map(p => p.id === tempId ? { ...newPost, user: optimisticPost.user } : p)
+                return pullPinnedToFront(list, pinnedPostIdRef.current)
             })
-            // Do NOT mark as seen yet. The feed uses persisted `seenPostIds` to filter posts.
-            // Marking optimistic posts as "seen" causes them to be filtered out on the next refresh/reload.
+            
+            lastPostTimestampRef.current = Date.now()
             return newPost
         } catch (err) {
             console.error('Error creating post:', err)
+            // Rollback on error
+            setPosts(previousPosts)
             throw err
         }
     }

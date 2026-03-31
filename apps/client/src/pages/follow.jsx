@@ -218,44 +218,65 @@ export default function Follow() {
         }
     }, [currentUser?.id, hasMoreFollowers, loadingMoreFollowers, followers.length])
 
-    // Infinite scroll: Suggested for You
+    // Infinite scroll: Suggested for You (only shown on following tab)
     useEffect(() => {
-        if (suggestionPage >= suggestionTotalPages || loadingMoreSuggestions) return
-        const el = suggestionTriggerRef.current
-        if (!el) return
-        const observer = new IntersectionObserver(
-            (entries) => { if (entries[0]?.isIntersecting) loadMoreSuggestions() },
-            { rootMargin: '200px', threshold: 0 }
-        )
-        observer.observe(el)
-        return () => observer.disconnect()
-    }, [suggestionPage, suggestionTotalPages, loadingMoreSuggestions, loadMoreSuggestions])
+        if (suggestionPage >= suggestionTotalPages || loadingMoreSuggestions || activeTab !== 'following') return
+        // Small delay to ensure the element is painted before observation
+        const timeoutId = setTimeout(() => {
+            const el = suggestionTriggerRef.current
+            if (!el) return
+            const observer = new IntersectionObserver(
+                (entries) => { if (entries[0]?.isIntersecting) loadMoreSuggestions() },
+                { rootMargin: '200px', threshold: 0 }
+            )
+            observer.observe(el)
+            
+            // Clean up the observer when effect unmounts or deps change
+            return () => {
+                 observer.disconnect()
+            }
+        }, 100)
+        
+        return () => clearTimeout(timeoutId)
+    }, [suggestionPage, suggestionTotalPages, loadingMoreSuggestions, loadMoreSuggestions, activeTab])
 
     // Infinite scroll: Following list
     useEffect(() => {
-        if (!hasMoreFollowing || loadingMoreFollowing) return
-        const el = followingTriggerRef.current
-        if (!el) return
-        const observer = new IntersectionObserver(
-            (entries) => { if (entries[0]?.isIntersecting) loadMoreFollowing() },
-            { rootMargin: '200px', threshold: 0 }
-        )
-        observer.observe(el)
-        return () => observer.disconnect()
-    }, [hasMoreFollowing, loadingMoreFollowing, loadMoreFollowing])
+        if (!hasMoreFollowing || loadingMoreFollowing || activeTab !== 'following') return
+        const timeoutId = setTimeout(() => {
+            const el = followingTriggerRef.current
+            if (!el) return
+            const observer = new IntersectionObserver(
+                (entries) => { if (entries[0]?.isIntersecting) loadMoreFollowing() },
+                { rootMargin: '200px', threshold: 0 }
+            )
+            observer.observe(el)
+            
+            return () => {
+                 observer.disconnect()
+            }
+        }, 100)
+        return () => clearTimeout(timeoutId)
+    }, [hasMoreFollowing, loadingMoreFollowing, loadMoreFollowing, activeTab])
 
     // Infinite scroll: Followers / Verified Followers list
     useEffect(() => {
-        if (!hasMoreFollowers || loadingMoreFollowers) return
-        const el = followersTriggerRef.current
-        if (!el) return
-        const observer = new IntersectionObserver(
-            (entries) => { if (entries[0]?.isIntersecting) loadMoreFollowers() },
-            { rootMargin: '200px', threshold: 0 }
-        )
-        observer.observe(el)
-        return () => observer.disconnect()
-    }, [hasMoreFollowers, loadingMoreFollowers, loadMoreFollowers])
+        if (!hasMoreFollowers || loadingMoreFollowers || (activeTab !== 'followers' && activeTab !== 'verified_followers')) return
+        const timeoutId = setTimeout(() => {
+            const el = followersTriggerRef.current
+            if (!el) return
+            const observer = new IntersectionObserver(
+                (entries) => { if (entries[0]?.isIntersecting) loadMoreFollowers() },
+                { rootMargin: '200px', threshold: 0 }
+            )
+            observer.observe(el)
+            
+            return () => {
+                 observer.disconnect()
+            }
+        }, 100)
+        return () => clearTimeout(timeoutId)
+    }, [hasMoreFollowers, loadingMoreFollowers, loadMoreFollowers, activeTab])
 
     const handleFollowChange = (userId, didFollow, userObj) => {
         if (didFollow && userObj) {

@@ -146,6 +146,7 @@ export function ComposeModal({ children, initialContent = "", open: openProp, on
         if ((isEmpty || isPosting)) return
 
         setIsPosting(true)
+        window.dispatchEvent(new Event('feed-creating-post'))
         try {
             const options = user?.businessProfile ? {
                 productId: selectedProductId,
@@ -153,14 +154,15 @@ export function ComposeModal({ children, initialContent = "", open: openProp, on
                 ctaLabel,
                 isPinned
             } : {}
-            
-            await postService.createPost(postContent.trim(), selectedFiles, null, null, options)
+            const newPost = await postService.createPost(postContent.trim(), selectedFiles, null, null, options)
             setPostContent("")
             setSelectedFiles([])
             setFilePreviews([])
             setCtaLink("")
             setSelectedProductId("")
             setOpen(false)
+            // Dispatch specifically to inject directly into feed without waiting for random offset poll
+            window.dispatchEvent(new CustomEvent('feed-new-post', { detail: newPost }))
             window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
             console.error('Error creating post:', error)

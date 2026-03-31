@@ -27,7 +27,7 @@ const videoAutoPlayManager = (() => {
     let active = null
     const ratios = new Map() // video -> intersectionRatio
 
-    const THRESHOLD_PLAY = 0.7
+    const THRESHOLD_PLAY = 0.5
     const SWITCH_DEBOUNCE_MS = 120
     let switchTimer = null
     const safePlay = (videoEl) => {
@@ -193,11 +193,34 @@ const videoAutoPlayManager = (() => {
     return { register }
 })()
 
-function AutoPlayVideo({ src, poster, className, style, onError }) {
-    const ref = useRef(null)
+function AutoPlayVideo({ src, poster, className, style, onClick, onError, priority = false }) {
+    const [shouldLoad, setShouldLoad] = useState(Boolean(priority))
+    const holderRef = useRef(null)
+    const videoRef = useRef(null)
 
     useEffect(() => {
-        const el = ref.current
+        if (priority || shouldLoad) return
+        const el = holderRef.current
+        if (!el || typeof window === "undefined" || typeof window.IntersectionObserver === "undefined") {
+            setShouldLoad(true)
+            return
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    setShouldLoad(true)
+                    observer.disconnect()
+                }
+            },
+            { rootMargin: "300px 0px", threshold: 0.01 }
+        )
+        observer.observe(el)
+        return () => observer.disconnect()
+    }, [priority, shouldLoad])
+
+    useEffect(() => {
+        if (!shouldLoad) return
+        const el = videoRef.current
         if (!el) return
         // Default required for autoplay policies; user can unmute via controls.
         el.muted = true
@@ -208,21 +231,38 @@ function AutoPlayVideo({ src, poster, className, style, onError }) {
         return () => {
             unregister?.()
         }
-    }, [])
+    }, [shouldLoad])
 
     return (
-        <video
-            ref={ref}
-            src={src}
-            poster={poster}
-            muted
-            playsInline
-            controls
-            preload="metadata"
-            className={className}
-            style={style}
-            onError={onError}
-        />
+        <div ref={holderRef} className="w-full h-full relative bg-black flex justify-center items-center overflow-hidden rounded-md" style={style}>
+            {shouldLoad ? (
+                <video
+                    ref={videoRef}
+                    src={src}
+                    poster={poster}
+                    muted
+                    playsInline
+                    controls
+                    autoPlay
+                    loop
+                    preload="metadata"
+                    className={className}
+                    style={{ width: '100%', height: '100%', maxHeight: style?.maxHeight || '100%', objectFit: 'contain' }}
+                    onClick={(e) => {
+                        if (onClick) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onClick(e);
+                        }
+                    }}
+                    onError={onError}
+                />
+            ) : (
+                <div className="w-full h-full animate-pulse bg-zinc-900 flex items-center justify-center overflow-hidden" style={{ minHeight: style?.maxHeight ? '250px' : 'auto' }}>
+                    {poster && <img src={poster} className="w-full h-full object-contain opacity-30" alt="" loading="lazy" />}
+                </div>
+            )}
+        </div>
     )
 }
 
@@ -590,8 +630,13 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                                         <AutoPlayVideo
                                             src={mediaUrl}
                                             poster={thumbnailUrl}
-                                            className="w-full h-auto"
+                                            className="w-full h-auto cursor-pointer"
                                             style={{ maxHeight: post.media.length === 1 ? '500px' : '250px' }}
+                                            priority={priorityMedia && index === 0}
+                                            onClick={() => {
+                                                setLightboxSrc(mediaUrl)
+                                                setLightboxOpen(true)
+                                            }}
                                             onError={() => {
                                                 console.error('Video load failed:', mediaUrl);
                                             }}
@@ -613,45 +658,72 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                     <ListPreviewCard listId={listId} />
                 )}
 
-                {/* Fullscreen image viewer */}
+                {/* Fullscreen media viewer */}
                 <Dialog open={lightboxOpen} onOpenChange={(v) => setLightboxOpen(!!v)}>
-                    <DialogContent className="max-w-none w-screen h-screen p-0 bg-black border-0 rounded-none [&>button]:hidden">
-                        <div
-                            className="w-full h-full flex items-center justify-center relative"
-                            onClick={() => setLightboxOpen(false)}
-                        >
+                    <DialogContent className="max-w-none w-screen h-screen p-0 bg-black border-0 rounded-none [&>button]:hidden z-[9999] flex flex-col">
+                        <div className="flex-1 relative flex items-center justify-center overflow-hidden">
                             {/* Close button */}
                             <button
                                 type="button"
-                                className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+                                className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors backdrop-blur-sm border border-white/10"
                                 onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
                                     setLightboxOpen(false)
                                 }}
                                 aria-label="Close"
-                                title="Close"
                             >
-                                ×
+                                <span className="text-2xl">×</span>
                             </button>
 
-                            {/* Image */}
-                            {lightboxSrc ? (
-                                <img
-                                    src={lightboxSrc}
-                                    alt="Full screen media"
-                                    className="max-w-[100vw] max-h-[100vh] object-contain select-none"
-                                    onClick={(e) => {
-                                        // prevent closing when clicking the image
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                    }}
-                                />
-                            ) : null}
+                            {/* Main Media Content */}
+                            <div 
+                                className="w-full h-full flex items-center justify-center p-4 cursor-pointer"
+                                onClick={() => setLightboxOpen(false)}
+                            >
+                                {lightboxSrc ? (
+                                    (() => {
+                                        const urlLower = lightboxSrc.toLowerCase()
+                                        const isVideo = /\.(mp4|webm|mov|m4v)($|\?)/i.test(urlLower)
+                                        if (isVideo) {
+                                            return (
+                                                <video 
+                                                    src={lightboxSrc} 
+                                                    controls 
+                                                    autoPlay 
+                                                    className="max-w-full max-h-full object-contain shadow-2xl"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            )
+                                        }
+                                        return (
+                                            <img
+                                                src={lightboxSrc}
+                                                alt="Full screen media"
+                                                className="max-w-full max-h-full object-contain select-none shadow-2xl"
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        )
+                                    })()
+                                ) : null}
+                            </div>
+                        </div>
 
-                            {/* Hint */}
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
-                                Click outside or press ESC to close
+                        {/* Immersive Action Bar (X Style) */}
+                        <div className="bg-gradient-to-t from-black via-black/80 to-transparent pt-10 pb-6 px-10">
+                            <div className="max-w-2xl mx-auto border-t border-white/10 pt-4">
+                                <PostActions
+                                    stats={stats}
+                                    post={post}
+                                    currentUserId={authUser?.id}
+                                    onLike={onLike}
+                                    onUnlike={onUnlike}
+                                    onRetweet={onRetweet}
+                                    onUnretweet={onUnretweet}
+                                    onBookmark={onBookmark}
+                                    onUnbookmark={onUnbookmark}
+                                    isDarkTheme={true}
+                                />
                             </div>
                         </div>
                     </DialogContent>

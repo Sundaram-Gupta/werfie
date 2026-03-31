@@ -143,7 +143,9 @@ mainServer.options('*', (req, res) => {
 const { gatewayLogin } = require('./lib/gateway-auth-login.cjs');
 mainServer.post('/api/auth/login', express.json({ limit: '512kb' }), async (req, res) => {
     try {
+        console.log('[Gateway] Login request for email:', req.body?.email);
         const result = await gatewayLogin(req.body);
+        console.log('[Gateway] Login result status:', result.status, 'message:', result.json?.message);
         if (result.status === 200 && result.json?.data?.accessToken) {
             res.cookie('accessToken', result.json.data.accessToken, { 
                 httpOnly: false, // browser/swagger can read for dev
@@ -222,6 +224,7 @@ const swaggerPath = path.join(__dirname, '..', '..', '..', 'swagger.yaml');
 if (fs.existsSync(swaggerPath)) {
     mainServer.get('/api-docs/spec', (req, res) => {
         res.setHeader('Content-Type', 'application/x-yaml');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.send(fs.readFileSync(swaggerPath, 'utf8'));
     });
     // Serve a custom Swagger UI HTML so it works on LAN devices too.
@@ -424,16 +427,12 @@ mainServer.all('/ws*', (req, res) => {
     proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
 });
 
-// Search – proxy directly to user/content services (works without search-service 3006)
-// Must use exact paths – Express * does not match exact path
-mainServer.all('/api/search/users', (req, res) => {
+// Search – proxy directly to unified search router in content service
+mainServer.all('/api/search*', (req, res) => {
+    injectUserFromToken(req);
     const orig = req.url;
-    req.url = (orig.includes('?') ? '/api/users/search?' + orig.split('?')[1] : '/api/users/search');
-    proxy.web(req, res, { target: USER_SERVICE_TARGET });
-});
-mainServer.all('/api/search/posts', (req, res) => {
-    const orig = req.url;
-    req.url = (orig.includes('?') ? '/search?' + orig.split('?')[1] : '/search');
+    // Map /api/search/* to /search/* on content-service
+    req.url = orig.replace('/api/search', '/search');
     proxy.web(req, res, { target: CONTENT_SERVICE_TARGET });
 });
 

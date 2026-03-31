@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage, getAvatarColor } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { BadgeCheck, Mail, Search, Settings, MessageSquarePlus, Smile, Send, MoreVertical, X, Users2, Plus, Check, ArrowLeft, ArrowRight, Link2, Phone, Video, Image, Mic, User, Clock, CameraOff, Ban, MessageCircle, Forward, Copy, Info, Trash2, MoreHorizontal } from "lucide-react"
+import { BadgeCheck, Mail, Search, Settings, MessageSquarePlus, Smile, Send, MoreVertical, X, Users2, Plus, Check, ArrowLeft, ArrowRight, Link2, Phone, Video, Image, Mic, User, Clock, CameraOff, Ban, MessageCircle, Forward, Copy, Info, Trash2, MoreHorizontal, Heart } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import { useState, useRef, useEffect } from "react"
@@ -9,6 +9,7 @@ import { cn, getMediaUrl } from "@/lib/utils"
 import EmojiPicker from 'emoji-picker-react'
 import { mediaService, searchService, messagingService, userService } from "@/services/api"
 import { socketService } from "@/services/socket"
+import ChatProfilePanel from "@/components/chat/ChatProfilePanel"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
@@ -119,6 +120,7 @@ export default function Chat() {
     const [showMessageInfoModal, setShowMessageInfoModal] = useState(false)
     const [selectedMessageDetail, setSelectedMessageDetail] = useState(null)
     const [conversationsReady, setConversationsReady] = useState(false)
+    const [reactingToMessageId, setReactingToMessageId] = useState(null)
 
     // Handlers for message actions
     const handleReply = (msg) => {
@@ -144,6 +146,24 @@ export default function Chat() {
         } catch (err) {
             console.error('Delete message error:', err)
             // Rollback if needed (though usually not critical for "delete for me")
+        }
+    }
+
+    const handleReactAction = async (messageId, emoji) => {
+        try {
+            setReactingToMessageId(null)
+            const updated = await messagingService.reactToMessage(messageId, emoji)
+            // Update local messages state
+            setMessages(prev => prev.map(m => {
+                if (m.id === messageId) {
+                    const reactions = updated.reactions || []
+                    return { ...m, reactions }
+                }
+                return m
+            }))
+        } catch (err) {
+            console.error('Reaction error:', err)
+            toast.error("Failed to add reaction")
         }
     }
 
@@ -434,6 +454,7 @@ export default function Chat() {
         mediaType: msg.type,
         thumbnailUrl: msg.thumbnailUrl,
         duration: msg.duration,
+        reactions: msg.reactions || [],
         createdAt: msg.createdAt,
         timestamp: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
@@ -801,8 +822,10 @@ export default function Chat() {
                     </div>
                 </div>
 
-                {/* Right panel fills space beside the inbox (no centered gap). Bubble max-width keeps messages readable. */}
-                <div className="flex-1 flex flex-col h-screen bg-black min-w-0 min-h-0 overflow-hidden">
+                {/* Main Chat and Info Panel wrapper */}
+                <div className="flex-1 flex min-w-0 h-screen overflow-hidden">
+                {/* Middle Chat Area */}
+                <div className={cn("flex-1 flex flex-col min-w-0 bg-black overflow-hidden transition-all", showUserInfoModal ? "hidden md:flex border-r border-border" : "")}>
                     {selectedChat ? (
                         <>
                             <div className="flex flex-col h-full w-full min-h-0 min-w-0">
@@ -965,8 +988,65 @@ export default function Chat() {
                                                             {msg.sender === "me" && <Check className="w-[13px] h-[13px]" strokeWidth={2.5} />}
                                                         </span>
                                                     </div>
-                                                    {/* Hover options... (Made visible explicitly per request & mobile friendly) */}
-                                                    <div className="absolute top-1/2 -translate-y-1/2 flex items-center gap-1" style={{[msg.sender === "me" ? "left" : "right"]: "-38px"}}>
+
+                                                    {/* Reactions Display */}
+                                                    {msg.reactions?.length > 0 && (
+                                                        <div className={cn(
+                                                            "flex flex-wrap gap-1 mt-1 border-t border-white/10 pt-1.5",
+                                                            msg.sender === "me" ? "justify-end" : "justify-start"
+                                                        )}>
+                                                            {Object.entries(
+                                                                msg.reactions.reduce((acc, r) => {
+                                                                    acc[r.emoji] = (acc[r.emoji] || 0) + 1
+                                                                    return acc
+                                                                }, {})
+                                                            ).map(([emoji, count]) => (
+                                                                <div key={emoji} className="bg-black/40 rounded-full px-2 py-0.5 flex items-center gap-1 text-[12px] border border-white/5 backdrop-blur-sm">
+                                                                    <span>{emoji}</span>
+                                                                    {count > 1 && <span className="text-white/60 font-medium">{count}</span>}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Hover options... (Visible on hover & when reacting) */}
+                                                    <div className={cn(
+                                                        "absolute top-1/2 -translate-y-1/2 flex items-center gap-1.5 transition-opacity duration-200",
+                                                        reactingToMessageId === msg.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                                    )} style={{[msg.sender === "me" ? "left" : "right"]: "-74px"}}>
+                                                        {/* Quick Reaction Button (X-Style HeartPlus) */}
+                                                        <div className="relative">
+                                                            <button 
+                                                                onClick={() => setReactingToMessageId(reactingToMessageId === msg.id ? null : msg.id)}
+                                                                className={cn(
+                                                                    "h-[30px] w-[30px] rounded-full border border-[#2f3336] bg-black flex items-center justify-center text-[#71767b] hover:text-white transition-all transform hover:scale-110",
+                                                                    reactingToMessageId === msg.id && "bg-[#1d9bf0] text-white border-[#1d9bf0]"
+                                                                )} 
+                                                                title="React"
+                                                            >
+                                                                <Heart className="w-3.5 h-3.5" />
+                                                                <Plus className="absolute bottom-1 right-1 w-2.5 h-2.5" strokeWidth={4} />
+                                                            </button>
+
+                                                            {/* Quick Reaction Bar */}
+                                                            {reactingToMessageId === msg.id && (
+                                                                <div className={cn(
+                                                                    "absolute -top-12 z-[50] flex items-center gap-1 bg-[#16181c] border border-[#2f3336] rounded-full px-2 py-1.5 shadow-2xl animate-in zoom-in-50 duration-200",
+                                                                    msg.sender === "me" ? "left-0 origin-bottom-left" : "right-0 origin-bottom-right"
+                                                                )}>
+                                                                    {['❤️', '👍', '🔥', '😂', '😮', '😢', '🙏'].map(emoji => (
+                                                                        <button 
+                                                                            key={emoji}
+                                                                            onClick={() => handleReactAction(msg.id, emoji)}
+                                                                            className="text-[18px] hover:scale-125 transition-transform px-1"
+                                                                        >
+                                                                            {emoji}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
                                                                 <button className="h-[26px] w-[26px] rounded-full border border-[#2f3336] bg-black flex items-center justify-center text-[#71767b] hover:text-[#e7e9ea] hover:bg-[#16181c] transition-colors" title="More">
@@ -1143,6 +1223,14 @@ export default function Chat() {
                         </div>
                     )}
                 </div>
+
+                {/* Right Info Panel Sliding Column */}
+                {selectedChat && showUserInfoModal && (
+                    <div className={cn("w-full md:w-[350px] lg:w-[400px] shrink-0 border-l border-border h-full bg-black z-20 transition-all", showUserInfoModal ? "absolute md:relative right-0 inset-y-0" : "hidden")}>
+                        <ChatProfilePanel targetUser={selectedChat.user} onClose={() => setShowUserInfoModal(false)} />
+                    </div>
+                )}
+                </div>
             </div>
 
             {/* New Message Modal */}
@@ -1210,86 +1298,7 @@ export default function Chat() {
                 </DialogContent>
             </Dialog>
 
-            {/* User Info Modal */}
-            {selectedChat && (
-                <Dialog open={showUserInfoModal} onOpenChange={setShowUserInfoModal}>
-                    <DialogContent className="sm:max-w-[480px] w-[95vw] bg-[#16181c] border-border p-0 overflow-hidden rounded-2xl [&>button]:hidden">
-                        <DialogTitle className="sr-only">User profile: {selectedChat.user.name}</DialogTitle>
-                        <DialogDescription className="sr-only">Profile and options for @{selectedChat.user.handle}</DialogDescription>
-                        <div className="flex flex-col">
-                            <div className="flex items-center justify-between p-5 border-b border-border">
-                                <button
-                                    onClick={() => setShowUserInfoModal(false)}
-                                    className="p-2.5 -ml-2 hover:bg-white/[0.06] rounded-full transition-colors text-white"
-                                >
-                                    <ArrowLeft className="w-6 h-6" />
-                                </button>
-                                <button className="p-2.5 -mr-2 hover:bg-white/[0.06] rounded-full transition-colors text-muted-foreground hover:text-white">
-                                    <Link2 className="w-6 h-6" />
-                                </button>
-                            </div>
-                            <div className="flex flex-col items-center pt-8 pb-6 px-8">
-                                <Avatar className="w-28 h-28 mb-5 border-2 border-border">
-                                    <AvatarImage src={getMediaUrl(selectedChat.user.avatar)} />
-                                    <AvatarFallback className={cn("text-white font-semibold text-3xl", getAvatarColor(selectedChat.user.name || selectedChat.user.id))}>{selectedChat.user.name?.[0]}</AvatarFallback>
-                                </Avatar>
-                                <h3 className="text-[22px] font-bold flex items-center gap-1.5 mb-1">
-                                    {selectedChat.user.name}
-                                    {selectedChat.user.verified && <BadgeCheck className="w-6 h-6 text-[#ffd700] fill-[#ffd700]/20" />}
-                                </h3>
-                                <p className="text-muted-foreground text-[16px] mb-8">@{selectedChat.user.handle}</p>
-                                <div className="grid grid-cols-4 gap-8 w-full max-w-[320px]">
-                                    <button className="flex flex-col items-center gap-3 text-muted-foreground hover:text-white transition-colors">
-                                        <div className="w-14 h-14 rounded-full bg-white/[0.08] flex items-center justify-center">
-                                            <Phone className="w-6 h-6" />
-                                        </div>
-                                        <span className="text-[14px] font-medium">Voice</span>
-                                    </button>
-                                    <button className="flex flex-col items-center gap-3 text-muted-foreground hover:text-white transition-colors">
-                                        <div className="w-14 h-14 rounded-full bg-white/[0.08] flex items-center justify-center">
-                                            <Video className="w-6 h-6" />
-                                        </div>
-                                        <span className="text-[14px] font-medium">Video</span>
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowUserInfoModal(false); navigate(`/profile/${selectedChat.user.id}`) }}
-                                        className="flex flex-col items-center gap-3 text-muted-foreground hover:text-white transition-colors"
-                                    >
-                                        <div className="w-14 h-14 rounded-full bg-white/[0.08] flex items-center justify-center">
-                                            <User className="w-6 h-6" />
-                                        </div>
-                                        <span className="text-[14px] font-medium">Profile</span>
-                                    </button>
-                                    <button className="flex flex-col items-center gap-3 text-muted-foreground hover:text-white transition-colors">
-                                        <div className="w-14 h-14 rounded-full bg-white/[0.08] flex items-center justify-center">
-                                            <MoreVertical className="w-6 h-6" />
-                                        </div>
-                                        <span className="text-[14px] font-medium">More</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="border-t border-border px-5 py-3">
-                                <button className="w-full flex items-center gap-3 py-3.5 text-[16px] text-white hover:bg-white/[0.04] rounded-lg px-3 transition-colors">
-                                    <Clock className="w-6 h-6 text-muted-foreground" />
-                                    <span className="flex-1 text-left">Disappearing Messages</span>
-                                    <span className="text-muted-foreground text-[15px]">Off</span>
-                                    <span className="text-muted-foreground">&gt;</span>
-                                </button>
-                                <button className="w-full flex items-center gap-3 py-3.5 text-[16px] text-white hover:bg-white/[0.04] rounded-lg px-3 transition-colors">
-                                    <CameraOff className="w-6 h-6 text-muted-foreground" />
-                                    <span className="flex-1 text-left">Block Screenshots</span>
-                                    <span className="text-muted-foreground text-[15px]">Off</span>
-                                    <span className="text-muted-foreground">&gt;</span>
-                                </button>
-                                <button className="w-full flex items-center gap-3 py-3.5 text-[16px] text-red-500 hover:bg-red-500/10 rounded-lg px-3 transition-colors">
-                                    <Ban className="w-6 h-6" />
-                                    <span className="flex-1 text-left">Block Messages</span>
-                                </button>
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-            )}
+            {/* User Info Modal is replaced by slide out panel */}
             {/* Forward Message Modal */}
             {showForwardModal && (
                 <div className="fixed inset-0 z-[100] bg-[#5b7083]/40 flex items-center justify-center p-4">

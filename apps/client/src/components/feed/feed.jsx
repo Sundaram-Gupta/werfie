@@ -8,7 +8,11 @@ import { useTranslation } from "react-i18next"
 
 export function Feed({ tab = 'for-you', ...rest }) {
     const { t } = useTranslation()
-    const { posts, loading, error, loadMore, hasMore, loadingMore, likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost } = usePosts({ tab, ...rest })
+    const { 
+        posts, loading, error, loadMore, hasMore, loadingMore, 
+        pendingPosts, showPendingPosts,
+        likePost, unlikePost, retweetPost, unretweetPost, bookmarkPost, unbookmarkPost, deletePost 
+    } = usePosts({ tab, ...rest })
     const loadMoreTriggerRef = useRef(null)
     const feedRef = useRef(null)
 
@@ -80,11 +84,23 @@ export function Feed({ tab = 'for-you', ...rest }) {
 
     return (
         <div ref={feedRef} className="relative">
-            {/* Subtle Refreshing Indicator (if posts already exist) */}
-            {loading && posts.length > 0 && (
-                <div className="h-1 bg-primary/20 overflow-hidden sticky top-[53px] z-10 w-full">
-                    <div className="h-full bg-primary animate-progress-indeterminate origin-left" />
-                </div>
+            {/* New Posts Notification Banner */}
+            {pendingPosts.length > 0 && (
+                <button 
+                    onClick={showPendingPosts}
+                    className="sticky top-[53px] z-20 w-full bg-primary py-3 text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all border-b border-border shadow-sm flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300"
+                >
+                    <div className="flex -space-x-2 mr-1">
+                        {pendingPosts.slice(0, 3).map(p => (
+                            <div 
+                                key={p.id} 
+                                className="w-6 h-6 rounded-full border-2 border-primary bg-muted overflow-hidden bg-cover bg-center" 
+                                style={{ backgroundImage: `url(${p.user?.profile?.avatar || p.user?.avatar || '/placeholder.png'})` }}
+                            />
+                        ))}
+                    </div>
+                    {t('feed.show_new_posts', { count: pendingPosts.length }) || `Show ${pendingPosts.length} new posts`}
+                </button>
             )}
 
             <div className="divide-y divide-border">

@@ -1822,6 +1822,124 @@ paths:
         '200': { description: Reaction removed }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/messages/chat/profile/{userId}:
+    get:
+      summary: Get chat profile and settings
+      description: Retrieve details about a user and your chat settings with them (blocked, muted, disappearing mode).
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Chat profile details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      user: { type: object }
+                      settings: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/chat/disappearing:
+    put:
+      summary: Update disappearing mode
+      description: Set disappearing messages duration for a specific user pair.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, mode]
+              properties:
+                targetUserId: { type: string }
+                mode: { type: string, enum: [off, 24h, 7d] }
+      responses:
+        '200': { description: Disappearing mode updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/chat/screenshot-block:
+    put:
+      summary: Update screenshot block
+      description: Enable or disable screenshot protection for a chat.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, enabled]
+              properties:
+                targetUserId: { type: string }
+                enabled: { type: boolean }
+      responses:
+        '200': { description: Screenshot block updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/chat/block:
+    post:
+      summary: Block user in chat
+      description: Prevent a user from sending messages to you.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+      responses:
+        '200': { description: User blocked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/chat/block/{id}:
+    delete:
+      summary: Unblock user
+      description: Allow a previously blocked user to message you again.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID to unblock
+          schema: { type: string }
+      responses:
+        '200': { description: User unblocked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/messages/chat/call/start:
+    post:
+      summary: Start/Notify call
+      description: Send an incoming call notification to a user.
+      tags: [Messaging]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+                type: { type: string, enum: [audio, video] }
+      responses:
+        '200': { description: Call notification sent }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   # ============ MONETIZATION ============
   /api/monetization/profile:
     get:

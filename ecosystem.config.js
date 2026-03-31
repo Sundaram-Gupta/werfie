@@ -86,13 +86,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3002,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3002,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -118,7 +118,7 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3003,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret",
                 KAFKA_BROKER: "localhost:9093",
                 KAFKAJS_NO_PARTITIONER_WARNING: "1"
@@ -126,7 +126,7 @@ module.exports = {
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3003,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -146,13 +146,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3004,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3004,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -172,14 +172,14 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3005,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 KAFKA_BROKER: "localhost:9092",
                 KAFKAJS_NO_PARTITIONER_WARNING: "1"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3005,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 KAFKA_BROKER: "localhost:9092"
             }
         },
@@ -231,7 +231,7 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3019,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret",
                 KAFKA_BROKER: "localhost:9092",
                 KAFKAJS_NO_PARTITIONER_WARNING: "1"
@@ -239,7 +239,7 @@ module.exports = {
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3019,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret",
                 KAFKA_BROKER: "localhost:9092"
             }
@@ -262,13 +262,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3014,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3014,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -291,13 +291,13 @@ module.exports = {
                 PORT: 3009,
                 USER_SERVICE_URL: "http://127.0.0.1:3002",
                 CONTENT_SERVICE_URL: "http://127.0.0.1:3003",
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3009,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -317,13 +317,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3010,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3010,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -343,13 +343,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3011,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3011,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -406,7 +406,7 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3012,
-                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db",
+                DATABASE_URL: "postgresql://xclone:xclone_dev_password@localhost:5433/xclone_db?connect_timeout=5",
                 JWT_SECRET: "dev-secret",
                 AUTH_GATEWAY_URL: "http://127.0.0.1:3001"
             }

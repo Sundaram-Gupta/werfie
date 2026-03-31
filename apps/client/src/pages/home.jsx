@@ -97,6 +97,7 @@ export default function Home() {
         if ((!finalContent && selectedFiles.length === 0) || isPosting) return
 
         setIsPosting(true)
+        window.dispatchEvent(new Event('feed-creating-post'))
         try {
             await createPost(finalContent, selectedFiles)
             filePreviews.forEach(p => URL.revokeObjectURL(p.url))
@@ -106,8 +107,6 @@ export default function Home() {
             setLocation("")
             clearDraft()
             toast.success(t('feed.posted') || 'Posted!')
-            // createPost already updates the state optimistically, but we keep feed-refresh for other listeners
-            window.dispatchEvent(new Event('feed-refresh'))
         } catch (error) {
             console.error('Error creating post:', error)
             const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Failed to create post'

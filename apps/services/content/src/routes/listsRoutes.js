@@ -5,6 +5,100 @@ const router = express.Router();
 
 const authenticateToken = require('../middleware/auth');
 
+// GET /: lists root
+// Many clients call `/lists` expecting discover-style public lists.
+// Without this handler, `/lists` falls through to the generic `GET /:id` route in index.js,
+// which treats "lists" as a post/list id and triggers Prisma errors -> 500.
+router.get('/', async (req, res) => {
+    try {
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 5));
+        const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+        // Optional auth: if token provided, include personalized fields (following).
+        let currentUserId = null;
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        if (token) {
+            try {
+                const decoded = require('jsonwebtoken').decode(token);
+                const raw = decoded?.sub || decoded?.id || decoded?.userId;
+                currentUserId = raw != null ? String(raw) : null;
+            } catch (e) {
+                // Ignore decode failures; treat as public.
+            }
+        }
+
+        // Same scope as GET /discover: owned/followed/member lists are excluded.
+        const discoverAndFilters = [
+            {
+                NOT: {
+                    OR: [
+                        { name: { startsWith: 'Important News for @' } },
+                        { name: { startsWith: 'Favorite Accounts of @' } },
+                        { name: { startsWith: 'Top Trends by @' } }
+                    ]
+                }
+            }
+        ];
+
+        if (currentUserId) {
+            discoverAndFilters.push({
+                NOT: {
+                    OR: [
+                        { ownerId: currentUserId },
+                        { followers: { some: { userId: currentUserId } } },
+                        { members: { some: { userId: currentUserId } } }
+                    ]
+                }
+            });
+        }
+
+        const discoverWhere = {
+            isPrivate: false,
+            AND: discoverAndFilters
+        };
+
+        const discover = await prisma.list.findMany({
+            where: discoverWhere,
+            take: limit,
+            skip: offset,
+            orderBy: [
+                { followers: { _count: 'desc' } }, // Show popular first
+                { createdAt: 'desc' }             // Then newest
+            ],
+            include: {
+                owner: { include: { profile: true } },
+                _count: { select: { members: true, followers: true } },
+                followers: currentUserId ? { where: { userId: currentUserId } } : undefined
+            }
+        });
+
+        const formatted = discover.map(list => {
+            const p = list.owner?.profile;
+            const handle = p?.handle || list.owner?.email?.split('@')[0] || 'user';
+            const mc = list._count?.members ?? 0;
+            const fc = list._count?.followers ?? 0;
+            return {
+                id: list.id,
+                name: list.name,
+                owner: `@${handle}`,
+                ownerHandle: handle,
+                memberCount: mc,
+                followerCount: fc,
+                members: `${mc} member${mc !== 1 ? 's' : ''}`,
+                avatar: list.avatar,
+                banner: list.banner,
+                isFollowing: currentUserId ? list.followers.length > 0 : false
+            };
+        });
+
+        res.json(formatted);
+    } catch (error) {
+        console.error('Error fetching lists root:', error);
+        res.status(500).json({ error: 'Failed to fetch lists' });
+    }
+});
+
 // GET /pinned: lists pinned by owner (List.isPinned) OR pinned as a follower (ListFollower.isPinned)
 router.get('/pinned', authenticateToken, async (req, res) => {
     try {

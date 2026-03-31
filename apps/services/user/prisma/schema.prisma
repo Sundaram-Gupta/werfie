@@ -73,6 +73,7 @@ model User {
   
   // Relations from Institutional
   institutionalProfile InstitutionalProfile?
+  seenPosts           SeenPost[]
 
   // Relations from Enterprise
   enterpriseUser      EnterpriseUser?
@@ -134,7 +135,6 @@ model InstitutionalProfile {
   
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   worldLeaders    WorldLeader[]
-  announcements   Announcement[]
 }
 
 model WorldLeader {
@@ -244,12 +244,18 @@ model Post {
   
   media           PostMedia[]
 
-  likes       Like[]
-  retweets    Retweet[]
-  bookmarks   Bookmark[]
-  notifications Notification[]
+  likesCount     Int             @default(0)
+  repliesCount   Int             @default(0)
+  retweetsCount  Int             @default(0)
+  bookmarksCount Int             @default(0)
+
+  likes          Like[]
+  retweets       Retweet[]
+  bookmarks      Bookmark[]
+  seenBy         SeenPost[]
+  notifications  Notification[]
   communityPosts CommunityPost[]
-  highlightedIn Highlight[]
+  highlightedIn  Highlight[]
   
   isPinned       Boolean         @default(false)
   productId      String?
@@ -261,6 +267,19 @@ model Post {
   @@index([replyToId])
   @@index([createdAt])
   @@index([scheduledAt])
+}
+
+model SeenPost {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
 }
 
 model PostMedia {
@@ -867,15 +886,12 @@ model Report {
 }
 
 model VerificationRequest {
-  id         String   @id @default(uuid())
-  userId     String
-  businessId String?
-  type       String   @default("INDIVIDUAL") // INDIVIDUAL, BUSINESS, INSTITUTION
-  status     String   @default("PENDING")    // PENDING, APPROVED, REJECTED
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  userId    String
+  status    String   @default("pending") // pending, approved, rejected
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
 }
@@ -953,8 +969,6 @@ model Announcement {
   transcriptUrl         String?
   speechVideoUrl        String?
   importanceScore       Float?    // Future AI scoring
- 
-  institution           InstitutionalProfile @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
   createdBy             String    // User ID
   createdAt             DateTime  @default(now())

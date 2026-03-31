@@ -40,6 +40,7 @@ async function gatewayLogin(body) {
   const p = getPrisma();
   const rows = await p.$queryRaw`SELECT id, email, "passwordHash", "role" FROM "User" WHERE LOWER(email) = LOWER(${email}) LIMIT 1`;
   const user = rows[0] || null;
+  console.log('[GatewayLogin] Query result for', email, ':', user ? 'User found' : 'Not found');
   let profile = null;
   if (user) {
     try {
@@ -57,7 +58,12 @@ async function gatewayLogin(body) {
     return jsonError('Account setup incomplete (no password set)', 400, null);
   }
 
+  console.log('[GatewayLogin] Comparing password for', email);
+  console.log('[GatewayLogin] Incoming password length:', password.length);
+  console.log('[GatewayLogin] Matches casey@123?', password === 'casey@123');
+  console.log('[GatewayLogin] Matches password123?', password === 'password123');
   const isValid = await bcrypt.compare(password, user.passwordHash);
+  console.log('[GatewayLogin] bcrypt compare result:', isValid);
   if (!isValid) {
     return jsonError('Invalid credentials', 401, null);
   }

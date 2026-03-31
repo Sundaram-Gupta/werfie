@@ -12,6 +12,7 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3003;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+let hasSeenPostTable = false;
 
 app.use(express.json());
 
@@ -93,6 +94,7 @@ const soapboxRoutes = require('./routes/soapboxRoutes');
 const debateRoutes = require('./routes/debateRoutes');
 const highlightsRoutes = require('./routes/highlightsRoutes');
 const articlesRoutes = require('./routes/articlesRoutes');
+const searchRoutes = require('./routes/searchRoutes');
 const MediaService = require('./services/media.service');
 
 // All routes now assume the /api prefix has been stripped if they were called with it
@@ -107,6 +109,7 @@ app.use('/soapbox', soapboxRoutes);
 app.use('/debate', debateRoutes);
 app.use('/highlights', highlightsRoutes);
 app.use('/articles', articlesRoutes);
+app.use('/search', searchRoutes);
 
 // Backup registration in case rewrite fails or is skipped
 app.use('/api/soapbox', soapboxRoutes);
@@ -290,64 +293,13 @@ app.get('/media/library', authenticateToken, async (req, res) => {
     }
 });
 
-// Search Posts (route at /search - gateway rewrite strips /api/posts from /api/posts/search)
+// Search Posts - HANDLED BY searchRoutes.js router mounted at /search
+/*
 app.get('/search', async (req, res) => {
     const { q, limit = 20, offset = 0, hasMedia } = req.query;
-
-    if (!q || q.trim().length === 0) {
-        return res.json([]);
-    }
-
-    // Split query for multi-keyword processing
-    const terms = q.trim().split(/\s+/).filter(t => t.length > 0);
-
-    try {
-        // Build an 'AND' query: ALL terms must be present in the content
-        const andConditions = terms.map(term => ({
-            content: { contains: term, mode: 'insensitive' }
-        }));
-
-        const posts = await prisma.post.findMany({
-            where: {
-                AND: andConditions,
-                ...(hasMedia === 'true' ? { media: { some: {} } } : {})
-            },
-            include: {
-                user: {
-                    include: { profile: true }
-                },
-                media: true,
-                _count: {
-                    select: { likes: true, retweets: true, replies: true }
-                },
-                highlightedIn: { where: { userId: req.headers['x-user-id'] || '' }, select: { id: true } }
-            },
-            take: parseInt(limit),
-            skip: parseInt(offset),
-            orderBy: { createdAt: 'desc' }
-        });
-
-        // Sanitize
-        const safePosts = posts.map(post => {
-            if (post.user) {
-                const { passwordHash, ...safeUser } = post.user;
-                return {
-                    ...post,
-                    user: safeUser
-                };
-            }
-            return {
-                ...post,
-                user: { id: post.userId, profile: { handle: 'unknown', name: 'Deleted User' } }
-            };
-        });
-
-        res.json(backfillMediaUrls(safePosts));
-    } catch (error) {
-        console.error('Search Posts Error:', error);
-        res.status(500).json({ error: 'Failed to search posts', details: error.message });
-    }
+    ...
 });
+*/
 
 // Helper: only show posts that are published (scheduledAt null or in the past)
 const publishedPostFilter = () => ({
@@ -448,6 +400,18 @@ async function handleCreatePost(req, res, body, files) {
             } catch (mediaUrlErr) {
                 // Non-fatal: mediaUrls column update failed, media array is still accessible
                 console.error('[ContentService] Failed to update mediaUrls column:', mediaUrlErr);
+            }
+        }
+
+        // 2c. Update repliesCount on parent post if this is a reply
+        if (replyToId) {
+            try {
+                await prisma.post.update({
+                    where: { id: replyToId },
+                    data: { repliesCount: { increment: 1 } }
+                });
+            } catch (countErr) {
+                console.error('[ContentService] Failed to increment repliesCount:', countErr);
             }
         }
 
@@ -740,7 +704,8 @@ function interleaveRandomFeed(items, options = {}) {
     }
 
     const out = [];
-    let prevKey = null;
+    const previousKeys = []; // Sliding window of the last 5 user keys
+    const DIVERSITY_WINDOW = 5;
 
     while (out.length < list.length) {
         let total = 0;
@@ -755,26 +720,36 @@ function interleaveRandomFeed(items, options = {}) {
         const criticalLimit = Math.ceil(total / 2);
         let candidates = [];
         
-        // If one bucket dominates (>50%), they MUST be picked to prevent back-to-back clumping later
+        // 1. Critical selection: if a user dominates the remainder, we MUST pick them (ignoring diversity window if necessary)
         if (max >= criticalLimit) {
             for (const k of keys) {
-                if (groups.get(k).length >= criticalLimit && k !== prevKey) {
+                if (groups.get(k).length >= criticalLimit && (previousKeys.length === 0 || k !== previousKeys[previousKeys.length - 1])) {
                     candidates.push(k);
                 }
             }
         }
 
-        // Proportional probability selection for fairer top-post randomization
+        // 2. Normal selection: pick a user NOT in the recent sliding window
         if (candidates.length === 0) {
             for (const k of keys) {
                 const c = groups.get(k).length;
-                if (c > 0 && k !== prevKey) {
+                if (c > 0 && !previousKeys.includes(k)) {
                     for (let i = 0; i < c; i++) candidates.push(k);
                 }
             }
         }
 
-        // If forced to repeat (unavoidable), allow selection from all remaining buckets
+        // 3. Fallback: if all active users are in the window, pick one that isn't the IMMEDIATE previous one
+        if (candidates.length === 0) {
+            for (const k of keys) {
+                const c = groups.get(k).length;
+                if (c > 0 && (previousKeys.length === 0 || k !== previousKeys[previousKeys.length - 1])) {
+                    for (let i = 0; i < c; i++) candidates.push(k);
+                }
+            }
+        }
+
+        // 4. Force fallback: pick anyone left
         if (candidates.length === 0) {
             for (const k of keys) {
                 if (groups.get(k).length > 0) candidates.push(k);
@@ -784,23 +759,22 @@ function interleaveRandomFeed(items, options = {}) {
         // Pick candidate among equals
         let pick;
         if (!stable && seed === null) {
-            // maintain entropy for discovery/random feeds
             pick = candidates[Math.floor(Math.random() * candidates.length)];
         } else if (seed !== null) {
-            // Seeded pick for stable following variety
             candidates.sort();
             const pickIndex = Math.floor(seededRandom(seed + out.length) * candidates.length);
             pick = candidates[pickIndex];
         } else {
-            // strictly deterministic
             candidates.sort();
             pick = candidates[0];
         }
+
         const bucket = groups.get(pick);
         const nextItem = bucket.shift();
         if (nextItem) {
             out.push(nextItem);
-            prevKey = pick;
+            previousKeys.push(pick);
+            if (previousKeys.length > DIVERSITY_WINDOW) previousKeys.shift();
         }
     }
     
@@ -1262,6 +1236,35 @@ function backfillMediaUrls(posts) {
     return posts.map((p) => normalizePostMediaUrlsInTree(p));
 }
 
+// Background worker to record seen posts without blocking the main response
+async function recordSeenPosts(userId, postIds) {
+    if (!userId || !Array.isArray(postIds) || postIds.length === 0) return;
+    try {
+        const data = postIds.map(pid => ({
+            userId,
+            postId: pid
+        }));
+
+        // Use createMany with skipDuplicates: true
+        await prisma.seenPost.createMany({
+            data,
+            skipDuplicates: true
+        });
+
+        // Optional: Cleanup old seen posts (e.g. > 24h)
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        await prisma.seenPost.deleteMany({
+            where: {
+                userId,
+                createdAt: { lt: yesterday }
+            }
+        });
+    } catch (err) {
+        console.error('[ContentService] Error recording seen posts:', err);
+    }
+}
+
 // Get All Posts (Feed compatible) - public when no auth; with auth includes bookmarks
 app.get('/', optionalAuthenticateToken, async (req, res) => {
     console.log(`[ContentService] GET / posts hit. User: ${req.user?.userId || 'anonymous'}`);
@@ -1316,9 +1319,11 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
         let fetchedPosts = [];
         let nextCursor = null;
         let hasMore = false;
+        const isDiscovery = !userId && !req.query.communityId && !req.query.search;
 
         // If cursor is provided, try cursor pagination, otherwise default to offset
-        if (cursor && !skipCount) {
+        // We SKIP standard cursor pagination for discovery feeds because they use high-performance random generation
+        if (cursor && !skipCount && !isDiscovery) {
              const cursorId = String(cursor);
              const cursorPost = await prisma.post.findUnique({
                  where: { id: cursorId },
@@ -1357,111 +1362,117 @@ app.get('/', optionalAuthenticateToken, async (req, res) => {
              
              return res.json({ posts, nextCursor, hasMore });
         }
-        // Optimized Retrieval Strategy: Discovery/For-You Mix (50% Recent, 30% Popular, 20% Random)
-        const isDiscovery = !userId && !req.query.communityId && !req.query.search;
         
-        if (isDiscovery && seed) {
-            const recentLimit = Math.ceil(take * 0.5);
-            const popularLimit = Math.ceil(take * 0.3);
-            const randomLimit = Math.max(1, take - recentLimit - popularLimit);
-
-            // 1. Decode Fused Cursor
-            let cursors = { recentOffset: 0, popularOffset: 0, randomOffset: 0 };
-            if (cursor) {
-                try {
-                    const decoded = Buffer.from(String(cursor), 'base64').toString();
-                    cursors = { ...cursors, ...JSON.parse(decoded) };
-                } catch (e) {
-                    console.error('[ContentService] Cursor Parse Error:', e);
-                }
+        // Optimized Retrieval Strategy: High-Performance Random Discovery Feed (X-Style)
+        
+        if (isDiscovery) {
+            // User requested to explicitly fetch 50 new posts on every page refresh
+            const FETCH_COUNT = 50;
+            
+            // STEP 1: RANDOM POST FETCH
+            // Jump to a random chunk of the unseen DB items and fetch a batch.
+            const randomOffset = Math.floor(Math.random() * 5000);
+            
+            // We fetch 4x the amount needed so we can filter diversity and shuffle efficiently
+            let query = `
+                SELECT "id"
+                FROM "Post" 
+                WHERE "replyToId" IS NULL 
+                  AND "scheduledAt" IS NULL
+                  ${currentUserId && hasSeenPostTable ? `AND "id" NOT IN (SELECT "postId" FROM "SeenPost" WHERE "userId" = '${currentUserId}')` : ''}
+                ORDER BY "createdAt" DESC
+                OFFSET ${randomOffset}
+                LIMIT ${FETCH_COUNT * 4}
+            `;
+            let candidateIdsRaw = await prisma.$queryRawUnsafe(query);
+            let candidateIds = candidateIdsRaw.map(r => r.id);
+            
+            // STEP 4: FALLBACK LOGIC
+            if (candidateIds.length < FETCH_COUNT) {
+                 const fallbackQuery = `
+                     SELECT "id"
+                     FROM "Post"
+                     WHERE "replyToId" IS NULL AND "scheduledAt" IS NULL
+                       ${currentUserId && hasSeenPostTable ? `AND "id" NOT IN (SELECT "postId" FROM "SeenPost" WHERE "userId" = '${currentUserId}')` : ''}
+                     ORDER BY random()
+                     LIMIT ${FETCH_COUNT * 4}
+                 `;
+                 const fbRaw = await prisma.$queryRawUnsafe(fallbackQuery);
+                 candidateIds = fbRaw.map(r => r.id);
+                 
+                 // If STILL less (user seen almost everything), reset seen history!
+                 if (candidateIds.length < FETCH_COUNT && currentUserId) {
+                     try {
+                         await prisma.seenPost.deleteMany({ where: { userId: currentUserId } });
+                     } catch(e) { console.error('Error clearing seen history:', e) }
+                     
+                     const resetQuery = `
+                         SELECT "id"
+                         FROM "Post"
+                         WHERE "replyToId" IS NULL AND "scheduledAt" IS NULL
+                         ORDER BY random()
+                         LIMIT ${FETCH_COUNT * 4}
+                     `;
+                     const rsRaw = await prisma.$queryRawUnsafe(resetQuery);
+                     candidateIds = rsRaw.map(r => r.id);
+                 }
+            }
+            
+            // FINAL SHUFFLE: Fisher-Yates array shuffle in JavaScript
+            for (let i = candidateIds.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [candidateIds[i], candidateIds[j]] = [candidateIds[j], candidateIds[i]];
             }
 
-            const seedInt = parseInt(String(seed).replace(/[^0-9]/g, '').slice(0, 8), 10) || 0;
-            console.log(`[ContentService] DISCOVERY FEED: seed=${seed}, seedInt=${seedInt}, cursor=${cursor ? 'YES' : 'NO'}`);
-
-            // 2. Fetch Streams
-            const lastMonth = new Date();
-            lastMonth.setMonth(lastMonth.getMonth() - 1);
-
-            const totalCount = await prisma.post.count({ where });
-            const driftLimit = Math.min(totalCount, 5000);
-
-            // Use seed to drift the starting point of "Recent" and "Popular" for variety
-            const recentStart = cursors.recentOffset || (seedInt % Math.max(1, driftLimit)); // Drift within top 5000
-            const popularStart = cursors.popularOffset || (seedInt % Math.max(1, driftLimit)); // Drift within top 5000
-
-            const [recentRows, popularRows] = await Promise.all([
-                prisma.post.findMany({
-                    where,
-                    take: recentLimit + 1,
-                    skip: recentStart,
-                    orderBy: { createdAt: 'desc' },
-                    include: includeOpt
-                }),
-                prisma.post.findMany({
-                    where: {
-                        ...where,
-                        createdAt: { gte: lastMonth } // Limit popularity scan to recent posts
-                    },
-                    take: popularLimit + 1,
-                    skip: popularStart,
-                    orderBy: [
-                        { likes: { _count: 'desc' } },
-                        { createdAt: 'desc' }
-                    ],
-                    include: includeOpt
-                })
-            ]);
-
-            // Random stream uses a stable offset derived from seed + session progress
-            const initialRandomOffset = seedInt % Math.max(1, totalCount - take);
-            const currentRandomOffset = (initialRandomOffset + (cursors.randomOffset || 0)) % Math.max(1, totalCount);
-
-            const randomRows = await prisma.post.findMany({
-                where,
-                take: randomLimit + 1,
-                skip: currentRandomOffset,
-                orderBy: { id: 'asc' }, // Stable order for offset pagination
+            const rawPosts = await prisma.post.findMany({
+                where: { id: { in: candidateIds } },
                 include: includeOpt
             });
 
-            // 3. Merge and Deduplicate
-            const seenIds = new Set();
-            const merged = [];
-            const addBatch = (batch, limit) => {
-                let count = 0;
-                for (const p of batch) {
-                    if (count >= limit) break;
-                    if (!seenIds.has(p.id)) {
-                        seenIds.add(p.id);
-                        merged.push(p);
-                        count++;
-                    }
-                }
-            };
-
-            addBatch(recentRows, recentLimit);
-            addBatch(popularRows, popularLimit);
-            addBatch(randomRows, randomLimit);
-
-            // 4. Update Cursors
-            const nextCursors = {
-                recentOffset: recentStart + recentLimit,
-                popularOffset: popularStart + popularLimit,
-                randomOffset: (cursors.randomOffset || 0) + randomLimit
-            };
-
-            hasMore = recentRows.length > recentLimit || popularRows.length > popularLimit || (nextCursors.randomOffset < totalCount);
-            nextCursor = hasMore ? Buffer.from(JSON.stringify(nextCursors)).toString('base64') : null;
-
-            // Re-shuffle to prevent grouping same types or same users
-            const shuffled = backfillMediaUrls(interleaveRandomFeed(merged, { seed: seedInt }));
+            // Re-order rawPosts to strictly match our shuffled candidateIds array
+            const postsMap = new Map();
+            rawPosts.forEach(p => postsMap.set(p.id, p));
             
-            return res.json({ 
-                posts: shuffled, 
-                nextCursor, 
-                hasMore 
+            const shuffledPosts = [];
+            candidateIds.forEach(id => {
+                if (postsMap.has(id)) shuffledPosts.push(postsMap.get(id));
             });
+
+            // DIVERSITY RULE: Ensure no more than 2 posts from same user per batch
+            const finalPosts = [];
+            const userCounts = {};
+            
+            for (const p of shuffledPosts) {
+                const uid = p.userId;
+                if (!userCounts[uid]) userCounts[uid] = 0;
+                
+                if (userCounts[uid] < 2) {
+                    finalPosts.push(p);
+                    userCounts[uid]++;
+                }
+                if (finalPosts.length === FETCH_COUNT) break;
+            }
+
+            // STEP 2: TRACK SEEN POSTS in backend immediately
+            if (currentUserId && finalPosts.length > 0) {
+                try {
+                    const seenData = finalPosts.map(p => ({
+                        userId: currentUserId,
+                        postId: p.id
+                    }));
+                    await prisma.seenPost.createMany({
+                        data: seenData,
+                        skipDuplicates: true
+                    });
+                } catch (err) {
+                    console.error('Failed to mark posts as seen:', err);
+                }
+            }
+
+            const posts = backfillMediaUrls(finalPosts);
+            // Infinite scroll uses hasMore without needing a real cursor for strictly offset/random feeds
+            // Returning a fake nextCursor so the frontend triggers the infinite loader
+            return res.json({ posts, nextCursor: `r-${Date.now()}-${randomOffset}`, hasMore: true });
         }
 
         // Fallback: Standard Pagination (Profiles, Searches, Bookmarks, or No Seed)
@@ -1664,6 +1675,12 @@ app.post('/:id/like', authenticateToken, async (req, res) => {
             }
         });
 
+        // Increment likesCount on the post
+        await prisma.post.update({
+            where: { id },
+            data: { likesCount: { increment: 1 } }
+        }).catch(e => console.error('[ContentService] Failed to increment likesCount:', e));
+
         // Notification
         const post = await prisma.post.findUnique({ where: { id } });
         if (post && post.userId !== userId) {
@@ -1698,6 +1715,12 @@ app.delete('/:id/like', authenticateToken, async (req, res) => {
                 }
             }
         });
+
+        // Decrement likesCount on the post
+        await prisma.post.update({
+            where: { id },
+            data: { likesCount: { decrement: 1 } }
+        }).catch(e => console.error('[ContentService] Failed to decrement likesCount:', e));
         res.json({ success: true });
     } catch (error) {
         if (error.code === 'P2025') { // Record not found
@@ -1732,6 +1755,12 @@ app.post('/:id/retweet', authenticateToken, async (req, res) => {
             }
         });
 
+        // Increment retweetsCount on the post
+        await prisma.post.update({
+            where: { id },
+            data: { retweetsCount: { increment: 1 } }
+        }).catch(e => console.error('[ContentService] Failed to increment retweetsCount:', e));
+
         const post = await prisma.post.findUnique({ where: { id } });
         if (post && post.userId !== userId) {
             await prisma.notification.create({
@@ -1765,6 +1794,12 @@ app.delete('/:id/retweet', authenticateToken, async (req, res) => {
                 }
             }
         });
+
+        // Decrement retweetsCount on the post
+        await prisma.post.update({
+            where: { id },
+            data: { retweetsCount: { decrement: 1 } }
+        }).catch(e => console.error('[ContentService] Failed to decrement retweetsCount:', e));
         res.json({ success: true });
     } catch (error) {
         if (error.code === 'P2025') {
@@ -1844,6 +1879,15 @@ app.delete('/:id', authenticateToken, async (req, res) => {
         }
 
         await prisma.post.delete({ where: { id } });
+
+        // Decrement repliesCount on parent if this was a reply
+        if (post.replyToId) {
+            await prisma.post.update({
+                where: { id: post.replyToId },
+                data: { repliesCount: { decrement: 1 } }
+            }).catch(e => console.error('[ContentService] Failed to decrement repliesCount on parent:', e));
+        }
+
         res.json({ success: true });
     } catch (error) {
         console.error('Delete Post Error:', error);
@@ -1869,6 +1913,12 @@ app.post('/:id/bookmark', authenticateToken, async (req, res) => {
             data: { postId: id, userId }
         });
 
+        // Increment bookmarksCount on the post
+        await prisma.post.update({
+            where: { id },
+            data: { bookmarksCount: { increment: 1 } }
+        }).catch(e => console.error('[ContentService] Failed to increment bookmarksCount:', e));
+
         res.json(bookmark);
     } catch (error) {
         console.error('Bookmark Error:', error);
@@ -1882,9 +1932,23 @@ app.delete('/:id/bookmark', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     try {
-        await prisma.bookmark.deleteMany({
+        // Check for existing bookmark before decrementing to avoid double-negative when deleteMany runs multiple times
+        const existing = await prisma.bookmark.findFirst({
             where: { postId: id, userId }
         });
+
+        if (existing) {
+            await prisma.bookmark.deleteMany({
+                where: { postId: id, userId }
+            });
+
+            // Decrement bookmarksCount on the post
+            await prisma.post.update({
+                where: { id },
+                data: { bookmarksCount: { decrement: 1 } }
+            }).catch(e => console.error('[ContentService] Failed to decrement bookmarksCount:', e));
+        }
+
         res.json({ success: true });
     } catch (error) {
         console.error('Remove Bookmark Error:', error);
@@ -2255,8 +2319,76 @@ async function ensureArticleSchemaCompatibility() {
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Article_createdAt_idx" ON "Article"("createdAt")`);
 }
 
+async function ensurePostSchemaCompatibility() {
+    // Some deployments have an older DB schema that is missing scalar columns
+    // referenced by the Prisma model. Add them safely to prevent 500s from Prisma.
+    // Add the exact camelCase columns Prisma sometimes expects (case-sensitive in Postgres).
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT false;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS "likesCount" INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS "repliesCount" INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS "retweetsCount" INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS "bookmarksCount" INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    // Also add lower-case variants so unquoted identifiers resolve (Postgres folds to lower-case).
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS isPinned BOOLEAN NOT NULL DEFAULT false;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS likesCount INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS repliesCount INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS retweetsCount INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Post"
+        ADD COLUMN IF NOT EXISTS bookmarksCount INTEGER NOT NULL DEFAULT 0;
+    `);
+}
+
 ensureArticleSchemaCompatibility()
     .then(async () => {
+        await ensurePostSchemaCompatibility();
+        // The feed's discovery mode optionally filters out already-seen posts using a raw SQL subquery
+        // against the `SeenPost` table. In some environments that table may be missing, which
+        // causes the whole feed request to crash with a 500.
+        // Detect availability once on startup and gate the raw SQL accordingly.
+        try {
+            await prisma.$queryRawUnsafe('SELECT 1 FROM \"SeenPost\" LIMIT 1');
+            hasSeenPostTable = true;
+        } catch (e) {
+            hasSeenPostTable = false;
+            console.warn('[ContentService] SeenPost table missing; skipping unseen filter for discovery feeds');
+        }
         await redisService.init();
         websocketService.init(server);
         server.listen(PORT, bindHost, () => {

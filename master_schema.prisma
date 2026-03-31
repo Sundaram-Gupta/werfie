@@ -73,6 +73,7 @@ model User {
   
   // Relations from Institutional
   institutionalProfile InstitutionalProfile?
+  seenPosts           SeenPost[]
 
   // Relations from Enterprise
   enterpriseUser      EnterpriseUser?
@@ -243,12 +244,18 @@ model Post {
   
   media           PostMedia[]
 
-  likes       Like[]
-  retweets    Retweet[]
-  bookmarks   Bookmark[]
-  notifications Notification[]
+  likesCount     Int             @default(0)
+  repliesCount   Int             @default(0)
+  retweetsCount  Int             @default(0)
+  bookmarksCount Int             @default(0)
+
+  likes          Like[]
+  retweets       Retweet[]
+  bookmarks      Bookmark[]
+  seenBy         SeenPost[]
+  notifications  Notification[]
   communityPosts CommunityPost[]
-  highlightedIn Highlight[]
+  highlightedIn  Highlight[]
   
   isPinned       Boolean         @default(false)
   productId      String?
@@ -260,6 +267,19 @@ model Post {
   @@index([replyToId])
   @@index([createdAt])
   @@index([scheduledAt])
+}
+
+model SeenPost {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
 }
 
 model PostMedia {
