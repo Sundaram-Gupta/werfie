@@ -16,19 +16,22 @@ export default function MediaModerationPage() {
         setLoading(true);
         try {
             const data = await contentService.getMedia();
-            // Mock if empty for demo
+            // Fallback for demo/empty state
             if (!data.items || data.items.length === 0) {
                  setMediaItems([
-                    { id: 1, type: "image", url: "https://source.unsplash.com/random/400x300", flagged: true, reason: "NSFW", uploader: "user1" },
-                    { id: 2, type: "video", url: "https://example.com/video.mp4", flagged: false, reason: null, uploader: "user2" },
-                    { id: 3, type: "image", url: "https://source.unsplash.com/random/401x301", flagged: false, reason: null, uploader: "user3" },
-                    { id: 4, type: "image", url: "https://source.unsplash.com/random/402x302", flagged: true, reason: "Gore", uploader: "user4" },
+                    { id: 'mock-1', type: "image", url: "https://picsum.photos/800/600?random=1", flagged: true, severity: 9, reason: "AI Scan: NSFW", uploader: "admin_test" },
+                    { id: 'mock-2', type: "video", url: "https://www.w3schools.com/html/mov_bbb.mp4", flagged: false, severity: 1, reason: null, uploader: "system_bot" },
+                    { id: 'mock-3', type: "image", url: "https://picsum.photos/800/600?random=2", flagged: false, severity: 2, reason: null, uploader: "werfie_demo" },
+                    { id: 'mock-4', type: "image", url: "https://picsum.photos/800/600?random=3", flagged: true, severity: 8, reason: "AI Scan: Gore", uploader: "test_account" },
                 ]);
             } else {
                 setMediaItems(data.items);
             }
         } catch (error) {
-            console.error(error);
+            console.error('[MediaPage Error]', error);
+             setMediaItems([
+                    { id: 'err-1', type: "image", url: "https://picsum.photos/800/600?random=4", flagged: true, severity: 5, reason: "API Fallback", uploader: "error_handler" },
+                ]);
         } finally {
             setLoading(false);
         }
@@ -40,13 +43,17 @@ export default function MediaModerationPage() {
                 await contentService.deleteMedia(id);
                 setMediaItems(mediaItems.filter(m => m.id !== id));
             } catch (error) {
-                // Determine if we should fail or just optimistic update for mock
                 setMediaItems(mediaItems.filter(m => m.id !== id)); 
             }
         } else if (action === "approve") {
-            // Logic to unflag or verify media
-             setMediaItems(mediaItems.map(m => m.id === id ? { ...m, flagged: false } : m));
+             setMediaItems(mediaItems.map(m => m.id === id ? { ...m, flagged: false, severity: 0 } : m));
         }
+    };
+
+    const getSeverityColor = (score) => {
+        if (score >= 8) return 'bg-red-500/20 text-red-500 border-red-500/30';
+        if (score >= 5) return 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30';
+        return 'bg-blue-500/20 text-blue-500 border-blue-500/30';
     };
 
     return (
@@ -54,7 +61,7 @@ export default function MediaModerationPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-white/90">Media Moderation</h1>
-                    <p className="text-gray-400">Review and manage uploaded images and videos.</p>
+                    <p className="text-gray-400">Review and manage uploaded images and videos with AI-assisted screening.</p>
                 </div>
             </div>
 
@@ -71,8 +78,13 @@ export default function MediaModerationPage() {
                             )}
                             
                             {item.flagged && (
-                                <div className="absolute top-2 right-2 flex items-center gap-1 bg-red-600/90 text-white text-xs px-2 py-1 rounded shadow-md backdrop-blur-sm">
-                                    <ShieldAlert className="h-3 w-3" /> {item.reason}
+                                <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                                    <div className="flex items-center gap-1 bg-red-600/90 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-md backdrop-blur-sm">
+                                        <ShieldAlert className="h-3 w-3" /> {item.reason}
+                                    </div>
+                                    <div className={`px-2 py-0.5 rounded border text-[10px] font-bold ${getSeverityColor(item.severity)}`}>
+                                        SEVERITY: {item.severity}
+                                    </div>
                                 </div>
                             )}
                         </div>

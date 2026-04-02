@@ -1,8 +1,11 @@
+import { useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BadgeCheck } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { PostActions } from "./post-actions"
 import { MoreOptionsDropdown } from "./more-options-dropdown"
+import { SubmitAppealModal } from "@/components/modals/SubmitAppealModal"
+import { ShieldAlert } from "lucide-react"
 
 import { getMediaUrl } from "@/lib/utils"
 import { PollDisplay } from "./poll-display"
@@ -14,6 +17,7 @@ import { useTranslation } from "react-i18next"
 export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBookmark, onUnbookmark, onDelete }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
+    const [isAppealModalOpen, setIsAppealModalOpen] = useState(false)
     
     const handleUserClick = (e) => {
         e.stopPropagation()
@@ -88,7 +92,35 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                     <MoreOptionsDropdown user={user} contentId={post.id} post={post} onDelete={onDelete} />
                 </div>
 
-                {/* Reply indicator */}
+                {/* Removed Post UI */}
+                {(post.status === 'REMOVED' || post.moderationStatus === 'REMOVED' || post.deleted) ? (
+                    <div className="mt-2 mb-2 p-4 rounded-xl border border-red-500/20 bg-red-500/5">
+                        <div className="flex items-start gap-3">
+                            <ShieldAlert className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                            <div>
+                                <h4 className="text-[15px] font-bold text-red-500">This post was removed</h4>
+                                <p className="text-[14px] text-red-400/90 mt-1">
+                                    It violates the Werfie Terms of Service. If you believe this is an error, you can submit an appeal.
+                                </p>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setIsAppealModalOpen(true); }}
+                                    className="mt-3 px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-bold rounded-full transition-colors"
+                                >
+                                    Submit Appeal
+                                </button>
+                                
+                                <SubmitAppealModal 
+                                    isOpen={isAppealModalOpen}
+                                    onClose={() => setIsAppealModalOpen(false)}
+                                    defaultType="Post Removal"
+                                    targetId={post.id}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Reply indicator */}
                 {post.replyToId && (
                     <p className="text-[13px] text-muted-foreground mt-0.5 mb-0.5">
                         {t('feed.replying_to') || 'Replying to'}{' '}
@@ -171,6 +203,8 @@ export function PostCard({ post, onLike, onUnlike, onRetweet, onUnretweet, onBoo
                     onBookmark={onBookmark}
                     onUnbookmark={onUnbookmark}
                 />
+                </>
+                )}
             </div>
         </div>
     )

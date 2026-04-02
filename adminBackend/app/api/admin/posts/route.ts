@@ -6,20 +6,36 @@ export async function GET(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
         const filter = searchParams.get('filter') || 'all';
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '10');
+        const skip = (page - 1) * limit;
 
-        const posts = await prisma.post.findMany({
-            include: {
-                user: {
-                    include: {
-                        profile: true
+        const whereClause: any = {};
+        if (filter === 'reported') {
+            whereClause.reports = {
+                some: {}
+            };
+        }
+
+        const [posts, totalPosts] = await Promise.all([
+            prisma.post.findMany({
+                where: whereClause,
+                skip,
+                take: limit,
+                include: {
+                    user: {
+                        include: {
+                            profile: true
+                        }
                     }
-                }
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.post.count({ where: whereClause })
+        ]);
 
-        // Fetch real report counts
-        const postIds = posts.map(p => p.id);
+        // Fetch report counts for the current page of posts
+        const postIds = posts.map((p: any) => p.id);
         const reportCounts = await prisma.report.groupBy({
             by: ['targetId'],
             where: {
@@ -37,7 +53,7 @@ export async function GET(req: NextRequest) {
         }, {});
 
         // Map to match frontend expectations
-        const mappedPosts = posts.map(post => {
+        const mappedPosts = posts.map((post: any) => {
             let image = null;
             if (post.mediaUrls) {
                 try {
@@ -52,8 +68,8 @@ export async function GET(req: NextRequest) {
 
             return {
                 id: post.id,
-                user: post.user.profile?.name || post.user.email.split('@')[0] || 'Unknown',
-                handle: `@${post.user.profile?.handle || post.user.id.slice(0, 8)}`,
+                user: post.user?.profile?.name || post.user?.email.split('@')[0] || 'Unknown',
+                handle: `@${post.user?.profile?.handle || post.id.slice(0, 8)}`,
                 content: post.content,
                 date: post.createdAt.toISOString().split('T')[0],
                 image: image,
@@ -62,12 +78,15 @@ export async function GET(req: NextRequest) {
             };
         });
 
-        // If filtered by reported, filter the mapped ones
-        const filteredPosts = filter === 'reported'
-            ? mappedPosts.filter(p => p.reportCount > 0)
-            : mappedPosts;
-
-        return apiSuccess(filteredPosts, 'Posts fetched successfully');
+        return apiSuccess({
+            posts: mappedPosts,
+            pagination: {
+                totalPosts,
+                currentPage: page,
+                totalPages: Math.ceil(totalPosts / limit),
+                limit
+            }
+        }, 'Posts fetched successfully');
 
     } catch (error: any) {
         console.error('Fetch Posts Error:', error);

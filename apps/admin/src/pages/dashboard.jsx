@@ -74,6 +74,9 @@ export default function Dashboard() {
 
     useEffect(() => {
         loadData();
+        // Polling for real-time dashboard updates
+        const interval = setInterval(() => loadData(true), 30000);
+        return () => clearInterval(interval);
     }, [loadData]);
 
     useRefreshOnFocus(() => loadData(true));

@@ -82,7 +82,30 @@ export function getSocketServer(httpServer) {
             socket.on('send_message', async (data, callback) => {
                 try {
                     const { conversationId, content, type = 'text', mediaUrl, thumbnailUrl, duration, size, mimeType } = data
+                    const { filterContent, checkSpam } = await import('./moderation.js');
 
+                    // 1. Modration & Filtering
+                    const { safe, reason, severity } = filterContent(content);
+                    const spamStatus = checkSpam(userId);
+                    
+                    if (!safe || spamStatus.isSpam) {
+                        console.warn(`[Moderation] Filtered message from ${userId}: ${reason || 'Spam Rate Limit exceeded'}`);
+                        
+                        // Log to Admin Audit (Async - don't block socket)
+                        // In production, emit to Kafka for a Moderation Service to consume
+                        const auditSeverity = (severity || (spamStatus.isSpam ? 7 : 1));
+                        if (auditSeverity >= 5) {
+                           // Example: await kafka.send('CONTENT_FLAGGED', { userId, content, reason: reason || 'Spam' });
+                           console.log(`[Auto-Moderation] Flagging User ${userId} for High Severity Content`);
+                        }
+                        
+                        // Reject message if it's very severe, or just flag it
+                        if (auditSeverity >= 7) {
+                            throw new Error(reason || 'Message rejected by automated spam filter');
+                        }
+                    }
+
+                    // 2. Normal Processing
                     // Import dynamically to avoid circular dependency issues if any
                     const { MessagingService } = await import('../services/messaging.service.js')
 

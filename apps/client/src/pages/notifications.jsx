@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { notificationService } from "@/services/api"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Heart, User, Repeat2, MessageCircle, AtSign, Settings, Loader2 } from "lucide-react"
+import { Heart, User, Repeat2, MessageCircle, AtSign, Settings, Loader2, CheckCircle, XCircle } from "lucide-react"
 import { BadgeCheck } from "lucide-react"
 import { getMediaUrl } from "@/lib/utils"
 
@@ -76,34 +76,54 @@ export default function Notifications() {
                 ) : (
                     notifications.map((notification) => (
                         <div key={notification.id} className="p-4 flex gap-3 hover:bg-white/[0.03] transition-colors cursor-pointer">
-                            {/* Icon based on type */}
                             <div className="w-10 flex justify-end">
                                 {notification.type === 'like' && <Heart className="w-8 h-8 text-pink-500 fill-current" />}
                                 {notification.type === 'repost' && <Repeat2 className="w-8 h-8 text-green-500" />}
                                 {notification.type === 'follow' && <User className="w-8 h-8 text-blue-500 fill-current" />}
                                 {notification.type === 'reply' && <MessageCircle className="w-8 h-8 text-blue-500 fill-current" />}
-                                {notification.type === 'mention' && <AtSign className="w-8 h-8 text-green-500" />}
+                                {notification.type === 'mention' && <AtSign className="w-8 h-8 text-primary" />}
+                                {notification.type === 'appeal_approved' && <CheckCircle className="w-8 h-8 text-green-500" />}
+                                {notification.type === 'appeal_rejected' && <XCircle className="w-8 h-8 text-red-500" />}
                             </div>
 
                             <div className="flex-1 space-y-2">
-                                <Avatar className="w-8 h-8">
-                                    <AvatarImage src={getMediaUrl(notification.actor?.profile?.avatar || notification.actor?.avatar)} />
-                                    <AvatarFallback>{notification.actor?.profile?.name?.[0] || notification.actor?.name?.[0]}</AvatarFallback>
-                                </Avatar>
+                                {/* Only show avatar if not system/appeal notification (which usually lacks a personal actor) */}
+                                {!['appeal_approved', 'appeal_rejected'].includes(notification.type) && (
+                                    <Avatar className="w-8 h-8">
+                                        <AvatarImage src={getMediaUrl(notification.actor?.profile?.avatar || notification.actor?.avatar)} />
+                                        <AvatarFallback>{notification.actor?.profile?.name?.[0] || notification.actor?.name?.[0] || 'S'}</AvatarFallback>
+                                    </Avatar>
+                                )}
 
-                                <div className="text-[15px] leading-5">
-                                    <span className="font-bold">{notification.actor?.profile?.name || notification.actor?.name}</span>
-                                    {notification.actor?.profile?.verified && <BadgeCheck className="inline-block w-4 h-4 text-blue-500 ml-1 mb-0.5 fill-blue-500/10" />}
-                                    <span className="text-foreground ml-1">
-                                        {notification.type === 'like' && t('notifications.types.like')}
-                                        {notification.type === 'repost' && t('notifications.types.repost')}
-                                        {notification.type === 'follow' && t('notifications.types.follow')}
-                                        {notification.type === 'reply' && t('notifications.types.reply')}
-                                        {notification.type === 'mention' && t('notifications.types.mention')}
-                                    </span>
+                                <div>
+                                    {!['appeal_approved', 'appeal_rejected'].includes(notification.type) ? (
+                                        <>
+                                            <span className="font-bold">{notification.actor?.profile?.name || notification.actor?.name || 'System User'}</span>
+                                            {notification.actor?.profile?.verified && <BadgeCheck className="inline-block w-4 h-4 text-blue-500 ml-1 mb-0.5 fill-blue-500/10" />}
+                                            <span className="text-foreground ml-1">
+                                                {notification.type === 'like' && t('notifications.types.like')}
+                                                {notification.type === 'repost' && t('notifications.types.repost')}
+                                                {notification.type === 'follow' && t('notifications.types.follow')}
+                                                {notification.type === 'reply' && t('notifications.types.reply')}
+                                                {notification.type === 'mention' && t('notifications.types.mention')}
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <span className={`font-bold ${notification.type === 'appeal_approved' ? 'text-green-500' : 'text-red-500'}`}>
+                                            {notification.type === 'appeal_approved' ? 'Appeal Approved' : 'Appeal Rejected'}
+                                        </span>
+                                    )}
                                 </div>
 
-                                {notification.post && (
+                                {['appeal_approved', 'appeal_rejected'].includes(notification.type) && (
+                                    <p className="text-[15px] text-foreground leading-5 mb-0.5">
+                                        {notification.type === 'appeal_approved' 
+                                            ? 'Your appeal has been approved. Your account/content has been restored.' 
+                                            : 'After reviewing your appeal, we have decided to uphold the moderation decision.'}
+                                    </p>
+                                )}
+
+                                {notification.post && !['appeal_approved', 'appeal_rejected'].includes(notification.type) && (
                                     <p className="text-[15px] text-muted-foreground leading-5">
                                         {notification.post.content}
                                     </p>

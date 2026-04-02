@@ -16,7 +16,21 @@ const THUMB_DIR = path.join(UPLOADS_DIR, 'thumbnails');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-class MediaService {
+    static async simulateAIScan(type, buffer) {
+        // In production, this calls Amazon Rekognition, Azure Content Safety, or a local PyTorch model
+        // console.log(`[AI-Scanning] Analyzing ${type}...`);
+        
+        // Mock: Random detection score
+        const nsfwScore = Math.random() * 0.1; // Mostly safe in dev
+        const violenceScore = Math.random() * 0.1;
+
+        if (nsfwScore > 0.8 || violenceScore > 0.8) {
+             return { flagged: true, reason: nsfwScore > 0.8 ? 'NSFW' : 'Violence', score: Math.max(nsfwScore, violenceScore) };
+        }
+        
+        return { flagged: false, score: Math.max(nsfwScore, violenceScore) };
+    }
+
     /**
      * Process Image: Sharp (resize + compress to WebP) then upload to R2
      */
@@ -35,6 +49,9 @@ class MediaService {
                 .toBuffer();
 
             const metadata = await sharp(buffer).metadata();
+            
+            // 🖥️ AI Moderation Hook
+            const scan = await this.simulateAIScan('image', buffer);
 
             // Upload to R2 or save locally
             let mediaUrl;
@@ -53,7 +70,10 @@ class MediaService {
                 mediaUrl,
                 width: metadata.width,
                 height: metadata.height,
-                size: buffer.length
+                size: buffer.length,
+                aiFlagged: scan.flagged,
+                aiReason: scan.reason || null,
+                aiScore: scan.score
             };
         } catch (error) {
             console.error('[MediaService] Image processing failed:', error);

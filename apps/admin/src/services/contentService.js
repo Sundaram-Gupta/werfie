@@ -1,14 +1,14 @@
 import api from '@/lib/axios';
 
-export const getPosts = async (filter = 'all') => {
+export const getPosts = async (page = 1, limit = 10, filter = 'all') => {
     try {
         const response = await api.get('/admin/posts', {
-            params: { filter }
+            params: { page, limit, filter }
         });
-        return response.data;
+        return response.data; // This now includes pagination metadata
     } catch (error) {
         console.error('Error fetching posts:', error);
-        return [];
+        return { posts: [], pagination: { totalPages: 0, totalPosts: 0 } };
     }
 };
 
@@ -52,5 +52,55 @@ export const updateReportStatus = async (reportId, status) => {
     } catch (error) {
         console.error('Error updating report status:', error);
         return { success: false };
+    }
+};
+
+export const getMedia = async () => {
+    try {
+        const response = await api.get('/admin/media');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching media:', error);
+        return { items: [] };
+    }
+};
+
+export const deleteMedia = async (id) => {
+    try {
+        const response = await api.delete(`/admin/media/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error('Error deleting media:', error);
+        throw error;
+    }
+};
+
+export const getFlaggedMessages = async () => {
+    try {
+        const response = await api.get('/admin/messaging');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching flagged messages:', error);
+        return { items: [] };
+    }
+};
+
+export const deleteMessage = async (id) => {
+    try {
+        const response = await api.delete(`/admin/messaging/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        throw error;
+    }
+};
+
+export const approveMessage = async (id) => {
+    try {
+        const response = await api.patch(`/admin/messaging/${id}`, { status: 'approved' });
+        return response.data;
+    } catch (error) {
+        console.error('Error approving message:', error);
+        throw error;
     }
 };

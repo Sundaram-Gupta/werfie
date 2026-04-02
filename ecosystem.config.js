@@ -19,7 +19,7 @@ module.exports = {
                 NODE_ENV: 'development',
                 PORT: 3001,
                 USER_SERVICE_PORT: 3002,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret",
                 NEXTAUTH_SECRET: "dev-secret"
             },
@@ -27,7 +27,7 @@ module.exports = {
                 NODE_ENV: 'production',
                 PORT: 3001,
                 USER_SERVICE_PORT: 3002,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret",
                 NEXTAUTH_SECRET: "dev-secret"
             }
@@ -75,13 +75,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3002,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3002,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -103,14 +103,14 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3003,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret",
                 KAFKA_BROKER: "localhost:9093"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3003,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -131,13 +131,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3004,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3004,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -158,13 +158,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3005,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 KAFKA_BROKER: "localhost:9092"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3005,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 KAFKA_BROKER: "localhost:9092"
             }
         },
@@ -212,14 +212,14 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3019,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret",
                 KAFKA_BROKER: "localhost:9092"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3019,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret",
                 KAFKA_BROKER: "localhost:9092"
             }
@@ -242,13 +242,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3014,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3014,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -270,13 +270,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3009,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3009,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -297,13 +297,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3010,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3010,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -324,13 +324,13 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3011,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3011,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         },
@@ -369,14 +369,14 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
                 NODE_ENV: 'development',
-                VITE_API_URL: 'http://localhost:3012'
+                VITE_API_URL: 'http://localhost:3015'
             }
         },
         {
             name: 'admin-backend',
             cwd: './adminBackend',
             script: 'node_modules/next/dist/bin/next',
-            args: ['start', '-p', '3012'],
+            args: ['dev', '-p', '3015'],
             instances: 1,
             exec_mode: 'fork',
             windowsHide: true,
@@ -388,8 +388,8 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             env: {
                 NODE_ENV: 'development',
-                PORT: 3012,
-                DATABASE_URL: "postgresql://postgres:root@localhost:5432/xclone_db",
+                PORT: 3015,
+                DATABASE_URL: "postgresql://postgres:aspire@localhost:5432/werfie",
                 JWT_SECRET: "dev-secret"
             }
         }

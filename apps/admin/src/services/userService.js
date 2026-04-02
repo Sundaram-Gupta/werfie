@@ -6,10 +6,10 @@ export const getUsers = async (page = 1, limit = 10, search = '') => {
         const response = await api.get('/admin/users', {
             params: { page, limit, search }
         });
-        return response.data;
+        return response.data; // This now includes pagination metadata
     } catch (error) {
         console.error('Error fetching users:', error);
-        return { users: [] };
+        return { users: [], pagination: { totalPages: 0, totalUsers: 0 } };
     }
 };
 

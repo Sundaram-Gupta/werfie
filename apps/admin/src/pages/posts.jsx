@@ -13,19 +13,32 @@ export default function PostsPage() {
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
+    
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalPosts, setTotalPosts] = useState(0);
+    const limit = 9; // Grid layout looks better with multiples of 3
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await contentService.getPosts(filter === 'reported' ? 'reported' : 'all');
-            setPosts(Array.isArray(data) ? data : data?.data ?? []);
+            const data = await contentService.getPosts(page, limit, filter);
+            if (Array.isArray(data)) {
+                 setPosts(data);
+                 setTotalPages(1);
+            } else {
+                 setPosts(data?.posts || []);
+                 setTotalPages(data?.pagination?.totalPages || 1);
+                 setTotalPosts(data?.pagination?.totalPosts || 0);
+            }
         } catch (error) {
             console.error(error);
             toast.error('Failed to load posts');
         } finally {
             setLoading(false);
         }
-    }, [filter]);
+    }, [page, filter]);
 
     useEffect(() => {
         fetchPosts();
@@ -63,7 +76,7 @@ export default function PostsPage() {
                 </Button>
             </div>
 
-            <Tabs defaultValue="all" onValueChange={setFilter}>
+            <Tabs defaultValue="all" onValueChange={(v) => { setFilter(v); setPage(1); }}>
                 <TabsList>
                     <TabsTrigger value="all">All Posts</TabsTrigger>
                     <TabsTrigger value="reported">Reported Only</TabsTrigger>
@@ -76,6 +89,45 @@ export default function PostsPage() {
                     {loading ? <div>Loading...</div> : <PostsGrid posts={posts} onAction={handleAction} />}
                 </TabsContent>
             </Tabs>
+
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-between mt-8 p-4 bg-card border border-border rounded-xl shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="flex -space-x-2">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="w-6 h-6 rounded-full border-2 border-card bg-muted flex items-center justify-center text-[8px] font-bold">
+                                {i}
+                            </div>
+                        ))}
+                    </div>
+                    <span className="text-sm font-medium text-muted-foreground">
+                        {totalPosts} posts found • Page {page} of {totalPages}
+                    </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page <= 1 || loading}
+                        className="h-9"
+                    >
+                        Previous
+                    </Button>
+                    <div className="px-4 py-1.5 border border-border rounded-lg bg-muted/30 font-bold text-sm">
+                        {page}
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page >= totalPages || loading}
+                        className="h-9"
+                    >
+                        Next
+                    </Button>
+                </div>
+            </div>
         </div>
     );
 }

@@ -37,19 +37,32 @@ export default function UsersPage() {
     const [search, setSearch] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalUsers, setTotalUsers] = useState(0);
+    const limit = 10;
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await userService.getUsers(1, 10, search);
-            const usersList = Array.isArray(data) ? data : data?.users ?? data?.data ?? [];
-            setUsers(usersList);
+            const data = await userService.getUsers(page, limit, search);
+            const usersList = data?.users || [];
+            if (Array.isArray(data)) {
+                 setUsers(data);
+                 setTotalPages(1);
+            } else {
+                 setUsers(usersList);
+                 setTotalPages(data?.pagination?.totalPages || 1);
+                 setTotalUsers(data?.pagination?.totalUsers || 0);
+            }
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
-    }, [search]);
+    }, [page, search]);
 
     useEffect(() => {
         const timer = setTimeout(fetchUsers, 300);
@@ -119,7 +132,10 @@ export default function UsersPage() {
                         placeholder="Search users..."
                         className="pl-8"
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => {
+                            setSearch(e.target.value);
+                            setPage(1);
+                        }}
                     />
                 </div>
             </div>
@@ -239,6 +255,39 @@ export default function UsersPage() {
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-between mt-6 bg-card border border-border p-4 rounded-xl shadow-sm">
+                <div className="text-sm font-medium flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                    <span className="text-muted-foreground">{totalUsers} {totalUsers === 1 ? 'user' : 'users'} found</span>
+                    <span className="text-border mx-1">|</span>
+                    <span className="text-foreground font-bold">Page {page} of {totalPages}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page <= 1 || loading}
+                        className="h-9 transition-all active:scale-95"
+                    >
+                        Previous
+                    </Button>
+                    <div className="flex items-center justify-center h-9 px-4 border border-border rounded-lg font-bold text-sm bg-muted/40 shadow-inner">
+                        {page}
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page >= totalPages || loading}
+                        className="h-9 transition-all active:scale-95"
+                    >
+                        Next
+                    </Button>
+                </div>
             </div>
 
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

@@ -28,16 +28,16 @@ export default function MainLayout() {
      * Visible on: all other routes
      */
     const hideRightSidebar = location.pathname === "/chat" ||
-                             location.pathname === "/chat/settings" || 
-                             location.pathname === "/werfie-ai" || 
-                             location.pathname === "/settings/institutional" || 
-                             location.pathname === "/announcements" || 
-                             location.pathname === "/enterprise" ||
-                             location.pathname === "/crisis-command" ||
-                             location.pathname === "/soapbox" ||
-                             location.pathname.startsWith("/soapbox/") ||
-                             location.pathname === "/debate" ||
-                             location.pathname.startsWith("/debate/")
+        location.pathname === "/chat/settings" ||
+        location.pathname === "/werfie-ai" ||
+        location.pathname === "/settings/institutional" ||
+        location.pathname === "/announcements" ||
+        location.pathname === "/enterprise" ||
+        location.pathname === "/crisis-command" ||
+        location.pathname === "/soapbox" ||
+        location.pathname.startsWith("/soapbox/") ||
+        location.pathname === "/debate" ||
+        location.pathname.startsWith("/debate/")
 
     return (
         // Outer container: centers content and applies theme colors

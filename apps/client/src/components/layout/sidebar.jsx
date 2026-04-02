@@ -13,6 +13,7 @@ import {
     DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import { ComposeModal } from "@/components/feed/compose-modal"
+import { SubmitAppealModal } from "@/components/modals/SubmitAppealModal"
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -24,6 +25,7 @@ export function Sidebar() {
     const { user } = useAuth()
     const { t } = useTranslation()
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark")
+    const [isAppealModalOpen, setIsAppealModalOpen] = useState(false)
 
     useEffect(() => {
         const root = window.document.documentElement
@@ -146,6 +148,10 @@ export function Sidebar() {
                                             Comments Moderation
                                         </DropdownMenuItem>
                                     </Link>
+                                    <DropdownMenuItem onClick={() => setIsAppealModalOpen(true)} className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
+                                        <ShieldAlert className="w-[18px] h-[18px] text-yellow-500" />
+                                        Submit an Appeal
+                                    </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={toggleTheme} className="flex items-center gap-3 px-4 py-3 text-[15px] font-bold cursor-pointer">
                                         {theme === "dark" ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
@@ -223,6 +229,11 @@ export function Sidebar() {
             <div className="w-full mb-4 px-2 xl:px-0">
                 <UserProfileMenu />
             </div>
+
+            <SubmitAppealModal 
+                isOpen={isAppealModalOpen} 
+                onClose={() => setIsAppealModalOpen(false)} 
+            />
         </nav>
     )
 }

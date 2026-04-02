@@ -64,7 +64,9 @@ export async function middleware(req: NextRequest) {
 
                 const role = (payload.role as string) || 'USER';
 
-                if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+                const isAppealingInUserRole = path === '/api/admin/appeals' && req.method === 'POST';
+
+                if (role !== 'ADMIN' && role !== 'SUPER_ADMIN' && !isAppealingInUserRole) {
                     response = NextResponse.json(
                         { status: false, message: 'Forbidden: Insufficient permissions', data: null },
                         { status: 403 }
@@ -72,7 +74,13 @@ export async function middleware(req: NextRequest) {
                 } else {
                     // Success logic
                     const requestHeaders = new Headers(req.headers);
-                    requestHeaders.set('x-admin-id', payload.userId as string);
+                    // Extract userId from common JWT fields (userId, sub, id)
+                    const userId = (payload.userId || payload.sub || payload.id) as string;
+                    
+                    if (userId && userId !== 'undefined') {
+                        requestHeaders.set('x-admin-id', userId);
+                    }
+                    
                     requestHeaders.set('x-admin-role', role);
 
                     response = NextResponse.next({

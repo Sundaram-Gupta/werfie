@@ -219,12 +219,12 @@ mainServer.all('/api/timeline*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3003' });
 });
 
-// Admin Backend Proxy (admin-backend runs on 3012)
+// Admin Backend Proxy (admin-backend runs on 3015)
 mainServer.all('/api/admin*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3012' });
+    proxy.web(req, res, { target: 'http://127.0.0.1:3015' });
 });
 mainServer.all('/api/docs*', (req, res) => {
-    proxy.web(req, res, { target: 'http://127.0.0.1:3012' });
+    proxy.web(req, res, { target: 'http://127.0.0.1:3015' });
 });
 
 // Creator Studio & Analytics (port 3009) - same service
@@ -233,11 +233,21 @@ mainServer.all('/api/creator-studio*', (req, res) => {
     proxy.web(req, res, { target: 'http://127.0.0.1:3009' });
 });
 
-// 4. Other Microservices Catch-all (timeline/notifications have explicit routes above)
+// 3. Specific Microservices (Explicit targets for clarity/priority)
+mainServer.all('/api/moderation*', (req, res) => {
+    injectUserFromToken(req);
+    console.log(`[Gateway] Proxying Moderation: ${req.method} ${req.url} -> http://127.0.0.1:3010`);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3010' });
+});
+
+mainServer.all('/api/analytics*', (req, res) => {
+    injectUserFromToken(req);
+    proxy.web(req, res, { target: 'http://127.0.0.1:3009' });
+});
+
+// 4. Other Microservices Catch-all
 const microservices = [
     { path: '/api/search', port: 3006 },
-    { path: '/api/analytics', port: 3009 },
-    { path: '/api/moderation', port: 3010 },
     { path: '/api/settings', port: 3011 },
     { path: '/api/monetization', port: 3014 },
 ];

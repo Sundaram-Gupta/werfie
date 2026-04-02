@@ -21,8 +21,11 @@ model User {
   role          String   @default("USER")
   institutionType String?
   status        String   @default("ACTIVE")
+  banReason     String?
+  banExpiresAt  DateTime?
   lastActiveAt  DateTime @default(now())
   preferredLanguage String @default("en")
+  reputation    Int      @default(100) // 0-100 score
   
   refreshTokens RefreshToken[]
   profile       Profile?
@@ -46,6 +49,7 @@ model User {
   subscriptions       Subscription[] // As a subscriber
 
   reportsSubmitted Report[]       @relation("UserReports")
+  appealsSubmitted Appeal[]       @relation("UserAppeals")
   
   // Relations from Lists
   ownedLists      List[]
@@ -133,6 +137,9 @@ model PostMedia {
   height          Int
   duration        Float?   // video only
   size            Int
+  aiFlagged       Boolean  @default(false)
+  aiReason        String?
+  aiScore         Float?
   createdAt       DateTime @default(now())
   
   post            Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -593,10 +600,29 @@ model Report {
   status     String   @default("pending")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  severity   Int      @default(1) // 1-10
+  isAutomated Boolean @default(false)
+  metadata   Json?    // AI logs, spam markers
   reporter   User     @relation("UserReports", fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@index([targetId])
   @@index([reporterId])
+  @@index([status])
+}
+
+model Appeal {
+  id         String   @id @default(uuid())
+  type       String   @default("Account Suspension") // standard appeal types
+  reason     String?
+  targetId   String?  // Id of post, comment or null if account
+  status     String   @default("Pending") // Pending, Approved, Rejected
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  userId     String
+  user       User     @relation("UserAppeals", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([status])
 }
 
